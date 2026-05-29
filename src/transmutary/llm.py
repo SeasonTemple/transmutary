@@ -10,14 +10,22 @@ the underlying provider.
 
 Transport is LiteLLM ``completion`` (KTD9): model_tier maps to a model alias;
 budget / daily cap / retry / fallback are delegated to LiteLLM rather than hand
--rolled (KTD7). Credentials (LLM key / base_url) come from U1 config (env).
+-rolled (KTD7). The L3 judge daily cap is enforced here via LiteLLM's
+``BudgetManager`` (a per-day ``max_budget`` keyed by the ``l3-judge`` user):
+:func:`call` checks the projected cost against the remaining budget BEFORE every
+request and raises :class:`LLMBudgetExceeded` once the day's cap is exhausted, so
+the cost-discipline guarantee (KTD7) holds at runtime, not just in tests.
+Credentials (LLM key / base_url) and the daily cap come from U1 config (env).
 """
 
 from __future__ import annotations
 
 import enum
+import os
+import threading
 
 import litellm
+from litellm import BudgetManager
 
 # Marker fences that delimit the untrusted data block. The instruction slot tells
 # the model that anything between these markers is DATA to be analyzed, never
@@ -45,6 +53,87 @@ DEFAULT_TIER_MODELS = {
     ModelTier.STRONG: "gpt-4o",
     ModelTier.CHEAP: "gpt-4o-mini",
 }
+
+# --- L3 daily cap (KTD7) ----------------------------------------------------
+# The judge/diagnose budget is enforced per UTC day by LiteLLM's BudgetManager,
+# keyed by this user. The cap is a shipped concrete number (USD/day), overridable
+# via env — NOT an unlimited config-defer. When the projected cost of the next
+# call would exceed the remaining daily budget, :func:`call` raises
+# LLMBudgetExceeded so callers (U9/U10) drive deterministic overflow handling.
+L3_BUDGET_USER = "l3-judge"
+ENV_L3_DAILY_BUDGET = "TRANSMUTARY_L3_DAILY_BUDGET_USD"
+DEFAULT_L3_DAILY_BUDGET_USD = 5.0
+_BUDGET_PROJECT = "transmutary-l3"
+
+_budget_lock = threading.Lock()
+_budget_manager: BudgetManager | None = None
+
+
+class _InMemoryBudgetManager(BudgetManager):
+    """BudgetManager that keeps spend purely in-memory (KTD4/determinism).
+
+    LiteLLM's ``local`` client persists to a ``user_cost.json`` in the CWD on
+    every ``create_budget`` / ``update_cost``, which would (a) leak per-day spend
+    across unrelated runs and (b) drop a stray file in the repo. We override the
+    persistence hooks to no-ops so the daily cap is enforced from process memory
+    and reset deterministically via :func:`reset_budget_manager`.
+    """
+
+    def __init__(self) -> None:
+        # Skip the parent's load_data() (which would read user_cost.json).
+        self.client_type = "local"
+        self.project_name = _BUDGET_PROJECT
+        self.api_base = "https://api.litellm.ai"
+        self.headers = {"Content-Type": "application/json"}
+        self.user_dict = {}
+
+    def save_data(self):  # noqa: D102 - in-memory only
+        return {"status": "success"}
+
+    def load_data(self):  # noqa: D102 - in-memory only
+        self.user_dict = getattr(self, "user_dict", {})
+
+
+def _daily_budget_usd() -> float:
+    """Read the shipped daily cap (USD/day) from env, defaulting to a concrete
+    number rather than unlimited (KTD7)."""
+    raw = os.environ.get(ENV_L3_DAILY_BUDGET)
+    if raw is None or raw.strip() == "":
+        return DEFAULT_L3_DAILY_BUDGET_USD
+    try:
+        return float(raw)
+    except ValueError:
+        return DEFAULT_L3_DAILY_BUDGET_USD
+
+
+def get_budget_manager() -> BudgetManager:
+    """Return the process-wide BudgetManager, creating/seeding it on first use.
+
+    The ``l3-judge`` user is created with a ``daily`` reset and a concrete
+    ``max_budget`` from config, so LiteLLM tracks per-day spend and the daily cap
+    is enforced inside this single LLM entry point (KTD7/KTD9).
+    """
+    global _budget_manager
+    with _budget_lock:
+        if _budget_manager is None:
+            _budget_manager = _InMemoryBudgetManager()
+        bm = _budget_manager
+        if not bm.is_valid_user(L3_BUDGET_USER):
+            bm.create_budget(
+                total_budget=_daily_budget_usd(),
+                user=L3_BUDGET_USER,
+                duration="daily",
+            )
+        # Roll the window over if the daily duration has elapsed.
+        bm.reset_on_duration(L3_BUDGET_USER)
+        return bm
+
+
+def reset_budget_manager() -> None:
+    """Drop the cached BudgetManager (test seam / config reload)."""
+    global _budget_manager
+    with _budget_lock:
+        _budget_manager = None
 
 
 class LLMError(Exception):
@@ -104,6 +193,13 @@ def call(
     resolved_model = model or DEFAULT_TIER_MODELS[model_tier]
     messages = _build_messages(system_instruction, data_block)
 
+    # L3 daily cap (KTD7): refuse the call up front if the projected cost would
+    # push today's spend past the configured budget. This is the runtime hard cap
+    # the deterministic overflow path (LLMBudgetExceeded → ConservativeReview)
+    # depends on — not just an after-the-fact detection.
+    bm = get_budget_manager()
+    _enforce_budget(bm, resolved_model, messages)
+
     kwargs = dict(litellm_kwargs)
     if api_key is not None:
         kwargs["api_key"] = api_key
@@ -117,7 +213,41 @@ def call(
             raise LLMBudgetExceeded(str(exc)) from exc
         raise LLMError(str(exc)) from exc
 
+    # Record actual spend against the daily budget so subsequent calls see it.
+    _record_cost(bm, resolved_model, response)
     return _extract_text(response)
+
+
+def _enforce_budget(bm: BudgetManager, model: str, messages: list) -> None:
+    """Raise LLMBudgetExceeded if this call would exceed the daily L3 cap (KTD7).
+
+    Uses BudgetManager's projected cost for the request plus today's accrued cost;
+    if that crosses the user's ``max_budget`` (or the manager itself reports the
+    budget is exhausted) the call is refused before any provider request is made.
+    """
+    try:
+        total = bm.get_total_budget(L3_BUDGET_USER)
+        current = bm.get_current_cost(L3_BUDGET_USER)
+        try:
+            projected = bm.projected_cost(model=model, messages=messages, user=L3_BUDGET_USER)
+        except Exception:  # noqa: BLE001 - pricing unknown → don't pre-charge, rely on current
+            projected = 0.0
+    except Exception as exc:  # noqa: BLE001 - budget bookkeeping failure surfaces as budget error
+        raise LLMBudgetExceeded(f"L3 budget check failed: {exc}") from exc
+    if total is not None and current + projected > total:
+        raise LLMBudgetExceeded(
+            f"L3 daily budget exhausted: current {current:.6g} + projected {projected:.6g} "
+            f"> cap {total:.6g} USD for user {L3_BUDGET_USER!r} (KTD7)"
+        )
+
+
+def _record_cost(bm: BudgetManager, model: str, response) -> None:
+    """Charge the completed call against the daily budget. Best-effort: a cost
+    bookkeeping failure must not turn a successful call into an error."""
+    try:
+        bm.update_cost(completion_obj=response, user=L3_BUDGET_USER)
+    except Exception:  # noqa: BLE001 - never fail a good response on accounting
+        pass
 
 
 def _is_budget_error(exc: Exception) -> bool:

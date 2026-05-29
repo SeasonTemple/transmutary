@@ -13,6 +13,21 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 
+@pytest.fixture(autouse=True)
+def _reset_l3_budget():
+    """Reset the process-wide L3 BudgetManager before/after each test.
+
+    The daily cap in llm.py tracks spend in a module-global BudgetManager; without
+    a reset, accrued cost would leak across tests. This keeps each test's budget
+    state deterministic and isolated (no real network/disk).
+    """
+    from transmutary import llm
+
+    llm.reset_budget_manager()
+    yield
+    llm.reset_budget_manager()
+
+
 @pytest.fixture
 def fake_env() -> dict:
     """A complete set of required credential env vars (fake values)."""

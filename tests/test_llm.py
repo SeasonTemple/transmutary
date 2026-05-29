@@ -110,3 +110,52 @@ def test_provider_failure_raises_llmerror():
     with mock.patch.object(llm.litellm, "completion", side_effect=RuntimeError("503 upstream")):
         with pytest.raises(LLMError):
             call("sys", "data")
+
+
+# --- L3 daily cap is actually enforced by the configured budget (KTD7) -------
+def test_daily_cap_default_is_concrete_not_unlimited():
+    # The shipped daily cap is a real number, not an unbounded config-defer.
+    assert llm.DEFAULT_L3_DAILY_BUDGET_USD > 0
+
+
+def test_call_raises_budget_exceeded_when_cap_exhausted(monkeypatch):
+    """End-to-end cap: with a real (tiny) daily budget configured, call() refuses
+    BEFORE hitting the provider — proving the cap fires, not just that a hand-
+    raised exception is caught.
+    """
+    monkeypatch.setenv(llm.ENV_L3_DAILY_BUDGET, "0.000001")  # 1e-6 USD/day
+    llm.reset_budget_manager()  # pick up the tiny cap
+
+    # completion must NOT be reached: the budget gate trips first.
+    with mock.patch.object(
+        llm.litellm, "completion", side_effect=AssertionError("provider must not be called")
+    ) as m:
+        with pytest.raises(LLMBudgetExceeded):
+            call("sys", "a much longer data payload to ensure projected cost > cap")
+    assert not m.called
+
+
+def test_call_accrues_cost_then_trips_cap(monkeypatch):
+    """A successful call charges the budget; once accrued cost crosses the cap a
+    later call is refused. Proves update_cost is wired, not just the pre-check.
+    """
+    # Budget large enough for the first call's projected cost but small enough
+    # that the recorded actual cost pushes a second call over.
+    monkeypatch.setenv(llm.ENV_L3_DAILY_BUDGET, "0.001")
+    llm.reset_budget_manager()
+    bm = llm.get_budget_manager()
+
+    def _completion(model, messages, **kwargs):
+        return _fake_response("ok")
+
+    # Force a large recorded cost on the successful call so the cap is exhausted.
+    with mock.patch.object(llm.litellm, "completion", side_effect=_completion):
+        with mock.patch.object(bm, "update_cost", side_effect=lambda **kw: bm.user_dict.__setitem__(
+            llm.L3_BUDGET_USER,
+            {**bm.user_dict[llm.L3_BUDGET_USER], "current_cost": 999.0},
+        )):
+            out = call("sys", "data")  # first call succeeds and accrues cost
+            assert out == "ok"
+        # Second call: accrued cost now exceeds the cap → refused.
+        with pytest.raises(LLMBudgetExceeded):
+            call("sys", "data")
