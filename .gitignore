@@ -1,0 +1,30 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+
+# 运行时状态与产物（私有，禁入库 — R24/KTD5）
+*.sqlite
+*.sqlite3
+*.db
+artifacts/
+_delivered/
+
+# 凭据 / 本地配置（禁入库 — R21/KTD4）
+.env
+*.local.yaml
+config/watchlist.yaml
+config/trend_scope.yaml
+config/delivery.yaml
+
+# 编辑器 / OS
+.DS_Store
+.idea/
+.vscode/
