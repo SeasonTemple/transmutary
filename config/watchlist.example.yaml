@@ -1,0 +1,11 @@
+# Mode A watchlist (R2, R3) — repos to observe + manual dependency edges.
+# Repos are not distinguished by ownership; first-party and third-party alike.
+repos:
+  - repo: example-org/upstream-cli
+  - repo: example-org/internal-gateway
+
+# Manual runtime dependency edges (依赖边). System does NOT auto-discover these.
+# Each edge's `to` MUST reference a repo declared above, or config load fails.
+dependency_edges:
+  - from: example-org/upstream-cli
+    to: example-org/internal-gateway

@@ -1,0 +1,11 @@
+# Mode B scope filter (R4) — AI-direction trend radar boundary.
+# topics + keywords combine as OR. At least one of the two must be non-empty,
+# otherwise config load fails (an empty scope would match nothing meaningfully).
+topics:
+  - llm
+  - artificial-intelligence
+  - machine-learning
+keywords:
+  - agent
+  - inference
+  - rag

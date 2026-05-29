@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transmutary"
+version = "0.0.1"
+description = "Transmutary — external ecosystem repository observation system"
+requires-python = ">=3.9"
+dependencies = [
+    "httpx",
+    "feedparser",
+    "feedgen",
+    "uvicorn",
+    "starlette",
+    "apscheduler",
+    "litellm",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

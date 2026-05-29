@@ -1,0 +1,12 @@
+# Delivery configuration (R14, R15, R16) — fixed routing, not an abstraction.
+# Routing is a two-branch inline condition (KTD1): urgent → immediate; else digest.
+
+# Filesystem roots (KTD5). DB file enforced 0600, artifact dir enforced 0700.
+state_db_path: ./var/state.sqlite3
+artifact_root: ./var/artifacts
+
+# Max subscriber token validity (R20) — used by U15 server (Phase 1), declared here.
+token_max_age_days: 90
+
+# Daily digest send hour (local, 24h). Phase 1 scheduler reads this.
+digest_hour: 9
