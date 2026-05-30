@@ -87,6 +87,40 @@ export TRANSMUTARY_LLM_BASE_URL=...      # optional: OpenAI/Anthropic-compatible
 | `config/trend_scope.yaml` | Mode B scope filter (topics + keywords) |
 | `config/delivery.yaml` | DB/artifact paths, digest hour, optional RSS feed dir + SMTP recipients |
 
+## Output & storage
+
+Two roots, both configured in `delivery.yaml`. All reports are private (files `0600`, dirs `0700`) and gitignored — nothing is committed.
+
+```
+<artifact_root>/
+├── <owner>__<repo>/                       # per-repo analysis archive (canonical, R24)
+│   └── <ts>-<kind>.md                     #   citation-bearing record of each report
+├── _delivered/<route>/                    # channel-rendered reports
+│   └── <owner>__<repo>-<kind>.md          #   route = immediate (urgent) | digest
+└── _feed/<route>.atom.xml                 # private RSS feed, one per route
+
+<state_db_path>  state.sqlite3  (SQLite, WAL)
+  event_fingerprint   event dedup (release / advisory / issue-cluster)
+  seen_set            rolling 7-day seen set (artifact diff)
+  issue_baseline      per-repo issue-rate baseline
+  collect_cursor      per-repo incremental since-cursor (survives restart)
+  star_snapshot       Mode B star snapshots (growth rate)
+  subscriber_token    per-subscriber RSS tokens (revoke / expiry)
+```
+
+One pipeline pass (tick):
+
+```
+collect (atom + incremental REST)
+  → dedup (event_fingerprint / seen_set)
+  → release → diagnose   |   issues → filter funnel (L1 rules → L3 judge) → diagnose
+  → diagnose (LLM + R18 quality gate + OSV/GHSA cross-validation)
+  → archive per-repo artifact  +  deliver (route → _delivered/<route>/ + RSS; email on immediate)
+  → persist state (advance cursor, update baseline, record fingerprints)
+```
+
+Routing is severity-driven: urgent (malware/critical) → `immediate` + email; everything else (or R18-downgraded) → `digest`.
+
 ## Architecture & docs
 
 - Domain glossary: [`CONTEXT.md`](CONTEXT.md)

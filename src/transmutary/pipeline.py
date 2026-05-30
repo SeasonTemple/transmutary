@@ -48,6 +48,7 @@ from .filter import ConservativeReview, IssueObservation, filter_issue_surge
 from .report.diagnose import EventContext, diagnose
 from .report.explain import explain_trends
 from .report.schema import Severity
+from .store.artifacts import ArtifactStore
 from .store.state import StateStore
 
 logger = logging.getLogger("transmutary.pipeline")
@@ -79,6 +80,7 @@ class PipelineRuntime:
     client: httpx.Client
     outbound: OutboundDelivery
     settings: Settings
+    artifacts: ArtifactStore
     creds: Credentials | None = None
     since_cursors: dict[str, str | None] = field(default_factory=dict)
 
@@ -106,6 +108,7 @@ def build_runtime(
     *,
     store: StateStore | None = None,
     client: httpx.Client | None = None,
+    artifacts: ArtifactStore | None = None,
 ) -> PipelineRuntime:
     """Construct the shared :class:`PipelineRuntime` from config + credentials (U2).
 
@@ -123,6 +126,7 @@ def build_runtime(
     delivery = settings.delivery
     store = store if store is not None else StateStore(delivery.state_db_path)
     client = client if client is not None else make_client()
+    artifacts = artifacts if artifacts is not None else ArtifactStore(delivery.artifact_root)
 
     feed_dir = delivery.feed_dir or os.path.join(delivery.artifact_root, "_feed")
 
@@ -140,6 +144,7 @@ def build_runtime(
         client=client,
         outbound=outbound,
         settings=settings,
+        artifacts=artifacts,
         creds=creds,
     )
 
@@ -175,7 +180,15 @@ def _ts_to_float(iso_ts: str) -> float:
 
 
 def _deliver_report(rt: PipelineRuntime, report, urgency: Severity | None) -> None:
-    """Route a report through the existing inline two-branch ``deliver`` (KTD1)."""
+    """Archive then route a report (U3 per-repo artifact + inline two-branch deliver).
+
+    The per-repo analysis artifact (`<artifact_root>/<repo>/<ts>-<kind>.md`, U3)
+    is the canonical citation-bearing record (R24/KTD5) and is written FIRST, so a
+    downstream delivery-channel hiccup never loses the archived diagnosis. The
+    inline two-branch ``deliver`` (KTD1) then renders to `_delivered/<route>/` and
+    the RSS feed (plus email on the immediate branch).
+    """
+    rt.artifacts.write(report)
     deliver(
         report,
         urgency,

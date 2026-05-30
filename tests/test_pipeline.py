@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import tempfile
 
 import httpx
@@ -180,9 +181,10 @@ def test_build_runtime_rss_only_when_no_email_config():
     assert rt.outbound.feed_dir is not None
 
 
-def test_build_runtime_feed_dir_derived_from_artifact_root():
-    rt = _build(_settings(artifact_root="/var/data", feed_dir=None))
-    assert rt.outbound.feed_dir == "/var/data/_feed"
+def test_build_runtime_feed_dir_derived_from_artifact_root(tmp_path):
+    root = str(tmp_path / "arts")
+    rt = _build(_settings(artifact_root=root, feed_dir=None))
+    assert rt.outbound.feed_dir == os.path.join(root, "_feed")
 
 
 def test_build_runtime_feed_dir_explicit_respected():
@@ -258,6 +260,23 @@ def test_ae4_same_release_across_two_ticks_diagnosed_once():
     res2 = run_release_issue_tick(rt2, "acme/cli", call_fn=llm)
     assert res2.releases_new == 0
     assert res2.diagnosed == 0
+
+
+def test_diagnose_writes_per_repo_artifact_archive(tmp_path):
+    # U3: every diagnosed report is archived per-repo under <artifact_root>/<repo>/
+    # (canonical citation-bearing record, R24/KTD5), IN ADDITION to the
+    # _delivered/<route>/ channel render.
+    root = str(tmp_path / "arts")
+    rt = _runtime(_settings(artifact_root=root), _creds(), _ri_handler(atom_tag="v9.9.9"))
+    res = run_release_issue_tick(rt, "acme/cli", call_fn=RecordingLLM(reply="body"))
+    assert res.diagnosed == 1
+
+    repo_dir = rt.artifacts.repo_dir("acme/cli")
+    archived = [f for f in os.listdir(repo_dir) if f.endswith("-diagnose.md")]
+    assert archived, "per-repo artifact archive should be written"
+
+    # the channel delivery still fires (per-repo archive does not replace it)
+    assert os.path.isdir(os.path.join(root, "_delivered"))
 
 
 def test_cold_start_no_baseline_does_not_crash():

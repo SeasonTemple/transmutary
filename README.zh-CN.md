@@ -87,6 +87,40 @@ export TRANSMUTARY_LLM_BASE_URL=...      # 可选：OpenAI/Anthropic-compatible 
 | `config/trend_scope.yaml` | 模式 B 范围过滤器（topics + keywords） |
 | `config/delivery.yaml` | DB/产物路径、摘要发送时辰、可选 RSS feed 目录 + SMTP 收件人 |
 
+## 产物与存储
+
+两个根，均在 `delivery.yaml` 配置。所有报告私有（文件 `0600`、目录 `0700`），gitignored 不入库。
+
+```
+<artifact_root>/
+├── <owner>__<repo>/                       # 按仓库归档的分析产物（权威，R24）
+│   └── <ts>-<kind>.md                     #   每份报告的溯源载体
+├── _delivered/<route>/                    # 投递渲染的报告
+│   └── <owner>__<repo>-<kind>.md          #   route = immediate(高危) | digest(摘要)
+└── _feed/<route>.atom.xml                 # 私有 RSS feed，按路由各一
+
+<state_db_path>  state.sqlite3  (SQLite, WAL)
+  event_fingerprint   事件去重（release / advisory / issue 聚类）
+  seen_set            7 天滚动已见集（产物差分）
+  issue_baseline      每仓 issue 速率基线
+  collect_cursor      每仓 since 增量游标（跨重启）
+  star_snapshot       模式B star 快照（增速）
+  subscriber_token    订阅者 RSS token（撤销 / 有效期）
+```
+
+一拍流程：
+
+```
+collect (atom + REST 增量)
+  → dedup (event_fingerprint / seen_set)
+  → release 直诊   |   issue 走筛选漏斗 (L1 规则 → L3 judge) → 诊断
+  → diagnose (LLM + R18 质量门控 + OSV/GHSA 交叉校验)
+  → 归档 per-repo 分析产物  +  投递 (路由 → _delivered/<route>/ + RSS；immediate 加邮件)
+  → 持久化 state (推进游标 / 更新基线 / 记指纹)
+```
+
+路由按 severity：高危（malware/critical）→ `immediate` + 邮件；其余（或 R18 降级）→ `digest`。
+
 ## 架构与文档
 
 - 领域术语表：[`CONTEXT.md`](CONTEXT.md)
