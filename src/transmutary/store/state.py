@@ -114,6 +114,12 @@ CREATE TABLE IF NOT EXISTS collect_cursor (
     since      TEXT,
     updated_at REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS promoted_repo (
+    repo         TEXT PRIMARY KEY,
+    source       TEXT,
+    promoted_at  REAL NOT NULL
+);
 """
 
 
@@ -352,6 +358,41 @@ class StateStore:
         )
 
     # ------------------------------------------------------------------
+    # promoted_repo (F4 — mode-B candidate promoted into the mode-A watchlist)
+    # ------------------------------------------------------------------
+    def promote_repo(self, repo: str, source: str = "mode-b") -> None:
+        """Persist ``repo`` as promoted (INSERT OR REPLACE → idempotent, no dup rows).
+
+        The promoted set is the cross-process bridge (KTD-B): the CLI writes here
+        and a resident service's reconcile job picks it up.
+        """
+        source = scrub_credentials(source)
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO promoted_repo (repo, source, promoted_at) "
+                "VALUES (?, ?, ?)",
+                (repo, source, time.time()),
+            )
+            self._conn.commit()
+
+    def demote_repo(self, repo: str) -> None:
+        """Remove ``repo`` from the promoted set (no error if it is not present)."""
+        with self._lock:
+            self._conn.execute("DELETE FROM promoted_repo WHERE repo=?", (repo,))
+            self._conn.commit()
+
+    def list_promoted(self) -> list[str]:
+        """Return all promoted repo names in deterministic (sorted) order."""
+        with self._lock:
+            cur = self._conn.execute("SELECT repo FROM promoted_repo ORDER BY repo ASC")
+            return [r["repo"] for r in cur.fetchall()]
+
+    def is_promoted(self, repo: str) -> bool:
+        with self._lock:
+            cur = self._conn.execute("SELECT 1 FROM promoted_repo WHERE repo=?", (repo,))
+            return cur.fetchone() is not None
+
+    # ------------------------------------------------------------------
     # diagnostics
     # ------------------------------------------------------------------
     def dump_all_text(self) -> list[str]:
@@ -365,6 +406,7 @@ class StateStore:
                 "seen_set",
                 "subscriber_token",
                 "collect_cursor",
+                "promoted_repo",
             ):
                 cur = self._conn.execute(f"SELECT * FROM {table}")  # noqa: S608 - fixed names
                 for row in cur.fetchall():

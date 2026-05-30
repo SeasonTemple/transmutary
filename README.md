@@ -9,7 +9,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 239 passing](https://img.shields.io/badge/tests-239_passing-brightgreen.svg)](#tests)
+[![Tests: 271 passing](https://img.shields.io/badge/tests-271_passing-brightgreen.svg)](#tests)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
 
@@ -106,6 +106,7 @@ Two roots, both configured in `delivery.yaml`. All reports are private (files `0
   collect_cursor      per-repo incremental since-cursor (survives restart)
   star_snapshot       Mode B star snapshots (growth rate)
   subscriber_token    per-subscriber RSS tokens (revoke / expiry)
+  promoted_repo       mode-B candidates promoted into the watchlist (F4)
 ```
 
 One pipeline pass (tick):
@@ -120,6 +121,19 @@ collect (atom + incremental REST)
 ```
 
 Routing is severity-driven: urgent (malware/critical) → `immediate` + email; everything else (or R18-downgraded) → `digest`.
+
+## Promotion (mode-B → mode-A)
+
+Promotion adds a mode-B trend candidate to the effective watchlist so it is observed by mode A. Use the `transmutary` CLI:
+
+```bash
+transmutary promote owner/repo            # add to the watchlist (persisted)
+transmutary promote owner/repo --source manual
+transmutary demote owner/repo             # remove
+transmutary list-watchlist                # config repos + promoted repos, with source
+```
+
+The effective watchlist is `config watchlist ∪ promoted_repo`. The CLI runs in a separate process and only writes the shared `promoted_repo` table; a running service's periodic **reconcile** job (every 60s) full-syncs its per-repo jobs to the effective watchlist, so a promote/demote takes effect **without restarting** the service. Promotion never touches credentials.
 
 ## Architecture & docs
 
@@ -153,16 +167,16 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 | Phase 1 — Mode A (collect / diagnose / deliver / supply-chain) | ✅ done · F1 real-repo milestone verified |
 | Phase 2 — Mode B (trend radar) | ✅ done |
 | Phase 3 — scheduling wiring (pipeline + service) | ✅ done |
-| Tests | ✅ 239 passing · ruff clean |
+| Tests | ✅ 271 passing · ruff clean |
 
 ### Roadmap
 
-Deferred by design: L2 embedding rerank, critique→refine report pass, channel interface abstraction, one-click promotion, subscription config, web dashboard, live resident run.
+Deferred by design: L2 embedding rerank, critique→refine report pass, channel interface abstraction, dashboard one-click promotion button, subscription config, web dashboard, live resident run.
 
 ### Tests
 
 ```bash
-.venv/bin/python -m pytest -q      # 239 passing
+.venv/bin/python -m pytest -q      # 271 passing
 .venv/bin/ruff check src tests     # clean
 ```
 

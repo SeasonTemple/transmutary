@@ -9,7 +9,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 239 passing](https://img.shields.io/badge/tests-239_passing-brightgreen.svg)](#测试)
+[![Tests: 271 passing](https://img.shields.io/badge/tests-271_passing-brightgreen.svg)](#测试)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
 
@@ -106,6 +106,7 @@ export TRANSMUTARY_LLM_BASE_URL=...      # 可选：OpenAI/Anthropic-compatible 
   collect_cursor      每仓 since 增量游标（跨重启）
   star_snapshot       模式B star 快照（增速）
   subscriber_token    订阅者 RSS token（撤销 / 有效期）
+  promoted_repo       晋升进关注清单的模式 B 候选仓（F4）
 ```
 
 一拍流程：
@@ -120,6 +121,19 @@ collect (atom + REST 增量)
 ```
 
 路由按 severity：高危（malware/critical）→ `immediate` + 邮件；其余（或 R18 降级）→ `digest`。
+
+## 晋升（模式 B → 模式 A）
+
+晋升把模式 B 趋势候选仓加入有效关注清单，使其转由模式 A 盯着。用 `transmutary` CLI：
+
+```bash
+transmutary promote owner/repo            # 加入关注清单（持久化）
+transmutary promote owner/repo --source manual
+transmutary demote owner/repo             # 移除
+transmutary list-watchlist                # config 仓 + 晋升仓，标注来源
+```
+
+有效关注清单 = `config 关注清单 ∪ promoted_repo`。CLI 是独立进程，只写共享的 `promoted_repo` 表；运行中的 service 由周期性 **reconcile** job（每 60 秒）把逐仓 job 全量同步到有效清单，因此 promote/demote **无需重启** service 即生效。晋升不碰任何凭据。
 
 ## 架构与文档
 
@@ -153,16 +167,16 @@ git config commit.template .gitmessage
 | Phase 1 — 模式 A（采集/诊断/投递/供应链） | ✅ 完成 · F1 真实仓里程碑已验收 |
 | Phase 2 — 模式 B（趋势雷达） | ✅ 完成 |
 | Phase 3 — 调度接线（pipeline + service） | ✅ 完成 |
-| 测试 | ✅ 239 passing · ruff clean |
+| 测试 | ✅ 271 passing · ruff clean |
 
 ### 路线图
 
-按设计延后：L2 embedding rerank、critique→refine 报告增强、channel 接口抽象、一键晋升、订阅配置、Web 仪表盘、真实常驻跑。
+按设计延后：L2 embedding rerank、critique→refine 报告增强、channel 接口抽象、Web 仪表盘一键晋升按钮、订阅配置、Web 仪表盘、真实常驻跑。
 
 ### 测试
 
 ```bash
-.venv/bin/python -m pytest -q      # 239 passing
+.venv/bin/python -m pytest -q      # 271 passing
 .venv/bin/ruff check src tests     # clean
 ```
 

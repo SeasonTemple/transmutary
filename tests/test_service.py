@@ -28,7 +28,12 @@ from transmutary.service import (
     Service,
     _isolated,
     build_scheduler,
+    effective_repos,
+    reconcile_repo_jobs,
+    register_repo_jobs,
+    unregister_repo_jobs,
 )
+from transmutary.store.state import StateStore
 
 
 def _settings(*, repos=("acme/cli", "acme/gateway"), email=False) -> Settings:
@@ -190,3 +195,214 @@ def test_service_init_passes_settings_through():
     job_ids = {j.id for j in svc.scheduler.get_jobs()}
     assert "trend" in job_ids
     assert "placeholder" not in job_ids
+
+
+# ===========================================================================
+# F4 — effective_repos, dynamic registration, reconcile, Service.promote/demote
+# ===========================================================================
+import pytest  # noqa: E402 - test-only import grouped with the F4 block
+
+
+@dataclass
+class _FakeRuntimeWithStore:
+    """Fake runtime carrying a real in-memory StateStore for F4 reconcile tests.
+
+    Only the attributes the registration / reconcile code reads are populated
+    (settings, store, has_email_leg). The ticks themselves are never executed
+    (scheduler is never started), so no network / LLM is involved."""
+
+    settings: Settings
+    store: StateStore
+    has_email_leg: bool = True
+
+
+@pytest.fixture
+def store():
+    s = StateStore(":memory:")
+    yield s
+    s.close()
+
+
+def _rt_store(settings, store) -> _FakeRuntimeWithStore:
+    return _FakeRuntimeWithStore(settings=settings, store=store)
+
+
+def _repo_job_ids(sched):
+    return {j.id for j in sched.get_jobs()}
+
+
+# --- U2: effective_repos ---
+
+
+def test_effective_repos_config_only(store):
+    settings = _settings(repos=("acme/cli", "acme/gateway"))
+    assert effective_repos(settings, store) == ["acme/cli", "acme/gateway"]
+
+
+def test_effective_repos_union_dedup_sorted(store):
+    settings = _settings(repos=("acme/cli", "acme/gateway"))
+    store.promote_repo("z/hot")
+    store.promote_repo("acme/cli")  # overlaps config → must not duplicate
+    assert effective_repos(settings, store) == ["acme/cli", "acme/gateway", "z/hot"]
+
+
+def test_effective_repos_none_store_degrades_to_config():
+    settings = _settings(repos=("b/two", "a/one"))
+    assert effective_repos(settings, None) == ["a/one", "b/two"]
+
+
+# --- U3: boot over effective list ---
+
+
+def test_boot_registers_promoted_repo_jobs(store):
+    store.promote_repo("hot/candidate")
+    settings = _settings(repos=("acme/cli",))
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    ids = _repo_job_ids(sched)
+    assert "security:hot/candidate" in ids
+    assert "release-issue:hot/candidate" in ids
+    assert "security:acme/cli" in ids
+    assert "reconcile" in ids
+
+
+# --- U3: reconcile cross-process sync + misdeletion protection ---
+
+
+def test_reconcile_picks_up_promote_from_another_process(store):
+    settings = _settings(repos=("acme/cli",))
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    assert "security:later/promoted" not in _repo_job_ids(sched)
+    # Simulate a CLI promote in a SEPARATE process writing the shared table.
+    store.promote_repo("later/promoted")
+    reconcile_repo_jobs(sched, _rt_store(settings, store))
+    ids = _repo_job_ids(sched)
+    assert "security:later/promoted" in ids
+    assert "release-issue:later/promoted" in ids
+
+
+def test_reconcile_removes_demoted_repo(store):
+    settings = _settings(repos=("acme/cli",))
+    store.promote_repo("temp/repo")
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    assert "security:temp/repo" in _repo_job_ids(sched)
+    store.demote_repo("temp/repo")
+    reconcile_repo_jobs(sched, _rt_store(settings, store))
+    ids = _repo_job_ids(sched)
+    assert "security:temp/repo" not in ids
+    assert "release-issue:temp/repo" not in ids
+
+
+def test_reconcile_never_removes_config_repo_jobs(store):
+    # Misdeletion guard: config repos are always in the effective list, so reconcile
+    # must keep their jobs even with an empty promoted set.
+    settings = _settings(repos=("acme/cli", "acme/gateway"))
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    reconcile_repo_jobs(sched, _rt_store(settings, store))  # nothing promoted
+    ids = _repo_job_ids(sched)
+    for repo in ("acme/cli", "acme/gateway"):
+        assert f"security:{repo}" in ids
+        assert f"release-issue:{repo}" in ids
+
+
+def test_reconcile_leaves_non_repo_jobs_untouched(store):
+    settings = _settings(repos=("acme/cli",))
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    reconcile_repo_jobs(sched, _rt_store(settings, store))
+    ids = _repo_job_ids(sched)
+    assert "trend" in ids
+    assert "reconcile" in ids
+
+
+# --- U3: idempotency (no duplicate jobs) ---
+
+
+@pytest.fixture
+def paused_sched():
+    # A started-but-paused scheduler: jobs land in the jobstore (so
+    # replace_existing actually dedupes) but no job runs (no network/LLM).
+    s = BackgroundScheduler()
+    s.start(paused=True)
+    yield s
+    s.shutdown(wait=False)
+
+
+def test_register_repo_jobs_idempotent_no_duplicates(store, paused_sched):
+    settings = _settings(repos=("acme/cli",))
+    rt = _rt_store(settings, store)
+    register_repo_jobs(paused_sched, rt, "dup/repo")
+    register_repo_jobs(paused_sched, rt, "dup/repo")  # repeat → replace_existing, no dup
+    ids = [j.id for j in paused_sched.get_jobs()]
+    assert ids.count("security:dup/repo") == 1
+    assert ids.count("release-issue:dup/repo") == 1
+
+
+def test_repeated_reconcile_no_duplicate_jobs(store, paused_sched):
+    settings = _settings(repos=("acme/cli",))
+    store.promote_repo("hot/one")
+    rt = _rt_store(settings, store)
+    build_scheduler(paused_sched, settings=settings, runtime=rt)
+    for _ in range(3):
+        reconcile_repo_jobs(paused_sched, rt)
+    ids = [j.id for j in paused_sched.get_jobs()]
+    assert ids.count("security:hot/one") == 1
+    assert ids.count("release-issue:hot/one") == 1
+
+
+# --- U3: unregister tolerance ---
+
+
+def test_unregister_missing_repo_is_noop(store):
+    sched = BackgroundScheduler()
+    # No jobs registered for this repo → must not raise.
+    unregister_repo_jobs(sched, "never/registered")
+
+
+# --- U3: Service.promote / demote immediate effect ---
+
+
+def test_service_promote_registers_immediately_and_persists(store):
+    settings = _settings(repos=("acme/cli",))
+    sched = BackgroundScheduler()
+    svc = Service(sched, settings=settings, runtime=_rt_store(settings, store))
+    svc.promote("fresh/repo")
+    ids = _repo_job_ids(svc.scheduler)
+    assert "security:fresh/repo" in ids  # immediate, not waiting for reconcile
+    assert "release-issue:fresh/repo" in ids
+    assert store.is_promoted("fresh/repo")  # persisted to shared table
+
+
+def test_service_demote_unregisters_and_persists(store):
+    settings = _settings(repos=("acme/cli",))
+    store.promote_repo("temp/repo")
+    sched = BackgroundScheduler()
+    svc = Service(sched, settings=settings, runtime=_rt_store(settings, store))
+    assert "security:temp/repo" in _repo_job_ids(svc.scheduler)
+    svc.demote("temp/repo")
+    ids = _repo_job_ids(svc.scheduler)
+    assert "security:temp/repo" not in ids
+    assert not store.is_promoted("temp/repo")
+
+
+def test_service_without_settings_cannot_promote():
+    # Backward compat: placeholder-only service has no runtime → promote raises.
+    svc = Service(BackgroundScheduler())
+    assert svc.runtime is None
+    with pytest.raises(RuntimeError):
+        svc.promote("x/y")
+
+
+# --- U3: reconcile job carries KTD-F flags (anti-overlap) ---
+
+
+def test_reconcile_job_has_max_instances_and_coalesce(store):
+    settings = _settings(repos=("acme/cli",))
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    by_id = {j.id: j for j in sched.get_jobs()}
+    assert by_id["reconcile"].max_instances == 1
+    assert by_id["reconcile"].coalesce is True

@@ -31,6 +31,9 @@ dependencies = [
     "pyyaml",
 ]
 
+[project.scripts]
+transmutary = "transmutary.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest",

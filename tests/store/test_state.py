@@ -29,6 +29,7 @@ def test_tables_created(store):
         "issue_baseline",
         "seen_set",
         "subscriber_token",
+        "promoted_repo",
     }
     cur = store._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     names = {r["name"] for r in cur.fetchall()}
@@ -100,6 +101,47 @@ def test_subscriber_token_crud_revoke(store):
     assert tok.revoked is False
     store.revoke_subscriber_token("th1")
     assert store.get_subscriber_token("th1").revoked is True
+
+
+# --- F4: promoted_repo CRUD ---
+
+
+def test_promote_lists_and_is_idempotent(store):
+    store.promote_repo("acme/cli")
+    assert store.list_promoted() == ["acme/cli"]
+    # Repeat promote → idempotent, no duplicate row.
+    store.promote_repo("acme/cli")
+    assert store.list_promoted() == ["acme/cli"]
+    cur = store._conn.execute("SELECT COUNT(*) c FROM promoted_repo")
+    assert cur.fetchone()["c"] == 1
+
+
+def test_demote_removes_and_missing_is_noop(store):
+    store.promote_repo("acme/cli")
+    store.demote_repo("acme/cli")
+    assert store.list_promoted() == []
+    # Demoting a repo that is not present must not raise.
+    store.demote_repo("never/promoted")
+    assert store.list_promoted() == []
+
+
+def test_is_promoted_true_and_false(store):
+    assert store.is_promoted("acme/cli") is False
+    store.promote_repo("acme/cli")
+    assert store.is_promoted("acme/cli") is True
+    assert store.is_promoted("other/repo") is False
+
+
+def test_list_promoted_is_sorted(store):
+    for r in ("z/last", "a/first", "m/mid"):
+        store.promote_repo(r)
+    assert store.list_promoted() == ["a/first", "m/mid", "z/last"]
+
+
+def test_promote_records_source(store):
+    store.promote_repo("acme/cli", source="mode-b")
+    cur = store._conn.execute("SELECT source FROM promoted_repo WHERE repo=?", ("acme/cli",))
+    assert cur.fetchone()["source"] == "mode-b"
 
 
 # --- security: R21 credential scrubbing ---
