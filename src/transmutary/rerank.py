@@ -38,6 +38,15 @@ from dataclasses import dataclass
 # is deliberately STRICT (KTD-E "宁少合并勿误并"): before this is tuned against a
 # real embedding model's similarity distribution, a high bar means we under-merge
 # (spend a little extra L3) rather than over-merge (risk masking a real signal).
+#
+# CALIBRATION DEFERRED (KTD-E sub-step / KTD-F): the spec's calibration sub-step —
+# measuring this model's cosine distribution over known should-merge / should-split
+# fault-text pairs (outage/crash/security buckets) and recording the worked basis
+# here — is intentionally deferred until a live embedding provider is wired in
+# (KTD-F gates it; MVP runs entirely on mocked deterministic vectors). The deferral
+# is SAFE because the strict default only risks under-merging, never over-merging,
+# so the only consequence is a few extra L3 calls — never a masked real signal. See
+# the plan's "Deferred to Follow-Up Work" list.
 L2_GROUP_THRESHOLD = 0.90
 
 # Embedding cost ceiling (KTD-H). If a single batch exceeds this many items, L2 is

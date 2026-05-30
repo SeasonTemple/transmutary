@@ -227,3 +227,167 @@ def test_data_block_carries_all_issues():
     filter_issue_surge(_issues(6, text="outage"), baseline_rate=None, call_fn=judge)
     data = judge.calls[0]["data"]
     assert data.count("[issue") == 6  # all matched issues forwarded to judge
+
+
+# ===========================================================================
+# U3 — L2 semantic grouping in the issue-surge funnel (KTD-A/B/H)
+# ===========================================================================
+import math  # noqa: E402
+
+from transmutary.rerank import L2_MAX_EMBED_ITEMS  # noqa: E402
+
+
+def _unit(deg: float) -> list[float]:
+    r = math.radians(deg)
+    return [math.cos(r), math.sin(r)]
+
+
+def _embed_by_angles(angles):
+    """embed_fn returning fixed 2-D unit vectors (one per matched issue, in order)."""
+
+    def fn(texts):
+        assert len(texts) == len(angles)
+        return [_unit(a) for a in angles]
+
+    return fn
+
+
+def _judge_recording():
+    """A judge that records the concatenated data block it saw, faults on 'outage'."""
+    calls = []
+
+    def _fn(system_instruction, data_block, *args, **kwargs):
+        calls.append(data_block)
+        is_fault = "outage" in data_block.lower()
+        return f'{{"is_fault": {str(is_fault).lower()}, "reason": "r"}}'
+
+    _fn.calls = calls
+    return _fn
+
+
+def test_l2_embed_fn_none_is_backcompat_single_judge():
+    # No embed_fn → exactly the prior behavior: ONE judge call over all matched.
+    judge = _judge_says(True)
+    decision = filter_issue_surge(_issues(6, text="outage"), baseline_rate=None, call_fn=judge)
+    assert decision.triggered is True
+    assert len(judge.calls) == 1
+    assert decision.groups == 1
+    assert decision.judge_calls == 1
+    assert decision.l2_degraded is False
+    # The single data block still carries all matched issues.
+    assert judge.calls[0]["data"].count("[issue") == 6
+
+
+def test_l2_near_duplicates_merge_into_fewer_judge_calls():
+    # 6 near-identical outage issues (all 0°) → one group → one judge call.
+    judge = _judge_says(True)
+    obs = _issues(6, text="outage")
+    decision = filter_issue_surge(
+        obs, baseline_rate=None, call_fn=judge, embed_fn=_embed_by_angles([0] * 6)
+    )
+    assert decision.triggered is True
+    assert decision.groups == 1
+    assert decision.judge_calls == 1  # << 6: L2 collapsed the duplicates
+
+
+def test_l2_quiet_representative_does_not_mask_member_fault():
+    # Representative issue text is benign; a later MEMBER of the same group is a real
+    # outage. Because the WHOLE group is concatenated into one judge call, the fault
+    # is seen — a quiet representative can never hide it (KTD-A P0).
+    judge = _judge_recording()
+    obs = [
+        IssueObservation(repo="acme/cli", text="service is down quiet note", ts=1000.0),
+        IssueObservation(repo="acme/cli", text="service is down real outage here", ts=1001.0),
+        IssueObservation(repo="acme/cli", text="service is down still", ts=1002.0),
+        IssueObservation(repo="acme/cli", text="service is down again", ts=1003.0),
+        IssueObservation(repo="acme/cli", text="service is down more", ts=1004.0),
+    ]
+    decision = filter_issue_surge(
+        obs, baseline_rate=None, call_fn=judge, embed_fn=_embed_by_angles([0, 0, 0, 0, 0])
+    )
+    assert decision.groups == 1
+    # The judge's single data block included the member's 'outage' text.
+    assert any("outage" in db.lower() for db in judge.calls)
+    assert decision.triggered is True
+
+
+def test_l2_fault_group_counts_all_members_as_evidence_not_just_representative():
+    # 回填 (KTD-A P0): when a group is judged a fault, EVERY member — not just the
+    # representative — is carried as evidence. The whole-group concatenation IS the
+    # anti-masking mechanism, so matched_count reflects all 5 members, making the
+    # "断言覆盖全组非仅代表" guarantee an explicit, observable output field rather than
+    # an indirect consequence of the judge-call count.
+    judge = _judge_recording()
+    obs = [
+        IssueObservation(repo="acme/cli", text="service is down quiet note", ts=1000.0),
+        IssueObservation(repo="acme/cli", text="service is down real outage here", ts=1001.0),
+        IssueObservation(repo="acme/cli", text="service is down still", ts=1002.0),
+        IssueObservation(repo="acme/cli", text="service is down again", ts=1003.0),
+        IssueObservation(repo="acme/cli", text="service is down more", ts=1004.0),
+    ]
+    decision = filter_issue_surge(
+        obs, baseline_rate=None, call_fn=judge, embed_fn=_embed_by_angles([0, 0, 0, 0, 0])
+    )
+    assert decision.triggered is True
+    assert decision.groups == 1
+    assert decision.judge_calls == 1  # one judge call collapsed the duplicates
+    # All 5 members counted as fault evidence — the non-representative members are not
+    # dropped just because only the representative seeded the group.
+    assert decision.matched_count == len(obs) == 5
+
+
+def test_l2_distinct_signals_not_merged_each_judged():
+    # Two distinct signal clusters (0° and 90°) → two groups → two judge calls.
+    judge = _judge_recording()
+    obs = _issues(6, text="outage")
+    decision = filter_issue_surge(
+        obs, baseline_rate=None, call_fn=judge, embed_fn=_embed_by_angles([0, 0, 0, 90, 90, 90])
+    )
+    assert decision.groups == 2
+    assert decision.judge_calls == 2
+
+
+def test_l2_embed_failure_degrades_to_full_l3_zero_miss():
+    # embed_fn raising must NOT drop the surge or raise: degrade to a single judge
+    # over the whole batch (zero-miss), flagged l2_degraded.
+    judge = _judge_says(True)
+
+    def bad_embed(texts):
+        raise LLMError("embedding unavailable")
+
+    decision = filter_issue_surge(
+        _issues(6, text="outage"), baseline_rate=None, call_fn=judge, embed_fn=bad_embed
+    )
+    assert decision.triggered is True
+    assert decision.l2_degraded is True
+    assert decision.groups == 1  # whole batch, full L3
+    assert len(judge.calls) == 1
+
+
+def test_l2_over_cap_skips_embedding_and_degrades():
+    # More than L2_MAX_EMBED_ITEMS matched → skip L2 entirely, never call embed_fn.
+    judge = _judge_says(True)
+    called = {"n": 0}
+
+    def embed_fn(texts):
+        called["n"] += 1
+        return [_unit(0) for _ in texts]
+
+    n = L2_MAX_EMBED_ITEMS + 1
+    obs = _issues(n, text="outage")
+    decision = filter_issue_surge(obs, baseline_rate=None, call_fn=judge, embed_fn=embed_fn)
+    assert decision.l2_degraded is True
+    assert called["n"] == 0  # over the cap → embedding never invoked
+    assert decision.groups == 1
+    assert decision.triggered is True
+
+
+def test_l2_one_group_not_fault_no_trigger():
+    # A single benign group → judged once, not a fault → no trigger.
+    judge = _judge_says(False)
+    obs = _issues(6, text="down")  # 'down' bucket but judge says not fault
+    decision = filter_issue_surge(
+        obs, baseline_rate=None, call_fn=judge, embed_fn=_embed_by_angles([0] * 6)
+    )
+    assert decision.triggered is False
+    assert decision.used_judge is True

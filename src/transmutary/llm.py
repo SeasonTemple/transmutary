@@ -313,20 +313,59 @@ def embed(
     return vectors
 
 
+def _embedding_index(item) -> int | None:
+    """Read the per-object ``index`` field from an embedding item, if present.
+
+    The OpenAI/LiteLLM embedding schema carries an ``index`` on every data object
+    precisely because the ``data`` array is not contractually guaranteed to preserve
+    input order across all providers/proxies. Returns the int index when available
+    (object- or dict-shaped), else ``None``.
+    """
+    try:
+        raw = item.index
+    except AttributeError:
+        try:
+            raw = item["index"]
+        except (KeyError, TypeError):
+            return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _extract_embeddings(response) -> list[list[float]]:
-    """Pull the per-input vectors out of a LiteLLM/OpenAI-shaped embedding response."""
+    """Pull the per-input vectors out of a LiteLLM/OpenAI-shaped embedding response.
+
+    Vectors are mapped back to INPUT order by the per-item ``index`` field when every
+    item exposes one — the data array is not contractually ordered, and the
+    all-or-nothing count guard in :func:`embed` would pass an out-of-order-but-complete
+    response while leaving vectors silently mis-aligned to texts (a zero-miss hazard:
+    a mis-aligned vector could merge two genuinely different issue texts in L2). When
+    no item carries an index we fall back to arrival order (the documented contract for
+    mainstream OpenAI-compatible endpoints).
+    """
     try:
         data = response.data
     except AttributeError:
         data = response["data"]
-    vectors: list[list[float]] = []
-    for item in data:
+
+    items = list(data)
+    indices = [_embedding_index(item) for item in items]
+
+    def _vec(item) -> list[float]:
         try:
             vec = item.embedding
         except AttributeError:
             vec = item["embedding"]
-        vectors.append([float(x) for x in vec])
-    return vectors
+        return [float(x) for x in vec]
+
+    # Reorder by per-item index ONLY when every item exposes a distinct int index;
+    # otherwise trust arrival order (no index field, or a partial/ambiguous set).
+    if all(idx is not None for idx in indices) and len(set(indices)) == len(indices):
+        ordered = sorted(zip(indices, items), key=lambda pair: pair[0])
+        return [_vec(item) for _, item in ordered]
+    return [_vec(item) for item in items]
 
 
 def _enforce_budget(bm: BudgetManager, model: str, messages: list) -> None:

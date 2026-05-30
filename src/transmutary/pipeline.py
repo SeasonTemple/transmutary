@@ -53,6 +53,11 @@ from .store.state import StateStore
 
 logger = logging.getLogger("transmutary.pipeline")
 
+# Sentinel for the tick ``embed_fn`` seam: when left unset, a tick binds the real
+# llm.embed via _embed_fn(rt); tests pass an explicit value (a mock, or None to
+# disable L2) so pipeline tests never reach the real embedding endpoint.
+_UNSET = object()
+
 
 # ---------------------------------------------------------------------------
 # U2 — shared runtime bootstrap
@@ -179,7 +184,13 @@ def _embed_fn(rt: PipelineRuntime):
     base_url = _llm_base_url(rt)
 
     def embed_fn(texts: list[str]) -> list[list[float]]:
-        return llm.embed(texts, api_key=api_key, base_url=base_url)
+        # num_retries=0 makes the embedding call fail fast and DETERMINISTICALLY
+        # when the provider is unreachable (KTD-F): the filter/explain layers degrade
+        # to full L3 on any embedding error (zero-miss, KTD-B), so a flaky/slow embed
+        # endpoint must never stall or perturb the tick.
+        return llm.embed(
+            texts, api_key=api_key, base_url=base_url, num_retries=0
+        )
 
     return embed_fn
 
@@ -263,7 +274,7 @@ def _related_signals(rt: PipelineRuntime, repo: str, token: str | None) -> list[
 
 
 def run_release_issue_tick(
-    rt: PipelineRuntime, repo: str, *, call_fn=llm.call
+    rt: PipelineRuntime, repo: str, *, call_fn=llm.call, embed_fn=_UNSET
 ) -> ReleaseIssueTickResult:
     """Run one mode-A release/issue pipeline pass for a single watchlist repo (U3).
 
@@ -325,7 +336,7 @@ def run_release_issue_tick(
                 api_key=api_key,
                 base_url=base_url,
                 call_fn=call_fn,
-                embed_fn=_embed_fn(rt),
+                embed_fn=_embed_fn(rt) if embed_fn is _UNSET else embed_fn,
             )
         except ConservativeReview as exc:
             # Judge unavailable / budget exhausted for a real surge — flag for
@@ -479,6 +490,7 @@ def run_trend_tick(
     snapshot_candidates: list[TrendCandidate] | None = None,
     language: str | None = None,
     call_fn=llm.call,
+    embed_fn=_UNSET,
 ) -> TrendTickResult:
     """Run one mode-B trend pipeline pass for the configured scope (U5).
 
@@ -514,7 +526,7 @@ def run_trend_tick(
         api_key=api_key,
         base_url=base_url,
         call_fn=call_fn,
-        embed_fn=_embed_fn(rt),
+        embed_fn=_embed_fn(rt) if embed_fn is _UNSET else embed_fn,
     )
     result.skipped_unchanged = list(outcome.skipped_unchanged)
     result.reaccelerated = list(outcome.reaccelerated)

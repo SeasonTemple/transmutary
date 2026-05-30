@@ -9,7 +9,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 271 passing](https://img.shields.io/badge/tests-271_passing-brightgreen.svg)](#测试)
+[![Tests: 315 passing](https://img.shields.io/badge/tests-315_passing-brightgreen.svg)](#测试)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
 
@@ -114,7 +114,7 @@ export TRANSMUTARY_LLM_BASE_URL=...      # 可选：OpenAI/Anthropic-compatible 
 ```
 collect (atom + REST 增量)
   → dedup (event_fingerprint / seen_set)
-  → release 直诊   |   issue 走筛选漏斗 (L1 规则 → L3 judge) → 诊断
+  → release 直诊   |   issue 走筛选漏斗 (L1 规则 → L2 语义分组 → L3 judge) → 诊断
   → diagnose (LLM + R18 质量门控 + OSV/GHSA 交叉校验)
   → 归档 per-repo 分析产物  +  投递 (路由 → _delivered/<route>/ + RSS；immediate 加邮件)
   → 持久化 state (推进游标 / 更新基线 / 记指纹)
@@ -180,16 +180,16 @@ git config commit.template .gitmessage
 | Phase 1 — 模式 A（采集/诊断/投递/供应链） | ✅ 完成 · F1 真实仓里程碑已验收 |
 | Phase 2 — 模式 B（趋势雷达） | ✅ 完成 |
 | Phase 3 — 调度接线（pipeline + service） | ✅ 完成 |
-| 测试 | ✅ 271 passing · ruff clean |
+| 测试 | ✅ 315 passing · ruff clean |
 
 ### 路线图
 
-按设计延后：L2 embedding rerank、critique→refine 报告增强、channel 接口抽象、Web 仪表盘一键晋升按钮、订阅配置、Web 仪表盘、真实常驻跑。
+按设计延后：critique→refine 报告增强、channel 接口抽象、Web 仪表盘一键晋升按钮、订阅配置、Web 仪表盘、真实常驻跑。（L2 语义分组已实现。）
 
 ### 测试
 
 ```bash
-.venv/bin/python -m pytest -q      # 271 passing
+.venv/bin/python -m pytest -q      # 315 passing
 .venv/bin/ruff check src tests     # clean
 ```
 

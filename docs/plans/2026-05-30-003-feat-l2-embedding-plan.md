@@ -131,6 +131,7 @@ flowchart LR
 **In scope:** llm.embed、聚类工具、模式A/B 接 L2（去重聚类）、降级透传、文档。
 
 ### Deferred to Follow-Up Work
+- **U2 阈值校准子步骤（KTD-E）延后至接入真实 embedding provider（KTD-F 门控）。** MVP 全程 mock 确定性向量，无真实模型可测 cosine 分布；故未落 outage/crash/security 故障对 fixture，亦未在常量注释写校准依据。延后安全：严格默认（0.90）只会欠合并（多花 L3）、绝不误并真信号，方向性「宁少合并勿误并」自洽。接入 live provider 后再补 fixture + 分布测试 + 注释依据。
 - L2 相关性 top-K 收窄（zero-miss 风险，暂只去重聚类）。
 - chunk 级语义清洗（CONTEXT 另列）。
 - embedding 缓存/向量持久化（重复 embed 成本优化）。

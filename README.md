@@ -9,7 +9,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 271 passing](https://img.shields.io/badge/tests-271_passing-brightgreen.svg)](#tests)
+[![Tests: 315 passing](https://img.shields.io/badge/tests-315_passing-brightgreen.svg)](#tests)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
 
@@ -46,6 +46,7 @@ collect → clean → dedup → filter → report → deliver
 
 - **Pure-pull architecture** — no webhooks (you can't create webhooks on third-party repos); Atom feeds + incremental REST polling instead.
 - **Clean before LLM** — structured checks (URL/content fingerprint, staleness, reachability) run first; only passing content reaches the LLM for chunk-level relevance filtering.
+- **L1 → L2 → L3 funnel** — cheap keyword/rule gating (L1), then embedding-cosine *semantic grouping* of survivors (L2, representative-linkage, zero-miss), then the expensive LLM-as-judge once per group (L3). Authoritative supply-chain / release signals bypass L2; if embedding is unavailable the funnel degrades to full L3 so nothing is dropped.
 - **Deterministic API, LLM only for semantics** — external APIs run through deterministic code; the LLM only does diagnosis / relevance / summarization. Security verdicts are cross-validated against deterministic OSV/GHSA hits.
 - **Tiered scheduling** — a single resident service with internal cadences: supply-chain (minutes), releases/issues (~10 min), trends (daily).
 - **Security baseline** — untrusted external content is structurally isolated from instructions (prompt-injection defense); credentials live only in env, never persisted; SSRF allowlist with no redirects; private access-controlled artifacts.
@@ -114,7 +115,7 @@ One pipeline pass (tick):
 ```
 collect (atom + incremental REST)
   → dedup (event_fingerprint / seen_set)
-  → release → diagnose   |   issues → filter funnel (L1 rules → L3 judge) → diagnose
+  → release → diagnose   |   issues → filter funnel (L1 rules → L2 semantic group → L3 judge) → diagnose
   → diagnose (LLM + R18 quality gate + OSV/GHSA cross-validation)
   → archive per-repo artifact  +  deliver (route → _delivered/<route>/ + RSS; email on immediate)
   → persist state (advance cursor, update baseline, record fingerprints)
@@ -180,16 +181,16 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 | Phase 1 — Mode A (collect / diagnose / deliver / supply-chain) | ✅ done · F1 real-repo milestone verified |
 | Phase 2 — Mode B (trend radar) | ✅ done |
 | Phase 3 — scheduling wiring (pipeline + service) | ✅ done |
-| Tests | ✅ 271 passing · ruff clean |
+| Tests | ✅ 315 passing · ruff clean |
 
 ### Roadmap
 
-Deferred by design: L2 embedding rerank, critique→refine report pass, channel interface abstraction, dashboard one-click promotion button, subscription config, web dashboard, live resident run.
+Deferred by design: critique→refine report pass, channel interface abstraction, dashboard one-click promotion button, subscription config, web dashboard, live resident run. (L2 semantic grouping is implemented.)
 
 ### Tests
 
 ```bash
-.venv/bin/python -m pytest -q      # 271 passing
+.venv/bin/python -m pytest -q      # 315 passing
 .venv/bin/ruff check src tests     # clean
 ```
 

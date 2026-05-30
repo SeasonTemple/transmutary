@@ -681,3 +681,165 @@ def test_ticks_thread_llm_api_key_from_creds(tick):
         run_trend_tick(rt, ts=1000.0, call_fn=llm)
     assert llm.calls  # the seam was reached
     assert all(c["api_key"] == "sk-fakellmkey0000000000000000000000" for c in llm.calls)
+
+
+# ===========================================================================
+# L2 semantic grouping — pipeline wiring of the embed_fn seam (KTD-A/B/C/F/KTD7)
+# ===========================================================================
+# ONE shared deterministic, network-free embed_fn (same spirit as the rerank unit's
+# vector mocks). Each text maps to a fixed one-hot axis keyed on the first vocab
+# token it contains: texts sharing a token get the SAME unit vector (cosine 1.0 >
+# rerank.L2_GROUP_THRESHOLD → grouped onto one representative); texts on different
+# axes are ORTHOGONAL (cosine 0.0 → kept separate). No litellm, no real embedding
+# endpoint — fully repeatable across runs and under xdist.
+import transmutary.llm as _llm  # noqa: E402
+
+
+def _unit_vec(text: str) -> list[float]:
+    vocab = ["outage", "crash", "security", "perf", "docs"]
+    vec = [0.0] * (len(vocab) + 1)
+    for i, kw in enumerate(vocab):
+        if kw in text:
+            vec[i] = 1.0
+            return vec
+    vec[-1] = 1.0  # fallback axis for "everything else"
+    return vec
+
+
+class RecordingEmbed:
+    """A deterministic embed_fn seam that records the batches it was asked to embed.
+
+    Returns fixed one-hot vectors (:func:`_unit_vec`) so near-duplicate texts share a
+    vector (cosine 1.0 > the rerank dup threshold → grouped) while distinct topics
+    stay orthogonal. Never touches the network — this proves the L2 path runs without
+    litellm and stays under the suite time budget.
+    """
+
+    def __init__(self):
+        self.batches: list[list[str]] = []
+
+    def __call__(self, texts: list[str]) -> list[list[float]]:
+        self.batches.append(list(texts))
+        return [_unit_vec(t) for t in texts]
+
+
+# --- scenario (1): release/issue L2 grouping → judge < issues ---
+def test_l2_issue_surge_groups_near_duplicates_fewer_judge_calls():
+    # FIVE near-duplicate "outage" issues. With a mock embed_fn that maps them all to
+    # the SAME axis, the filter's L2 layer (rerank.group_semantic) collapses them to a
+    # single representative group, so the expensive L3 triage judge runs ONCE — not
+    # once per issue (KTD7). The judge replies "not a fault" so every group is judged
+    # (no early-exit hides the count): the judge-call reduction IS the proof of L2.
+    issues = [
+        _issue_item(i, "service down", "the API is down, 503 outage", _iso(i))
+        for i in range(1, 6)
+    ]
+    embed = RecordingEmbed()
+    llm = RecordingLLM(
+        reply=lambda sys, data: '{"is_fault": false, "reason": "benign"}'
+        if "triage judge" in sys
+        else "diagnosis body"
+    )
+    rt = _runtime(_settings(), _creds(), _ri_handler(issues=issues))
+
+    res = run_release_issue_tick(rt, "acme/cli", call_fn=llm, embed_fn=embed)
+
+    # The L2 seam was driven with all five issue texts (deterministic, no network).
+    assert embed.batches and len(embed.batches[0]) == len(issues)
+    judge_calls = [c for c in llm.calls if "triage judge" in c["system"]]
+    # L2 grouping collapsed the 5 near-duplicates → FEWER judge calls than issues...
+    assert len(judge_calls) < len(issues)
+    # ...specifically exactly one (all five share one axis → one cluster → one judge).
+    assert len(judge_calls) == 1
+    # Judge said "no fault" for the single representative group → no surge, no diagnose.
+    assert res.issue_triggered is False
+    assert res.diagnosed == 0
+
+
+# --- scenario (2): trend L2 grouping → fewer representatives than candidates ---
+def test_l2_trend_tick_groups_similar_candidates():
+    # Two near-duplicate "outage"-themed trend candidates plus one orthogonal "docs"
+    # candidate. The mock embed_fn puts the two outage repos on the SAME axis (cosine
+    # 1.0 → one L2 group, the second folded onto the first) and the docs repo on its
+    # own axis, so explain_trends sends only TWO representatives to its single batched
+    # LLM call — fewer than the three candidates — while still emitting one report per
+    # candidate (zero-miss). All over the pipeline embed_fn seam with NO network.
+    #
+    # Each description carries the configured scope tokens ("ai"/"llm") so the trend
+    # collector keeps all three; the L2 axis token ("outage" vs "docs") is what drives
+    # grouping — purely via the mock embedder, never the collector.
+    rows = [
+        _row("acme/outage-a", 1200, desc="an ai llm outage incident toolkit"),
+        _row("acme/outage-b", 1100, desc="another ai llm outage triage helper"),
+        _row("acme/doc-tool", 1000, desc="an ai llm docs generator"),
+    ]
+    embed = RecordingEmbed()
+    llm = RecordingLLM(
+        reply='[{"index": 0, "summary": "s0"}, {"index": 1, "summary": "s1"}]'
+    )
+    rt = _runtime(_settings(), _creds(), _trend_handler(rows))
+
+    res = run_trend_tick(rt, ts=1000.0, call_fn=llm, embed_fn=embed)
+
+    # The embed seam was exercised with all three candidate texts — deterministically.
+    assert embed.batches
+    embedded = embed.batches[0]
+    assert len(embedded) == 3
+    # The two outage candidates share an axis (grouped); the docs one is orthogonal.
+    vecs = [_unit_vec(t) for t in embedded]
+    outage_vecs = [v for t, v in zip(embedded, vecs) if "outage" in t]
+    docs_vecs = [v for t, v in zip(embedded, vecs) if "docs" in t]
+    assert len(outage_vecs) == 2 and outage_vecs[0] == outage_vecs[1]
+    assert docs_vecs and docs_vecs[0] != outage_vecs[0]
+    # Grouping is observable: only TWO representatives reached the single batched LLM
+    # call (3 candidates → 2 groups), proving L2 collapsed the duplicate pair (KTD7).
+    assert len(llm.calls) == 1
+    assert "[CANDIDATE 0]" in llm.calls[0]["data"]
+    assert "[CANDIDATE 1]" in llm.calls[0]["data"]
+    assert "[CANDIDATE 2]" not in llm.calls[0]["data"]
+    # Every candidate still gets a delivered report (collapsed member reuses its
+    # representative's summary — zero-miss).
+    assert res.delivered == 3
+
+
+# --- scenario (3): embed unavailable → degrade to full L3 (zero-miss) ---
+def test_release_issue_tick_embed_unavailable_degrades_no_crash(monkeypatch):
+    # embed raising (provider has no embedding API, KTD-F) must degrade to full L3,
+    # not crash and not drop the surge (zero-miss, KTD-B). The tick binds the real
+    # llm.embed (embed_fn left at its default); the patched embed raises, so the
+    # filter's L2 layer degrades to one-group-per-issue and the surge still confirms.
+    issues = [
+        _issue_item(i, "service down", "the API is down, 503 outage", _iso(i))
+        for i in range(1, 6)
+    ]
+
+    def boom_embed(texts, **kwargs):
+        raise _llm.LLMError("no embedding endpoint")
+
+    monkeypatch.setattr(_llm, "embed", boom_embed)
+
+    def reply(system, data):
+        return '{"is_fault": true, "reason": "ok"}' if "triage judge" in system else "body"
+
+    rt = _runtime(_settings(), _creds(), _ri_handler(issues=issues))
+    res = run_release_issue_tick(rt, "acme/cli", call_fn=RecordingLLM(reply=reply))
+    assert res.issue_triggered is True  # degraded full L3 still confirms the fault
+    assert res.needs_human_review is False
+
+
+# --- distinct: authority signals bypass L2 entirely (KTD-C) ---
+def test_security_tick_does_not_use_l2(monkeypatch):
+    # Authority signals (supply-chain) bypass L2 entirely (KTD-C): the security tick
+    # must never call the embedding API.
+    osv = {"results": [{"vulns": [{"id": "GHSA-xxxx-yyyy-zzzz", "summary": "RCE"}]}]}
+    embed_calls = {"n": 0}
+
+    def spy_embed(texts, **kwargs):
+        embed_calls["n"] += 1
+        return [[1.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(_llm, "embed", spy_embed)
+    rt = _runtime(_settings(), _creds(), _sec_handler(osv_results=osv))
+    res = run_security_tick(rt, "acme/cli", call_fn=RecordingLLM(reply="Upgrade."))
+    assert res.alerts == 1
+    assert embed_calls["n"] == 0  # L2 never touched the authority path

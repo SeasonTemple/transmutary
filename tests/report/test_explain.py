@@ -253,3 +253,105 @@ def test_llm_failure_still_emits_reports():
     out = explain_trends([_cand("a/r")], store, call_fn=_call)
     assert len(out.reports) == 1
     assert "unavailable" in out.reports[0].body_md.lower()
+
+
+# ===========================================================================
+# U4 — L2 semantic grouping in the trend explainer (KTD-A/B/H)
+# ===========================================================================
+import math  # noqa: E402
+
+from transmutary.rerank import L2_MAX_EMBED_ITEMS  # noqa: E402
+
+
+def _unit(deg: float) -> list[float]:
+    r = math.radians(deg)
+    return [math.cos(r), math.sin(r)]
+
+
+def _embed_by_angles(angles):
+    def fn(texts):
+        assert len(texts) == len(angles)
+        return [_unit(a) for a in angles]
+
+    return fn
+
+
+def test_l2_embed_fn_none_backcompat_single_call():
+    # No embed_fn → prior behavior: every fresh candidate summarized, one batch call.
+    store = _store()
+    captured: dict = {}
+    cands = [_cand(f"a/llm-{i}") for i in range(3)]
+    out = explain_trends(cands, store, call_fn=_summary_call(captured))
+    assert len(out.reports) == 3
+    assert out.single_llm_call is True
+    assert out.llm_call_count == 1
+    assert out.l2_groups == 3  # no folding
+    assert out.l2_degraded is False
+
+
+def test_l2_near_duplicates_folded_and_collapsed_repos_noted():
+    # Two near-identical trend candidates (0°, 0°) fold onto one representative.
+    # Every candidate still gets a report (zero-miss); the representative's report
+    # NOTES the collapsed repo (P0: no silent drop). One batch call either way.
+    store = _store()
+    captured: dict = {}
+    cands = [
+        _cand("a/rep", desc="an llm agent framework"),
+        _cand("a/dup", desc="an llm agent framework clone"),
+    ]
+    out = explain_trends(
+        cands, store, call_fn=_summary_call(captured), embed_fn=_embed_by_angles([0, 0])
+    )
+    assert len(out.reports) == 2  # zero-miss: both repos still reported
+    assert out.l2_groups == 1  # folded into one group
+    assert len(captured["calls"]) == 1  # only the representative was summarized
+    # The representative's report records the fold; the collapsed repo is named.
+    rep_report = next(r for r in out.reports if r.repo == "a/rep")
+    assert "L2 semantic fold" in rep_report.body_md
+    assert "a/dup" in rep_report.body_md
+
+
+def test_l2_distinct_trends_not_folded():
+    store = _store()
+    captured: dict = {}
+    cands = [_cand("a/one", desc="llm tool"), _cand("a/two", desc="db engine")]
+    out = explain_trends(
+        cands, store, call_fn=_summary_call(captured), embed_fn=_embed_by_angles([0, 90])
+    )
+    assert out.l2_groups == 2
+    assert len(out.reports) == 2
+    # No fold note on either when nothing was collapsed.
+    assert all("L2 semantic fold" not in r.body_md for r in out.reports)
+
+
+def test_l2_embed_failure_degrades_all_candidates_summarized():
+    from transmutary.llm import LLMError
+
+    store = _store()
+    captured: dict = {}
+
+    def bad_embed(texts):
+        raise LLMError("embedding unavailable")
+
+    cands = [_cand(f"a/llm-{i}") for i in range(3)]
+    out = explain_trends(cands, store, call_fn=_summary_call(captured), embed_fn=bad_embed)
+    assert out.l2_degraded is True
+    assert len(out.reports) == 3  # zero-miss: all summarized
+    assert out.l2_groups == 3
+
+
+def test_l2_over_cap_skips_embedding():
+    store = _store()
+    captured: dict = {}
+    called = {"n": 0}
+
+    def embed_fn(texts):
+        called["n"] += 1
+        return [_unit(0) for _ in texts]
+
+    n = L2_MAX_EMBED_ITEMS + 1
+    cands = [_cand(f"a/llm-{i}", desc=f"tool {i}") for i in range(n)]
+    out = explain_trends(cands, store, call_fn=_summary_call(captured), embed_fn=embed_fn)
+    assert out.l2_degraded is True
+    assert called["n"] == 0
+    assert len(out.reports) == n

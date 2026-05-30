@@ -319,6 +319,18 @@ def explain_trends(
     representative's report NOTES which approximate repos were folded into it — the
     fold is recorded, never silently dropped (P0). Embedding failure or an over-cap
     batch degrades to summarizing every candidate (KTD-B/H).
+
+    Why mode B summarizes ONLY the representative — and why that does NOT violate the
+    KTD-A "judge 看全组" (whole-group concatenation) invariant that mode A's L3 judge
+    enforces: mode A is a fault GATE (a missed real fault is a zero-miss failure), so
+    its judge must see every member's full text. Mode B is NOT a fault gate — trend
+    explanations are low-priority by nature (digest-tier severity), and the only
+    authoritative/safety-critical signals (supply-chain, release) bypass L2 entirely
+    (KTD-C). A trend candidate carries no fault verdict to mask, so summarizing the
+    representative is sufficient AS LONG AS every collapsed member still gets its own
+    zero-miss Report plus a visible fold note (both guaranteed below). The two modes
+    therefore diverge BY DESIGN: whole-group concat where a fault could be masked
+    (mode A), representative-only where nothing safety-critical is at stake (mode B).
     """
     # 1. Artifact diff: drop unchanged repos; keep new / re-accelerated (R8/AE2).
     #    reaccelerated covers ONLY genuine AE2 (same repo + prior round + higher
