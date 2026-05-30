@@ -35,7 +35,7 @@
 - **基线（baseline）** — 某仓库 issue 速率的历史常态，用于判断「激增」（当前速率 > 基线 × 倍数 且达绝对下限）。
 - **产物差分（artifact diff）** — 模式 B 的去重方式：本轮分析产物与上轮同仓产物比对，只上报新增/变化。
 - **canonical ID** — 引用链归并的标识：转载/博客与其引用的原始 PR/issue 共享同一 ID，使同一事件只计一次信号强度。
-- **漏斗（funnel）** — 筛选的多级结构：L1 关键词/规则（无 LLM）→ L2 轻量 embedding rerank → L3 LLM-as-judge。越靠后越贵、候选越少。
+- **漏斗（funnel）** — 筛选的多级结构：L1 关键词/规则（无 LLM）→ L2 轻量 embedding 语义分组 → L3 LLM-as-judge。越靠后越贵、候选越少。L2 已实现：按 embedding cosine 以 representative-linkage 把近似重复分组、整组喂 L3 judge（不丢组内不同信号，zero-miss）；仅作用于 issue 浪涌与趋势候选，供应链/release 权威信号绕过；embedding 不可达则全量透传降级。
 - **LLM-as-judge** — 用强模型对候选做相关性/真实性二次确认（JudgeRank 三步：先抽核心信号再判相关）。区别于纯关键词匹配。
 - **chunk 级过滤** — 清洗手段：对内容逐段判与观测目标的相关性、丢弃弱相关段，而非整文透传给 LLM。
 - **待核实信号** — 无法满足其适用门控（派生类需 ≥2 独立来源）的结论在报告中的降级标记，不作为直接结论。
