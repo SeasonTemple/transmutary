@@ -10,3 +10,20 @@ token_max_age_days: 90
 
 # Daily digest send hour (local, 24h). Phase 1 scheduler reads this.
 digest_hour: 9
+
+# --- Optional outbound delivery (U1, KTD-D) -------------------------------
+# RSS is the primary private channel (R14); the email leg is OPTIONAL and only
+# activates when BOTH email_recipients AND smtp_host are set. With neither, the
+# deployment is RSS-only (legitimate) — but high-risk alerts then go out via RSS
+# only, and the scheduler logs a one-time warning at registration (KTD-D).
+#
+# email_recipients accepts a single address or a list:
+#   email_recipients: alerts@example.com
+#   email_recipients:
+#     - alerts@example.com
+#     - oncall@example.com
+# smtp_host: smtp.example.com
+#
+# feed_dir: where the private Atom feed is written. When omitted, the pipeline
+# derives <artifact_root>/_feed automatically.
+# feed_dir: ./var/feed

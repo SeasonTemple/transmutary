@@ -1,9 +1,9 @@
 """SQLite state store (U2, R8/R9/R13/R20/R21, KTD5).
 
 Tables: event_fingerprint, star_snapshot, issue_baseline, seen_set,
-subscriber_token. DB file is enforced 0600 at startup (KTD5). All persisted
-text is scrubbed of credential patterns before write (R21): credentials must
-NEVER land in the DB, even inside a captured HTTP error body.
+subscriber_token, collect_cursor. DB file is enforced 0600 at startup (KTD5).
+All persisted text is scrubbed of credential patterns before write (R21):
+credentials must NEVER land in the DB, even inside a captured HTTP error body.
 
 Concurrency: a single serialized write connection + WAL journal so that
 high-priority (security) tasks are not blocked by trend batch writes.
@@ -107,6 +107,12 @@ CREATE TABLE IF NOT EXISTS subscriber_token (
     subscriber TEXT NOT NULL,
     revoked    INTEGER NOT NULL DEFAULT 0,
     expires_at REAL
+);
+
+CREATE TABLE IF NOT EXISTS collect_cursor (
+    repo       TEXT PRIMARY KEY,
+    since      TEXT,
+    updated_at REAL NOT NULL
 );
 """
 
@@ -254,6 +260,31 @@ class StateStore:
             return cur.fetchone()
 
     # ------------------------------------------------------------------
+    # collect_cursor (U3 — persisted incremental ``since`` cursor, AE4)
+    # ------------------------------------------------------------------
+    def get_cursor(self, repo: str) -> str | None:
+        """Return the persisted ``since`` cursor for ``repo`` (None if unseen).
+
+        The cursor survives process restarts so an issue surge already reported in
+        a prior process is not re-collected and re-diagnosed after a restart (U3).
+        """
+        with self._lock:
+            cur = self._conn.execute("SELECT since FROM collect_cursor WHERE repo=?", (repo,))
+            row = cur.fetchone()
+        return row["since"] if row is not None else None
+
+    def set_cursor(self, repo: str, since: str | None) -> None:
+        """Persist the ``since`` cursor for ``repo`` (advanced, never rewound by U3)."""
+        since = scrub_credentials(since)
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO collect_cursor (repo, since, updated_at) "
+                "VALUES (?, ?, ?)",
+                (repo, since, time.time()),
+            )
+            self._conn.commit()
+
+    # ------------------------------------------------------------------
     # seen_set (L1 dedup, rolling 7d)
     # ------------------------------------------------------------------
     def has_seen(self, hash_: str) -> bool:
@@ -333,6 +364,7 @@ class StateStore:
                 "issue_baseline",
                 "seen_set",
                 "subscriber_token",
+                "collect_cursor",
             ):
                 cur = self._conn.execute(f"SELECT * FROM {table}")  # noqa: S608 - fixed names
                 for row in cur.fetchall():

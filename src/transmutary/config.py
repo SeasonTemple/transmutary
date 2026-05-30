@@ -164,6 +164,14 @@ class Delivery:
     artifact_root: str
     token_max_age_days: int
     digest_hour: int
+    # Optional outbound-delivery wiring (U1, KTD-D). All three default to empty so
+    # the existing required-key tests are untouched: a config without them yields
+    # an RSS-only deployment (the email leg is simply not activated downstream).
+    email_recipients: list[str] = field(default_factory=list)
+    smtp_host: str | None = None
+    # Where the Atom feed is written; when None, the pipeline derives
+    # ``<artifact_root>/_feed`` (U2). Kept optional so config stays minimal.
+    feed_dir: str | None = None
 
 
 @dataclass(frozen=True)
@@ -226,6 +234,23 @@ def parse_trend_scope(data: dict) -> TrendScope:
     return TrendScope(topics=topics, keywords=keywords)
 
 
+def _parse_recipients(raw: object) -> list[str]:
+    """Normalize the optional ``email_recipients`` value to ``list[str]``.
+
+    Accepts a single string (one recipient) or a list; anything else is rejected
+    so a malformed config fails clearly rather than silently dropping recipients.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        return [raw]
+    if isinstance(raw, (list, tuple)):
+        return [str(x) for x in raw]
+    raise ConfigError(
+        "delivery 'email_recipients' must be a string or a list of strings"
+    )
+
+
 def parse_delivery(data: dict) -> Delivery:
     try:
         return Delivery(
@@ -233,6 +258,9 @@ def parse_delivery(data: dict) -> Delivery:
             artifact_root=str(data["artifact_root"]),
             token_max_age_days=int(data.get("token_max_age_days", 90)),
             digest_hour=int(data.get("digest_hour", 9)),
+            email_recipients=_parse_recipients(data.get("email_recipients")),
+            smtp_host=(str(data["smtp_host"]) if data.get("smtp_host") else None),
+            feed_dir=(str(data["feed_dir"]) if data.get("feed_dir") else None),
         )
     except KeyError as exc:
         raise ConfigError(f"delivery config missing required key: {exc}") from exc
