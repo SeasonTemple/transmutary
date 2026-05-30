@@ -9,6 +9,7 @@ __pycache__/
 .mypy_cache/
 build/
 dist/
+uv.lock
 
 # 运行时状态与产物（私有，禁入库 — R24/KTD5）
 *.sqlite
