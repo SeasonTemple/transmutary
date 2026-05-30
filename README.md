@@ -17,11 +17,11 @@
 
 ---
 
-A repository-observation system for external open-source **ecosystem intelligence**. It continuously watches a set of repositories and their dependencies, turns changes into readable diagnostic / explanatory reports, and pushes them to your team — converting *reactive post-incident investigation* into *proactive awareness*.
+A repository-observation system for external open-source **ecosystem intelligence**. It continuously watches a set of repositories and their dependencies, turns changes into readable diagnostic / explanatory reports, and pushes them to its subscribers — converting *reactive post-incident investigation* into *proactive awareness*.
 
 ## Why Transmutary
 
-Teams are structurally late to changes in the ecosystem they depend on:
+Subscribers are structurally late to changes in the ecosystem they depend on:
 
 - **Dependency breakage is found after the fact** — an upstream CLI tool changes, your internal gateway starts returning 504s, and someone manually asks an LLM to cross-check the two repos.
 - **No discovery channel for AI trends** — fast-rising tools surface on social media, not in any feed you own.
@@ -33,7 +33,7 @@ Transmutary closes these gaps with a pure-pull, all-free-data-source pipeline th
 
 The system is **two collection pipelines + one shared delivery layer** (two pipelines, one delivery layer — not a unified engine):
 
-- **Mode A · event-driven (watchlist)** — watches specific repos your team maintains or depends on. On any change (release, issue surge, supply-chain advisory) it detects, diagnoses the source, and pushes by severity.
+- **Mode A · event-driven (watchlist)** — watches specific repos a subscriber maintains or depends on. On any change (release, issue surge, supply-chain advisory) it detects, diagnoses the source, and pushes by severity.
 - **Mode B · scheduled batch (trend radar)** — periodically scans a defined scope (MVP: AI domain), finds repos with rapidly rising stars, and emits explanatory summaries.
 
 The two modes diverge only at the collection stage, then share `LLM report → channel delivery (private RSS / email)`. A repo discovered by Mode B can be **promoted** into Mode A's watchlist.
