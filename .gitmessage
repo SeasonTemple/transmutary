@@ -1,0 +1,16 @@
+<type>(<scope>): <summary>
+
+# Conventional Commits — 驱动 python-semantic-release 自动定版本/生 changelog。
+# Type:    feat, fix, docs, test, refactor, perf, build, ci, chore, style, revert
+#   feat  → MINOR bump   |   fix/perf → PATCH bump   |   BREAKING CHANGE → MAJOR
+# Scope:   可选，kebab-case 短词，例如 collect, dedup, filter, diagnose, deliver,
+#          trend, explain, pipeline, service, config, store, llm, release
+# Summary: 命令式、小写开头，header 含前缀 ≤ 72 字符
+#
+# 正文(可选)：解释「为何」而非「做了什么」；空行后写。
+# 破坏性变更：正文加 `BREAKING CHANGE: <说明>` 触发 MAJOR。
+#
+# 示例：
+#   feat(trend): add star-snapshot fallback when OSS Insight is down
+#   fix(filter): use deterministic cold-start threshold on empty baseline
+#   docs(readme): add bilingual README and release workflow

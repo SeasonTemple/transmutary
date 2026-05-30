@@ -1,0 +1,32 @@
+#!/usr/bin/env sh
+# Conventional Commits 校验 — 零依赖，纯 POSIX sh。
+# 启用：git config core.hooksPath .githooks
+# python-semantic-release 靠 commit type 推版本号，故格式承重，本地早拦。
+
+msg_file="$1"
+header="$(head -n1 "$msg_file")"
+
+# 放行自动前缀（merge/revert/fixup/squash）与版本发布提交
+case "$header" in
+  "Merge "*|'Revert "'*|"fixup! "*|"squash! "*|"chore(release):"*) exit 0 ;;
+esac
+
+# <type>(<scope>)?: <summary>  — type 白名单，scope 可选 kebab-case
+pattern='^(feat|fix|docs|test|refactor|perf|build|ci|chore|style|revert)(\([a-z0-9][a-z0-9-]*\))?(!)?: [^ ].*'
+
+if ! printf '%s' "$header" | grep -Eq "$pattern"; then
+  echo "✗ commit message 不符合 Conventional Commits 规范。" >&2
+  echo "  实际: $header" >&2
+  echo "  期望: <type>(<scope>): <summary>" >&2
+  echo "  type: feat|fix|docs|test|refactor|perf|build|ci|chore|style|revert" >&2
+  echo "  例如: feat(trend): add star-snapshot fallback" >&2
+  exit 1
+fi
+
+# header ≤ 72 字符
+if [ "$(printf '%s' "$header" | wc -c)" -gt 72 ]; then
+  echo "✗ commit header 超过 72 字符（含前缀）。" >&2
+  exit 1
+fi
+
+exit 0

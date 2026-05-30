@@ -1,12 +1,25 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "transmutary"
 version = "0.0.1"
 description = "Transmutary — external ecosystem repository observation system"
+readme = "README.md"
 requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "SeasonTemple" }]
+keywords = ["observability", "supply-chain", "github", "llm", "rss", "monitoring"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Security",
+]
 dependencies = [
     "httpx",
     "feedparser",
@@ -23,6 +36,14 @@ dev = [
     "pytest",
     "ruff",
 ]
+build = [
+    "build",
+]
+
+[project.urls]
+Repository = "https://github.com/SeasonTemple/transmutary"
+Changelog = "https://github.com/SeasonTemple/transmutary/blob/main/CHANGELOG.md"
+Issues = "https://github.com/SeasonTemple/transmutary/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -38,3 +59,18 @@ target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.semantic_release]
+# 自动定版本 + 生 changelog + 打 tag + 建 GitHub Release（由 Conventional Commits 推导）。
+version_toml = ["pyproject.toml:project.version"]
+build_command = "python -m pip install build && python -m build --sdist --wheel ."
+commit_message = "chore(release): {version}\n\n自动发布，勿手改版本。"
+allow_zero_version = true
+major_on_zero = false
+tag_format = "v{version}"
+
+[tool.semantic_release.changelog]
+exclude_commit_patterns = ["^chore\\(release\\):"]
+
+[tool.semantic_release.branches.main]
+match = "main"

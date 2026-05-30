@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    branches: ["main"]
+
+# 仅 contents 写权限即可建 tag + GitHub Release（不发 PyPI）。
+permissions:
+  contents: read
+
+jobs:
+  # 门：发布前再跑一遍测试，红则不发。
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - run: python -m pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: python -m pytest -q
+
+  release:
+    runs-on: ubuntu-latest
+    needs: verify
+    concurrency:
+      group: ${{ github.workflow }}-release-${{ github.ref_name }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: Setup | Checkout on release branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup | Force release branch to workflow sha
+        run: git reset --hard ${{ github.sha }}
+
+      - name: Action | Python Semantic Release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v10.5.3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          git_committer_name: "github-actions"
+          git_committer_email: "actions@users.noreply.github.com"
+
+      - name: Publish | Upload dist + notes to GitHub Release
+        uses: python-semantic-release/publish-action@v10.5.3
+        if: steps.release.outputs.released == 'true'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.release.outputs.tag }}

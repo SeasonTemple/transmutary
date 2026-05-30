@@ -1,52 +1,131 @@
 # Transmutary
 
-面向「外部开源生态情报」的仓库观测系统。持续观测一批仓库及其依赖，把变化转成可读的诊断/说明报告，主动推送给团队——把「出事后被动核查」变成「主动感知」。
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
+[![Tests: 239 passing](https://img.shields.io/badge/tests-239_passing-brightgreen.svg)](#tests)
 
-## 两个观测模式
+[简体中文](README.zh-CN.md)
 
-系统由**两条采集管线 + 一个共享投递层**组成（两条管线、一个投递层，非统一引擎）：
+A repository-observation system for external open-source **ecosystem intelligence**. It continuously watches a set of repositories and their dependencies, turns changes into readable diagnostic / explanatory reports, and pushes them to your team — converting *reactive post-incident investigation* into *proactive awareness*.
 
-- **模式 A · 事件驱动（关注清单）** — 盯团队重点维护/依赖的具体仓库，一有变化（release、issue 激增、供应链安全公告）即时检测、溯源诊断、分级推送。
-- **模式 B · 定时跑批（趋势雷达）** — 定期扫描指定范围（MVP 锁 AI 方向），发现 star 快速递增的新热门仓库并出说明摘要。
+## Why Transmutary
 
-两模式只在采集阶段分叉，之后共用 `LLM 报告 → channel 投递（私有 RSS / 邮件）`。模式 B 发现的热门仓可晋升进模式 A 关注清单。
+Teams are structurally late to changes in the ecosystem they depend on:
 
-## 设计要点
+- **Dependency breakage is found after the fact** — an upstream CLI tool changes, your internal gateway starts returning 504s, and someone manually asks an LLM to cross-check the two repos.
+- **No discovery channel for AI trends** — fast-rising tools surface on social media, not in any feed you own.
+- **Slow reaction to supply-chain attacks** — a malicious npm release lands before anyone notices.
 
-- **纯拉取架构**：不依赖 webhook（无法对第三方仓库建 webhook），靠 Atom feed + REST 增量轮询。
-- **采集流水线**：`收集 → 清洗 → 去重 → 筛选 → 报告`；清洗先于 LLM，筛选走漏斗（规则 → 强模型 judge）。
-- **确定性 API、语义才 LLM**：外部 API 走确定性代码，LLM 只做诊断/相关性/摘要；安全裁决与确定性 OSV/GHSA 命中交叉校验。
-- **安全基线**：不可信外部内容结构隔离（防 prompt injection）、凭据只走 env 不入库、SSRF allowlist、产物私有访问受控。
-- **数据源全免费拼合**：GitHub releases.atom + REST、OSV.dev、GHSA、deps.dev、OSS Insight。
+Transmutary closes these gaps with a pure-pull, all-free-data-source pipeline that needs no webhooks and no paid APIs.
 
-## 技术栈
+## Observation modes
 
-Python · httpx · feedparser/feedgen · sqlite3 · APScheduler · LiteLLM（LLM provider 传输，可经 OpenAI-compatible base_url 接入）· starlette + uvicorn（私有 feed 服务）· smtplib
+The system is **two collection pipelines + one shared delivery layer** (two pipelines, one delivery layer — not a unified engine):
 
-## 当前状态
+- **Mode A · event-driven (watchlist)** — watches specific repos your team maintains or depends on. On any change (release, issue surge, supply-chain advisory) it detects, diagnoses the source, and pushes by severity.
+- **Mode B · scheduled batch (trend radar)** — periodically scans a defined scope (MVP: AI domain), finds repos with rapidly rising stars, and emits explanatory summaries.
 
-| 阶段 | 状态 |
-|---|---|
-| 调研规划（brainstorm） | ✅ 完成 |
-| 实现计划（plan） | ✅ 完成（经多轮评审） |
-| Phase 0 共享骨架（U1-U5, U14） | ✅ 完成 · 46 tests / ruff clean |
-| Phase 1 模式 A（采集/诊断/投递/供应链） | ⏳ 待开发（spec 就绪） |
-| Phase 2 模式 B（趋势雷达） | ⏳ gate 在 Phase 1 F1 试运行 |
+The two modes diverge only at the collection stage, then share `LLM report → channel delivery (private RSS / email)`. A repo discovered by Mode B can be **promoted** into Mode A's watchlist.
 
-## 文档
+## How it works
 
-- 调研规划：[`docs/brainstorms/2026-05-29-repo-observation-system-requirements.md`](docs/brainstorms/2026-05-29-repo-observation-system-requirements.md)
-- 实现计划：[`docs/plans/2026-05-29-001-feat-transmutary-observation-system-plan.md`](docs/plans/2026-05-29-001-feat-transmutary-observation-system-plan.md)
-- Phase 1 goal spec：[`docs/plans/goals/2026-05-29-phase1-mode-a.goals.md`](docs/plans/goals/2026-05-29-phase1-mode-a.goals.md)
-- 领域术语表：[`CONTEXT.md`](CONTEXT.md)
+```
+collect → clean → dedup → filter → report → deliver
+```
 
-## 开发
+- **Pure-pull architecture** — no webhooks (you can't create webhooks on third-party repos); Atom feeds + incremental REST polling instead.
+- **Clean before LLM** — structured checks (URL/content fingerprint, staleness, reachability) run first; only passing content reaches the LLM for chunk-level relevance filtering.
+- **Deterministic API, LLM only for semantics** — external APIs run through deterministic code; the LLM only does diagnosis / relevance / summarization. Security verdicts are cross-validated against deterministic OSV/GHSA hits.
+- **Tiered scheduling** — a single resident service with internal cadences: supply-chain (minutes), releases/issues (~10 min), trends (daily).
+- **Security baseline** — untrusted external content is structurally isolated from instructions (prompt-injection defense); credentials live only in env, never persisted; SSRF allowlist with no redirects; private access-controlled artifacts.
+
+## Getting started
+
+### Install
 
 ```bash
 python -m venv .venv
 .venv/bin/pip install -e ".[dev]"
+```
+
+### Configure
+
+Copy the example configs and fill them in. Credentials are read from environment variables (`TRANSMUTARY_*`) and are never persisted.
+
+```bash
+cp config/watchlist.example.yaml   config/watchlist.yaml
+cp config/trend_scope.example.yaml config/trend_scope.yaml
+cp config/delivery.example.yaml    config/delivery.yaml
+export TRANSMUTARY_GITHUB_TOKEN=...      # read-only
+export TRANSMUTARY_LLM_API_KEY=...       # any LiteLLM-supported provider
+export TRANSMUTARY_LLM_BASE_URL=...      # optional: OpenAI/Anthropic-compatible endpoint
+```
+
+### Verify
+
+```bash
 .venv/bin/python -m pytest -q
 .venv/bin/ruff check src tests
 ```
 
-配置见 `config/*.example.yaml`；凭据从环境变量读取（`TRANSMUTARY_*`），不入库。
+## Configuration
+
+| File | Purpose |
+|---|---|
+| `config/watchlist.yaml` | Mode A repos + manual dependency edges |
+| `config/trend_scope.yaml` | Mode B scope filter (topics + keywords) |
+| `config/delivery.yaml` | DB/artifact paths, digest hour, optional RSS feed dir + SMTP recipients |
+
+## Architecture & docs
+
+- Domain glossary: [`CONTEXT.md`](CONTEXT.md)
+- Requirements (brainstorm): [`docs/brainstorms/`](docs/brainstorms/)
+- Implementation plans: [`docs/plans/`](docs/plans/)
+
+## Releases & versioning
+
+Releases are automated with [python-semantic-release](https://python-semantic-release.readthedocs.io/). Version numbers, the changelog, tags, and GitHub Releases are derived from [Conventional Commits](https://www.conventionalcommits.org/) on `main`:
+
+- `feat:` → minor · `fix:` / `perf:` → patch · `BREAKING CHANGE:` → major.
+
+Enable the local commit-message hook once after cloning:
+
+```bash
+git config core.hooksPath .githooks
+git config commit.template .gitmessage
+```
+
+See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+
+## Project
+
+### Status
+
+| Stage | Status |
+|---|---|
+| Requirements + plan | ✅ done (multi-round review) |
+| Phase 0 — shared skeleton (U1-U5, U14) | ✅ done |
+| Phase 1 — Mode A (collect / diagnose / deliver / supply-chain) | ✅ done · F1 real-repo milestone verified |
+| Phase 2 — Mode B (trend radar) | ✅ done |
+| Phase 3 — scheduling wiring (pipeline + service) | ✅ done |
+| Tests | ✅ 239 passing · ruff clean |
+
+### Roadmap
+
+Deferred by design: L2 embedding rerank, critique→refine report pass, channel interface abstraction, one-click promotion, subscription config, web dashboard, live resident run.
+
+### Tests
+
+```bash
+.venv/bin/python -m pytest -q      # 239 passing
+.venv/bin/ruff check src tests     # clean
+```
+
+### Contributing
+
+Commits follow Conventional Commits (enforced by `.githooks/commit-msg`). Run the test + lint gate before pushing. PRs target `main`.
+
+### License
+
+[Apache-2.0](LICENSE) © SeasonTemple
