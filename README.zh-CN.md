@@ -2,7 +2,7 @@
 
 <!-- hero banner: assets/hero-banner.* (TODO) -->
 
-# Transmutary
+# 嬗变 · Transmutary
 
 **主动的开源生态情报 —— 持续观测仓库与依赖，把变化转成诊断报告，在出事前把要紧的推送给团队。**
 
