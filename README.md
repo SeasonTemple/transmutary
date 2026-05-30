@@ -1,11 +1,21 @@
+<div align="center">
+
+<!-- hero banner: assets/hero-banner.* (TODO) -->
+
 # Transmutary
+
+**Proactive open-source ecosystem intelligence — continuously watch repositories and their dependencies, turn changes into diagnostic reports, and get pushed what matters before it becomes an incident.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
 [![Tests: 239 passing](https://img.shields.io/badge/tests-239_passing-brightgreen.svg)](#tests)
 
-[简体中文](README.zh-CN.md)
+[English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
+
+</div>
+
+---
 
 A repository-observation system for external open-source **ecosystem intelligence**. It continuously watches a set of repositories and their dependencies, turns changes into readable diagnostic / explanatory reports, and pushes them to your team — converting *reactive post-incident investigation* into *proactive awareness*.
 
@@ -124,7 +134,7 @@ Deferred by design: L2 embedding rerank, critique→refine report pass, channel 
 
 ### Contributing
 
-Commits follow Conventional Commits (enforced by `.githooks/commit-msg`). Run the test + lint gate before pushing. PRs target `main`.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, the Conventional-Commits convention (enforced by `.githooks/commit-msg`), and the automated release process. PRs target `main`.
 
 ### License
 

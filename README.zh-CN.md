@@ -1,11 +1,21 @@
+<div align="center">
+
+<!-- hero banner: assets/hero-banner.* (TODO) -->
+
 # Transmutary
+
+**主动的开源生态情报 —— 持续观测仓库与依赖，把变化转成诊断报告，在出事前把要紧的推送给团队。**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
 [![Tests: 239 passing](https://img.shields.io/badge/tests-239_passing-brightgreen.svg)](#测试)
 
-[English](README.md)
+[English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做-transmutary) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
+
+</div>
+
+---
 
 面向「外部开源生态情报」的仓库观测系统。持续观测一批仓库及其依赖，把变化转成可读的诊断/说明报告，主动推送给团队——把「出事后被动核查」变成「主动感知」。
 
@@ -124,7 +134,7 @@ git config commit.template .gitmessage
 
 ### 贡献
 
-提交遵循 Conventional Commits（由 `.githooks/commit-msg` 强制）。push 前先跑测试 + lint 门。PR 提向 `main`。
+见 [CONTRIBUTING.md](CONTRIBUTING.md)：开发环境、Conventional Commits 规范（由 `.githooks/commit-msg` 强制）、自动发布流程。PR 提向 `main`。
 
 ### 许可
 

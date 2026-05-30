@@ -65,12 +65,34 @@ select = ["E", "F", "I", "B", "UP"]
 version_toml = ["pyproject.toml:project.version"]
 build_command = "python -m pip install build && python -m build --sdist --wheel ."
 commit_message = "chore(release): {version}\n\n自动发布，勿手改版本。"
+commit_parser = "conventional"
 allow_zero_version = true
 major_on_zero = false
 tag_format = "v{version}"
 
+# 提交类型 → 版本 bump（固化：feat=minor，fix/perf=patch，其余不 bump）。
+[tool.semantic_release.commit_parser_options]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+other_allowed_tags = ["build", "chore", "ci", "docs", "style", "refactor", "test", "revert"]
+parse_squash_commits = true
+ignore_merge_commits = true
+
+# Changelog / release notes 排版（固化）：md、累加更新，隐藏内部噪声类型，
+# 保留 feat / fix / perf / docs / build 进发布说明。
 [tool.semantic_release.changelog]
-exclude_commit_patterns = ["^chore\\(release\\):"]
+mode = "update"
+exclude_commit_patterns = [
+    '''^chore(?:\(.*?\))?: .+''',
+    '''^ci(?:\(.*?\))?: .+''',
+    '''^style(?:\(.*?\))?: .+''',
+    '''^test(?:\(.*?\))?: .+''',
+    '''^refactor(?:\(.*?\))?: .+''',
+]
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+output_format = "md"
 
 [tool.semantic_release.branches.main]
 match = "main"
