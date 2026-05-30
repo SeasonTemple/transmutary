@@ -11,15 +11,15 @@
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
 [![Tests: 239 passing](https://img.shields.io/badge/tests-239_passing-brightgreen.svg)](#测试)
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做-transmutary) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
+[English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
 
 </div>
 
 ---
 
-面向「外部开源生态情报」的仓库观测系统。持续观测一批仓库及其依赖，把变化转成可读的诊断/说明报告，主动推送给团队——把「出事后被动核查」变成「主动感知」。
+**嬗变（Transmutary）** 是面向「外部开源生态情报」的仓库观测系统。持续观测一批仓库及其依赖，把变化转成可读的诊断/说明报告，主动推送给团队——把「出事后被动核查」变成「主动感知」。
 
-## 为何做 Transmutary
+## 为何做嬗变
 
 团队对所依赖的外部生态，反应是结构性滞后的：
 
@@ -27,7 +27,7 @@
 - **无 AI 热门情报渠道** —— 快速崛起的工具出现在社交媒体，不在你拥有的任何 feed 里。
 - **供应链投毒反应慢** —— 恶意 npm 包发布后才有人察觉。
 
-Transmutary 用一条纯拉取、数据源全免费拼合的管线补上这些缺口，无需 webhook、无需付费 API。
+嬗变用一条纯拉取、数据源全免费拼合的管线补上这些缺口，无需 webhook、无需付费 API。
 
 ## 两个观测模式
 
