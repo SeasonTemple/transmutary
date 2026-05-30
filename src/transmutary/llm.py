@@ -24,8 +24,18 @@ import enum
 import os
 import threading
 
-import litellm
-from litellm import BudgetManager
+# Force litellm to use its bundled model-cost map instead of fetching the remote
+# JSON from raw.githubusercontent.com on import. Without this, the first litellm
+# touch blocks on a network round-trip before falling back to the local copy —
+# in a no-egress sandbox that is a multi-minute hang per process, which is what
+# made the full test suite take ~28 minutes. Set BEFORE importing litellm so the
+# flag is read at import time (a conftest/env set later is too late). Pure offline
+# determinism; provider calls still use api_key/base_url at call time.
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+os.environ.setdefault("LITELLM_TELEMETRY", "False")
+
+import litellm  # noqa: E402 - must follow the env-var guard above
+from litellm import BudgetManager  # noqa: E402
 
 # Marker fences that delimit the untrusted data block. The instruction slot tells
 # the model that anything between these markers is DATA to be analyzed, never
