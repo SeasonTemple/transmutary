@@ -28,6 +28,28 @@ def _reset_l3_budget():
     llm.reset_budget_manager()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_embeddings(monkeypatch):
+    """Stub llm.embed so no test ever reaches a real embedding endpoint.
+
+    The pipeline ticks bind the real ``llm.embed`` by default (embed_fn left
+    unset). With fake creds + a fake base_url, a real ``litellm.embedding`` call
+    blocks on connection timeout (~228s per test) — this is what made the suite
+    take ~50 minutes. The L2 layer degrades to one-group-per-item when embed
+    raises (zero-miss, KTD-B), so by default we raise to exercise that safe path
+    with no network. Tests that specifically exercise L2 grouping override this
+    with their own monkeypatch (a real-shaped deterministic stub), which wins
+    because it is applied inside the test body, after this autouse fixture.
+    """
+    from transmutary import llm
+
+    def _stub_embed(texts, **kwargs):
+        raise llm.LLMError("embeddings stubbed in tests (no network)")
+
+    monkeypatch.setattr(llm, "embed", _stub_embed)
+    yield
+
+
 @pytest.fixture
 def fake_env() -> dict:
     """A complete set of required credential env vars (fake values)."""
