@@ -164,6 +164,26 @@ def _llm_base_url(rt: PipelineRuntime) -> str | None:
     return rt.settings.llm_base_url
 
 
+def _embed_fn(rt: PipelineRuntime):
+    """Build the L2 embedding function bound to this runtime's LLM credentials.
+
+    Returns a ``Callable[[list[str]], list[list[float]]]`` delegating to
+    :func:`llm.embed` (KTD-D, the sole embedding entry point). It is threaded into
+    the issue-surge filter and the trend explainer to enable L2 semantic grouping.
+    If embedding is unavailable at runtime (provider has no embedding API, KTD-F),
+    ``llm.embed`` raises ``LLMError`` and the filter/explain internals degrade to
+    full L3 (zero-miss, KTD-B) — the tick never crashes. The supply-chain tick does
+    NOT use this: authority signals bypass L2 (KTD-C).
+    """
+    api_key = _llm_api_key(rt)
+    base_url = _llm_base_url(rt)
+
+    def embed_fn(texts: list[str]) -> list[list[float]]:
+        return llm.embed(texts, api_key=api_key, base_url=base_url)
+
+    return embed_fn
+
+
 def _ts_to_float(iso_ts: str) -> float:
     """Best-effort ISO-8601 → epoch seconds for issue clustering (deterministic)."""
     from datetime import datetime, timezone
@@ -305,6 +325,7 @@ def run_release_issue_tick(
                 api_key=api_key,
                 base_url=base_url,
                 call_fn=call_fn,
+                embed_fn=_embed_fn(rt),
             )
         except ConservativeReview as exc:
             # Judge unavailable / budget exhausted for a real surge — flag for
@@ -493,6 +514,7 @@ def run_trend_tick(
         api_key=api_key,
         base_url=base_url,
         call_fn=call_fn,
+        embed_fn=_embed_fn(rt),
     )
     result.skipped_unchanged = list(outcome.skipped_unchanged)
     result.reaccelerated = list(outcome.reaccelerated)

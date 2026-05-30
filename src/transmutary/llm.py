@@ -46,13 +46,20 @@ class ModelTier(str, enum.Enum):
 
     STRONG = "strong"  # L3 judge / diagnose (R/KTD7: strong model for reliability)
     CHEAP = "cheap"  # batch explain summaries
+    EMBED = "embed"  # L2 semantic grouping vectors (KTD-D)
 
 
 # Default tier → LiteLLM model alias mapping. Overridable per call.
 DEFAULT_TIER_MODELS = {
     ModelTier.STRONG: "gpt-4o",
     ModelTier.CHEAP: "gpt-4o-mini",
+    ModelTier.EMBED: "text-embedding-3-small",
 }
+
+# Conservative per-text character cap before embedding, so a pathological README
+# cannot blow the embedding model's token limit (KTD-D P2). Truncation is silent —
+# L2 grouping only needs the leading content to judge approximate similarity.
+EMBED_MAX_CHARS = 8000
 
 # --- L3 daily cap (KTD7) ----------------------------------------------------
 # The judge/diagnose budget is enforced per UTC day by LiteLLM's BudgetManager,
@@ -235,6 +242,91 @@ def call(
     # Record actual spend against the daily budget so subsequent calls see it.
     _record_cost(bm, resolved_model, response)
     return _extract_text(response)
+
+
+def embed(
+    texts: list[str],
+    *,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    model_tier: ModelTier = ModelTier.EMBED,
+    **litellm_kwargs,
+) -> list[list[float]]:
+    """Embed a batch of texts into vectors — the SOLE embedding entry point (KTD-D).
+
+    This is the L2 semantic-grouping primitive. It is DELIBERATELY independent of
+    :func:`call`:
+
+    * No instruction/data fence — embedding vectorizes, it does not execute text,
+      so there is no system slot to protect.
+    * It NEVER touches the L3 :class:`BudgetManager` (KTD-H): embedding cost is
+      cheap and must not consume the judge/diagnose daily cap, so the L3 budget
+      stays pure.
+
+    Credentials are forwarded the same way :func:`call` forwards them. Any provider
+    failure is normalized to :class:`LLMError`. The batch is ALL-OR-NOTHING: if the
+    provider returns fewer vectors than inputs (any element failed), the whole call
+    raises rather than returning a partial result — a partial result would let the
+    caller silently mis-group (a missing vector is not the same as a zero vector).
+    An empty input returns ``[]`` without hitting the provider. Over-long texts are
+    conservatively truncated to :data:`EMBED_MAX_CHARS` first.
+
+    Args:
+        texts: the strings to embed.
+        api_key / base_url: credentials from config (env), forwarded to LiteLLM.
+        model: explicit model override (skips tier mapping).
+        model_tier: defaults to :attr:`ModelTier.EMBED`.
+
+    Returns:
+        One vector (``list[float]``) per input text, in input order.
+
+    Raises:
+        LLMError: provider failed, or returned a partial/empty batch.
+    """
+    if not texts:
+        return []
+
+    resolved_model = model or DEFAULT_TIER_MODELS[model_tier]
+    safe_texts = [t[:EMBED_MAX_CHARS] for t in texts]
+
+    kwargs = dict(litellm_kwargs)
+    if api_key is not None:
+        kwargs["api_key"] = api_key
+    if base_url is not None:
+        kwargs["base_url"] = base_url
+
+    try:
+        response = litellm.embedding(model=resolved_model, input=safe_texts, **kwargs)
+        vectors = _extract_embeddings(response)
+    except LLMError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - normalize provider errors
+        raise LLMError(f"embedding failed: {exc}") from exc
+
+    # All-or-nothing: a short batch means some element failed; never return partial.
+    if len(vectors) != len(safe_texts):
+        raise LLMError(
+            f"embedding returned {len(vectors)} vectors for {len(safe_texts)} inputs "
+            "(partial batch refused; KTD-D)"
+        )
+    return vectors
+
+
+def _extract_embeddings(response) -> list[list[float]]:
+    """Pull the per-input vectors out of a LiteLLM/OpenAI-shaped embedding response."""
+    try:
+        data = response.data
+    except AttributeError:
+        data = response["data"]
+    vectors: list[list[float]] = []
+    for item in data:
+        try:
+            vec = item.embedding
+        except AttributeError:
+            vec = item["embedding"]
+        vectors.append([float(x) for x in vec])
+    return vectors
 
 
 def _enforce_budget(bm: BudgetManager, model: str, messages: list) -> None:

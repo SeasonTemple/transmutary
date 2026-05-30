@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from . import llm
 from .dedup import keyword_bucket
 from .llm import LLMBudgetExceeded, LLMError, ModelTier
+from .rerank import L2_MAX_EMBED_ITEMS, group_semantic
 
 # --- Trigger defaults (shipped; configurable later) -------------------------
 DEFAULT_MULTIPLIER = 3.0  # current rate must exceed baseline * this
@@ -84,6 +85,12 @@ class FilterDecision:
     judge_reason: str = ""
     needs_human_review: bool = False
     matched_count: int = 0
+    # L2 audit (KTD-A/H): how many semantic groups the matched issues folded into
+    # (== matched_count when L2 was not applied), and whether L2 was skipped/
+    # degraded so every matched issue went straight to L3 (zero-miss).
+    judge_calls: int = 0
+    groups: int = 0
+    l2_degraded: bool = False
     extra: dict = field(default_factory=dict)
 
 
@@ -188,6 +195,38 @@ def _parse_verdict(raw: str) -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 # Public funnel entry point
 # ---------------------------------------------------------------------------
+def _group_matched(
+    matched: list[IssueObservation], *, embed_fn
+) -> tuple[list[list[IssueObservation]], bool]:
+    """Fold matched issues into L2 semantic groups (KTD-A/H).
+
+    Returns ``(groups, degraded)`` where each group is a list of the original
+    observations belonging to it. When L2 cannot/should-not run (no ``embed_fn``,
+    batch over :data:`L2_MAX_EMBED_ITEMS`, or an embedding failure) we DEGRADE to a
+    single group holding ALL matched issues — i.e. the prior single-batched-judge
+    behavior, so every issue still reaches L3 (zero-miss; KTD-B/H) and the degrade
+    costs no more L3 than the no-L2 path. ``degraded`` is True whenever the batch
+    was eligible for L2 but fell back (False when ``embed_fn`` was simply absent).
+    """
+    if embed_fn is None:
+        # Back-compat: the prior behavior is a SINGLE judge over all matched issues
+        # (one group). Not a degrade — L2 was simply not requested.
+        return [list(matched)], False
+    if len(matched) > L2_MAX_EMBED_ITEMS:
+        # Over the embedding cost ceiling → skip L2, but keep the prior single-judge
+        # batch shape so the over-cap path costs no MORE L3 than the no-L2 path.
+        return [list(matched)], True
+    try:
+        groups = group_semantic([o.text for o in matched], embed_fn=embed_fn)
+    except Exception:  # noqa: BLE001
+        # Embedding unavailable / any failure → full L3 over the whole batch
+        # (zero-miss; KTD-B). Never a ConservativeReview: the judge has not failed,
+        # only the optional L2 step. A broad catch is deliberate: L2 is a best-effort
+        # optimization, so NO embedding-side error may ever block or distort L3.
+        return [list(matched)], True
+    return [[matched[i] for i in g.member_indices] for g in groups], False
+
+
 def filter_issue_surge(
     observations: list[IssueObservation],
     *,
@@ -198,8 +237,9 @@ def filter_issue_surge(
     api_key: str | None = None,
     base_url: str | None = None,
     call_fn=llm.call,
+    embed_fn=None,
 ) -> FilterDecision:
-    """Run the L1→L3 funnel for one repo's issue batch (U9).
+    """Run the L1→L2→L3 funnel for one repo's issue batch (U9).
 
     Args:
         observations: candidate issues for one repo+window.
@@ -208,10 +248,20 @@ def filter_issue_surge(
         multiplier / abs_floor: baseline trigger tunables.
         api_key / base_url: LLM credentials from config (env), forwarded to llm.py.
         call_fn: llm.call seam (mocked in tests).
+        embed_fn: optional ``Callable[[list[str]], list[list[float]]]`` enabling L2
+            semantic grouping. ``None`` (default) preserves the prior behavior
+            exactly: a single judge call over all matched issues.
 
     Returns:
-        FilterDecision. ``triggered`` is True only when the rate gate passes AND
-        the L3 judge confirms a real fault.
+        FilterDecision. ``triggered`` is True only when the rate gate passes AND the
+        L3 judge confirms a real fault in AT LEAST ONE semantic group.
+
+    L2 (KTD-A): after the rate gate, matched issues are folded into semantic groups
+    and EACH group is judged ONCE over the CONCATENATION of all its members' text —
+    never just a representative, so a quiet representative can never mask a real
+    fault inside its group. A fault verdict applies to the WHOLE group (every member
+    is part of the same confirmed surge). Embedding failure or an over-cap batch
+    degrades to one-group-per-issue (full L3, zero-miss; KTD-B/H).
     """
     matched = l1_matches(observations)
     matched_count = len(matched)
@@ -231,11 +281,23 @@ def filter_issue_surge(
             matched_count=matched_count,
         )
 
-    # Rate gate passed → escalate to L3 judge (via llm.py).
+    # Rate gate passed. L2: fold into semantic groups, then judge each group once
+    # over its full concatenated text (KTD-A). Without embed_fn this is one group
+    # holding all matched issues — i.e. exactly the prior single-judge behavior.
+    groups, l2_degraded = _group_matched(matched, embed_fn=embed_fn)
+
+    any_fault = False
+    fault_reasons: list[str] = []
+    judge_calls = 0
     try:
-        is_fault, judge_reason = _judge(
-            matched, api_key=api_key, base_url=base_url, call_fn=call_fn
-        )
+        for group in groups:
+            judge_calls += 1
+            is_fault, judge_reason = _judge(
+                group, api_key=api_key, base_url=base_url, call_fn=call_fn
+            )
+            if is_fault:
+                any_fault = True
+                fault_reasons.append(judge_reason)
     except LLMBudgetExceeded as exc:
         # L3 daily cap hit (KTD7). Deterministic overflow: this surge already
         # passed the rate gate, so flag for human review rather than drop.
@@ -252,10 +314,13 @@ def filter_issue_surge(
         ) from exc
 
     return FilterDecision(
-        triggered=is_fault,
-        reason=("judge confirmed fault" if is_fault else "judge ruled not a fault"),
+        triggered=any_fault,
+        reason=("judge confirmed fault" if any_fault else "judge ruled not a fault"),
         used_judge=True,
         cold_start=cold_start,
-        judge_reason=judge_reason,
+        judge_reason="; ".join(fault_reasons),
         matched_count=matched_count,
+        judge_calls=judge_calls,
+        groups=len(groups),
+        l2_degraded=l2_degraded,
     )
