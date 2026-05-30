@@ -1,6 +1,10 @@
-# Transmutary — 领域词汇表
+# 嬗变 Transmutary — 领域词汇表
 
 本文件是**术语表**，只定义概念边界，不含实现细节。
+
+## 项目名
+
+- **嬗变（Transmutary）** — 项目名。「嬗变」取物质/元素**转化**之意（alchemical / nuclear transmutation），喻系统把外部生态的零散变化（release / issue / advisory / trend）转化为可读的诊断 / 说明情报。**Transmutary** 为规范名（仓库、包、徽章、代码标识用），中文文档与叙述用「**嬗变**」。
 
 ## 角色
 
