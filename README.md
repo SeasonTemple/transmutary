@@ -135,6 +135,19 @@ transmutary list-watchlist                # config repos + promoted repos, with 
 
 The effective watchlist is `config watchlist ∪ promoted_repo`. The CLI runs in a separate process and only writes the shared `promoted_repo` table; a running service's periodic **reconcile** job (every 60s) full-syncs its per-repo jobs to the effective watchlist, so a promote/demote takes effect **without restarting** the service. Promotion never touches credentials.
 
+## Deployment
+
+Run the resident service (embedded tiered scheduler) via Docker:
+
+```bash
+cp .env.example .env            # fill credentials (gitignored, never baked into the image)
+# prepare ./config/{watchlist,trend_scope,delivery}.yaml
+#   delivery.yaml: point state_db_path & artifact_root under /var/lib/transmutary
+docker compose up -d
+```
+
+The image runs as a non-root user; credentials come from `.env` at runtime; the state DB and private artifacts persist in the `transmutary-state` volume. Without Docker, run the entrypoint directly: `transmutary-serve` (reads `TRANSMUTARY_CONFIG_DIR`, default `config`).
+
 ## Architecture & docs
 
 - Domain glossary: [`CONTEXT.md`](CONTEXT.md)

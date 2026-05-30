@@ -1,0 +1,20 @@
+# Transmutary 常驻服务编排。
+# 用法：
+#   1. 备好 ./config/{watchlist,trend_scope,delivery}.yaml
+#      （delivery.yaml 的 state_db_path/artifact_root 指向 /var/lib/transmutary 下）
+#   2. 备好 .env（凭据，见 .env.example；不入库）
+#   3. docker compose up -d
+services:
+  transmutary:
+    build: .
+    image: transmutary:latest
+    restart: unless-stopped
+    env_file:
+      - .env                      # 凭据：TRANSMUTARY_GITHUB_TOKEN / LLM / SMTP / RSS（不入库）
+    volumes:
+      - ./config:/config:ro       # 配置只读
+      - transmutary-state:/var/lib/transmutary   # 状态 DB + 私有产物（持久卷）
+    # 服务无对外端口；私有 RSS feed 由 deliver 写卷内文件，按需另起 server 暴露。
+
+volumes:
+  transmutary-state:
