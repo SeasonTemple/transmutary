@@ -258,6 +258,15 @@ def test_index_lists_watchlist_with_source():
         assert "config" in resp.text
 
 
+def test_brand_renders_correct_chinese_name():
+    # Regression: the brand zh name must be 嬗变, not a wrong codepoint (嘡变).
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/")
+        assert "嬗变" in resp.text
+        assert "嘡" not in resp.text
+
+
 def test_report_page_renders_body():
     with tempfile.TemporaryDirectory() as d:
         client, *_ = _client(d)
