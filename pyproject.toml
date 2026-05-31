@@ -34,6 +34,7 @@ dependencies = [
 [project.scripts]
 transmutary = "transmutary.cli:main"
 transmutary-serve = "transmutary.service:main"
+transmutary-demo = "transmutary.demo:main"
 
 [project.optional-dependencies]
 dev = [

@@ -9,9 +9,9 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 337 passing](https://img.shields.io/badge/tests-337_passing-brightgreen.svg)](#测试)
+[![Tests: 344 passing](https://img.shields.io/badge/tests-344_passing-brightgreen.svg)](#测试)
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
+[English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [看 demo](#看-demo) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
 
 </div>
 
@@ -37,6 +37,33 @@
 - **模式 B · 定时跑批（趋势雷达）** —— 定期扫描指定范围（MVP 锁 AI 方向），发现 star 快速递增的新热门仓库并出说明摘要。
 
 两模式只在采集阶段分叉，之后共用 `LLM 报告 → channel 投递（私有 RSS / 邮件）`。模式 B 发现的热门仓可晋升进模式 A 关注清单。
+
+## 看 demo
+
+一条命令看整条管线跑起来——**零凭据、零网络、零 LLM**：
+
+```bash
+pip install -e .
+transmutary-demo
+```
+
+它把内置 mock 数据经 `httpx.MockTransport` + stub LLM 喂给*真实*管线（`build_runtime` + 三个 tick），全程不出进程：无 GitHub token、无 API key、无出站 HTTP、无模型调用。一拍产出一份 release 诊断、一份 issue 激增诊断（带依赖边 related 上下文）、一条由确定性 OSV 命中触发的供应链告警、三份趋势说明。
+
+产物落在一个全新临时目录（运行开头打印；可用 `--out DIR` 指定），布局与真实 service 写入完全一致——目录 `0700`、文件 `0600`：
+
+```
+<artifact_root>/
+├── octocat__hexbridge-cli/        # 按仓库归档的分析产物（权威，R24）
+│   └── <ts>-diagnose.md
+├── _delivered/
+│   ├── immediate/                 # 高危路由：诊断 + 供应链告警
+│   └── digest/                    # 摘要路由：趋势说明
+└── _feed/
+    ├── immediate.atom.xml         # 私有 RSS feed，按路由各一
+    └── digest.atom.xml
+```
+
+运行还会打印产物树 + 几段渲染报告摘录，让你直接读到它会投递的输出。照抄上面两条命令即可复现——零配置。
 
 ## 工作原理
 
@@ -180,7 +207,9 @@ git config commit.template .gitmessage
 | Phase 1 — 模式 A（采集/诊断/投递/供应链） | ✅ 完成 · F1 真实仓里程碑已验收 |
 | Phase 2 — 模式 B（趋势雷达） | ✅ 完成 |
 | Phase 3 — 调度接线（pipeline + service） | ✅ 完成 |
-| 测试 | ✅ 337 passing · ruff clean |
+| Phase B — F4 晋升 · 部署 · L2 语义分组 · critique→refine | ✅ 完成 |
+| 离线 demo（`transmutary-demo`） | ✅ 完成 |
+| 测试 | ✅ 344 passing · ruff clean |
 
 ### 路线图
 
@@ -189,7 +218,7 @@ git config commit.template .gitmessage
 ### 测试
 
 ```bash
-.venv/bin/python -m pytest -q      # 337 passing
+.venv/bin/python -m pytest -q      # 344 passing
 .venv/bin/ruff check src tests     # clean
 ```
 

@@ -9,9 +9,9 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 337 passing](https://img.shields.io/badge/tests-337_passing-brightgreen.svg)](#tests)
+[![Tests: 344 passing](https://img.shields.io/badge/tests-344_passing-brightgreen.svg)](#tests)
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
+[English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Try the demo](#try-the-demo) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
 
 </div>
 
@@ -37,6 +37,33 @@ The system is **two collection pipelines + one shared delivery layer** (two pipe
 - **Mode B · scheduled batch (trend radar)** — periodically scans a defined scope (MVP: AI domain), finds repos with rapidly rising stars, and emits explanatory summaries.
 
 The two modes diverge only at the collection stage, then share `LLM report → channel delivery (private RSS / email)`. A repo discovered by Mode B can be **promoted** into Mode A's watchlist.
+
+## Try the demo
+
+See the whole pipeline run in one command — **zero credentials, zero network, zero LLM**:
+
+```bash
+pip install -e .
+transmutary-demo
+```
+
+It feeds the *real* pipeline (`build_runtime` + the three ticks) built-in mock data through an `httpx.MockTransport` and a stub LLM, so nothing leaves the process: no GitHub token, no API key, no outbound HTTP, no model call. One pass produces a release diagnosis, an issue-surge diagnosis (with dependency-edge related context), a supply-chain alert from a deterministic OSV hit, and three trend explanations.
+
+Artifacts land in a fresh temp directory (printed at the top of the run; pass `--out DIR` to choose one) with the exact same private layout the real service writes — `0700` dirs, `0600` files:
+
+```
+<artifact_root>/
+├── octocat__hexbridge-cli/        # per-repo analysis archive (canonical, R24)
+│   └── <ts>-diagnose.md
+├── _delivered/
+│   ├── immediate/                 # urgent route: diagnosis + supply-chain alert
+│   └── digest/                    # digest route: trend explanations
+└── _feed/
+    ├── immediate.atom.xml         # private RSS feeds, one per route
+    └── digest.atom.xml
+```
+
+The run prints the artifact tree plus a couple of rendered-report excerpts so you can read the output it would deliver. Reproduce by copy-pasting the two commands above — no setup.
 
 ## How it works
 
@@ -181,7 +208,9 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 | Phase 1 — Mode A (collect / diagnose / deliver / supply-chain) | ✅ done · F1 real-repo milestone verified |
 | Phase 2 — Mode B (trend radar) | ✅ done |
 | Phase 3 — scheduling wiring (pipeline + service) | ✅ done |
-| Tests | ✅ 337 passing · ruff clean |
+| Phase B — F4 promotion · deployment · L2 semantic grouping · critique→refine | ✅ done |
+| Offline demo (`transmutary-demo`) | ✅ done |
+| Tests | ✅ 344 passing · ruff clean |
 
 ### Roadmap
 
@@ -190,7 +219,7 @@ Deferred by design: channel interface abstraction, dashboard one-click promotion
 ### Tests
 
 ```bash
-.venv/bin/python -m pytest -q      # 337 passing
+.venv/bin/python -m pytest -q      # 344 passing
 .venv/bin/ruff check src tests     # clean
 ```
 
