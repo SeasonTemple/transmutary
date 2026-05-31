@@ -1,10 +1,12 @@
 <div align="center">
 
-<!-- hero banner: assets/hero-banner.* (TODO) -->
-
 # 嬗变 · Transmutary
 
 **主动的开源生态情报 —— 持续观测仓库与依赖，把变化转成诊断报告，在出事前把要紧的推送给订阅者。**
+
+<img src="assets/demo.gif" alt="transmutary-demo：一条离线命令跑完整管线" width="720" />
+
+<sub>`transmutary-demo` —— 一条命令，零凭据、零网络。<a href="#看-demo">看 demo →</a></sub>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
