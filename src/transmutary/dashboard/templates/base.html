@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
+  <title>{% block title %}transmutary{% endblock %}</title>
+  <style>
+    body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+           max-width: 960px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5;
+           color: #1c1c1c; background: #fafafa; }
+    h1, h2 { line-height: 1.2; }
+    h1 a { text-decoration: none; color: inherit; }
+    table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1.5rem; }
+    th, td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #e2e2e2; }
+    .sev-critical { color: #b00020; font-weight: bold; }
+    .sev-high { color: #c25e00; }
+    .tag { font-size: 0.8rem; padding: 0.05rem 0.4rem; border-radius: 3px;
+           background: #eee; }
+    pre { background: #f0f0f0; padding: 1rem; overflow-x: auto; white-space: pre-wrap;
+          word-wrap: break-word; }
+    nav a { margin-right: 1rem; }
+    .muted { color: #888; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><a href="/">transmutary · 嬗变</a></h1>
+    <nav>
+      <a href="/">Overview</a>
+      <span class="muted">read-only</span>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

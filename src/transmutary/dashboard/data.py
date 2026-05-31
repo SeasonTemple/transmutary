@@ -27,7 +27,8 @@ from ..store.state import StateStore
 # vbscript:, …) is blanked so autoescape's text-context guard is not bypassed.
 
 # Severities that route to the urgent / supply-chain bucket on the overview.
-_ALERT_SEVERITIES = frozenset({"malware", "critical"})
+# Mirrors Severity.is_urgent (critical + high → immediate route).
+_ALERT_SEVERITIES = frozenset({"critical", "high"})
 
 # Parse one rendered source line: ``- `id` url (fetched ts)`` (see
 # ArtifactStore._render_markdown). Tolerant: a line that does not match is skipped
@@ -238,9 +239,11 @@ def build_repo_runtime(
         return None
 
     snapshots = store.get_star_snapshots(repo)
-    latest_stars = snapshots[-1].stars if snapshots else None
+    latest_stars = snapshots[-1].stargazers if snapshots else None
     star_growth = (
-        snapshots[-1].stars - snapshots[0].stars if len(snapshots) >= 2 else None
+        snapshots[-1].stargazers - snapshots[0].stargazers
+        if len(snapshots) >= 2
+        else None
     )
     baseline = store.get_issue_baseline(repo)
     runtime = RepoRuntime(

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ view.card.title }} — transmutary{% endblock %}
+{% block content %}
+
+<p><a href="/repo/{{ view.card.repo }}">&larr; {{ view.card.repo }}</a></p>
+<h2>{{ view.card.title }}</h2>
+<p>
+  <span class="tag">{{ view.card.kind }}</span>
+  <span class="sev-{{ view.card.severity }}">{{ view.card.severity }}</span>
+</p>
+
+{% if view.sources %}
+<h2>Sources</h2>
+<ul>
+  {% for s in view.sources %}
+  <li>
+    <code>{{ s.source_id }}</code>
+    {% if s.url %}<a href="{{ s.url }}" rel="noopener noreferrer">{{ s.url }}</a>
+    {% else %}<span class="muted">(non-http link withheld)</span>{% endif %}
+    <span class="muted">fetched {{ s.fetched_at }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<h2>Report</h2>
+<pre>{{ view.body }}</pre>
+
+{% endblock %}

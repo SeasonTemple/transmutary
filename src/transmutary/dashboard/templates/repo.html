@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ runtime.repo }} — transmutary{% endblock %}
+{% block content %}
+
+<h2>{{ runtime.repo }}</h2>
+<p>
+  <span class="tag">{{ runtime.source }}</span>
+  {% if runtime.in_watchlist %}<span class="tag">observed</span>
+  {% else %}<span class="tag muted">archived only</span>{% endif %}
+</p>
+
+<h2>Runtime state</h2>
+<table>
+  <tr><th>Issue baseline (rate)</th>
+      <td>{% if runtime.baseline_rate is not none %}{{ runtime.baseline_rate }}{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+  <tr><th>Latest stars</th>
+      <td>{% if runtime.latest_stars is not none %}{{ runtime.latest_stars }}{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+  <tr><th>Star growth</th>
+      <td>{% if runtime.star_growth is not none %}{{ runtime.star_growth }}{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+  <tr><th>Collect cursor</th>
+      <td>{% if runtime.cursor %}{{ runtime.cursor }}{% else %}<span class="muted">—</span>{% endif %}</td></tr>
+</table>
+
+<h2>Reports</h2>
+{% if cards %}
+<table>
+  <tr><th>Kind</th><th>Severity</th><th>Title</th></tr>
+  {% for c in cards %}
+  <tr>
+    <td><span class="tag">{{ c.kind }}</span></td>
+    <td class="sev-{{ c.severity }}">{{ c.severity }}</td>
+    <td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">No reports for this repo.</p>{% endif %}
+
+{% endblock %}

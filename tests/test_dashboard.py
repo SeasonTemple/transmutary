@@ -27,7 +27,12 @@ def _settings(repos=("acme/cli", "acme/gateway"), artifact_root="/tmp/x") -> Set
     return Settings(
         watchlist=Watchlist(repos=[RepoEntry(repo=r) for r in repos], dependency_edges=[]),
         trend_scope=TrendScope(topics=["ai"], keywords=["llm"]),
-        delivery=Delivery(state_db_path=":memory:", artifact_root=artifact_root),
+        delivery=Delivery(
+            state_db_path=":memory:",
+            artifact_root=artifact_root,
+            token_max_age_days=90,
+            digest_hour=9,
+        ),
     )
 
 
@@ -98,9 +103,9 @@ def test_build_overview_buckets_and_orders():
         root = os.path.join(d, "artifacts")
         store = StateStore(":memory:")
         artifacts = ArtifactStore(root)
-        artifacts.write(_report("acme/cli", severity=Severity.LOW), ts=1000.0)
+        artifacts.write(_report("acme/cli", severity=Severity.NORMAL), ts=1000.0)
         artifacts.write(
-            _report("acme/cli", severity=Severity.MALWARE), ts=3000.0
+            _report("acme/cli", severity=Severity.CRITICAL), ts=3000.0
         )
         artifacts.write(
             _report("acme/gateway", kind=ReportKind.EXPLAIN, severity=Severity.INFO),
@@ -110,7 +115,7 @@ def test_build_overview_buckets_and_orders():
 
         # recent: newest first across repos
         assert [c.ts for c in ov.recent_reports] == [3000, 2000, 1000]
-        # supply-chain alerts: only malware/critical
+        # supply-chain alerts: only critical/high
         assert [c.ts for c in ov.supply_chain_alerts] == [3000]
         # trend candidates: explain kind
         assert [c.ts for c in ov.trend_candidates] == [2000]
@@ -150,7 +155,8 @@ def test_build_repo_runtime_known_and_unknown():
         store.add_star_snapshot("acme/cli", 180, ts=2.0)
         store.set_cursor("acme/cli", "2026-01-01")
 
-        result = data.build_repo_runtime(_settings(artifact_root=root), store, artifacts, "acme/cli")
+        s = _settings(artifact_root=root)
+        result = data.build_repo_runtime(s, store, artifacts, "acme/cli")
         assert result is not None
         runtime, cards = result
         assert runtime.in_watchlist is True
@@ -216,3 +222,197 @@ def test_view_models_carry_no_tokens_or_credentials():
         assert "token" not in joined
         assert "api_key" not in joined
         assert "password" not in joined
+
+
+# --- U3: Starlette app via TestClient ----------------------------------------
+
+
+def _client(d, *, seed=True, raise_server_exceptions=True):
+    """Dashboard app + TestClient over in-memory store + tmp artifacts."""
+    from starlette.testclient import TestClient
+
+    from transmutary.dashboard.app import make_dashboard_app
+
+    root = os.path.join(d, "artifacts")
+    store = StateStore(":memory:")
+    artifacts = ArtifactStore(root)
+    if seed:
+        artifacts.write(_report("acme/cli", severity=Severity.CRITICAL), ts=1000.0)
+    settings = _settings(artifact_root=root)
+    app = make_dashboard_app(settings, store, artifacts)
+    client = TestClient(
+        app,
+        base_url="http://localhost",
+        raise_server_exceptions=raise_server_exceptions,
+    )
+    return client, store, artifacts, settings
+
+
+def test_index_lists_watchlist_with_source():
+    with tempfile.TemporaryDirectory() as d:
+        client, store, *_ = _client(d)
+        store.promote_repo("hot/repo", source="mode-b")
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "acme/cli" in resp.text
+        assert "config" in resp.text
+
+
+def test_report_page_renders_body():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/report/acme/cli/1000-diagnose.md")
+        assert resp.status_code == 200
+        assert "Report for acme/cli" in resp.text
+
+
+def test_report_page_escapes_script_xss():
+    with tempfile.TemporaryDirectory() as d:
+        client, store, artifacts, settings = _client(d, seed=False)
+        evil = Report(
+            title="<script>alert('t')</script>",
+            kind=ReportKind.DIAGNOSE,
+            repo="acme/cli",
+            severity=Severity.HIGH,
+            body_md="<script>alert('b')</script>",
+            created_at="2026-01-01T00:00:00Z",
+        )
+        artifacts.write(evil, ts=2000.0)
+        resp = client.get("/report/acme/cli/2000-diagnose.md")
+        assert resp.status_code == 200
+        # R-D10: raw script tags never reach the page; escaped form does.
+        assert "<script>alert(" not in resp.text
+        assert "&lt;script&gt;" in resp.text
+
+
+def test_report_page_blanks_javascript_source_href():
+    with tempfile.TemporaryDirectory() as d:
+        client, store, artifacts, settings = _client(d, seed=False)
+        rpt = _report(
+            "acme/cli",
+            sources=(
+                Source(source_id="ok", url="https://safe.example", fetched_at="2026"),
+                Source(source_id="evil", url="javascript:alert(1)", fetched_at="2026"),
+            ),
+        )
+        artifacts.write(rpt, ts=3000.0)
+        resp = client.get("/report/acme/cli/3000-diagnose.md")
+        assert resp.status_code == 200
+        # R-D15: no javascript: href; the safe https one is linked.
+        assert 'href="javascript:' not in resp.text
+        assert 'href="https://safe.example"' in resp.text
+
+
+def test_report_path_traversal_404():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        # R-D11: illegal filename → 404, never reads outside the dir.
+        assert client.get("/report/acme/cli/..%2f..%2fetc%2fpasswd").status_code == 404
+        assert client.get("/report/acme/cli/evil.txt").status_code == 404
+
+
+def test_unknown_repo_404():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        assert client.get("/repo/no/repo").status_code == 404
+
+
+def test_routes_are_get_only():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        from starlette.routing import Route
+
+        for route in client.app.routes:
+            if isinstance(route, Route):
+                # R-D7: read-only — only GET (Starlette auto-adds HEAD).
+                assert route.methods <= {"GET", "HEAD"}
+
+
+def test_host_header_allowlist():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        # R-D14: foreign Host → 400 (DNS-rebind defense); localhost → ok.
+        assert client.get("/", headers={"host": "evil.com"}).status_code == 400
+        assert client.get("/", headers={"host": "127.0.0.1:8787"}).status_code == 200
+        assert client.get("/", headers={"host": "localhost"}).status_code == 200
+
+
+def test_security_headers_present():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/")
+        # R-D18
+        assert "default-src 'self'" in resp.headers["content-security-policy"]
+        assert resp.headers["x-content-type-options"] == "nosniff"
+        assert resp.headers["x-frame-options"] == "DENY"
+
+
+def test_internal_error_does_not_leak(monkeypatch):
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d, raise_server_exceptions=False)
+        from transmutary.dashboard import app as app_mod
+
+        def _boom(*a, **k):
+            raise ValueError("/secret/path/to/state.sqlite3 leaked")
+
+        monkeypatch.setattr(app_mod.data, "build_overview", _boom)
+        resp = client.get("/")
+        assert resp.status_code == 500
+        # R-D17: generic body — no path / exception class / traceback.
+        assert "/secret/path" not in resp.text
+        assert "ValueError" not in resp.text
+        assert "Traceback" not in resp.text
+
+
+def test_feed_links_carry_no_token():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/")
+        # R-D9: feed hrefs in the rendered HTML never embed a token.
+        assert "/feed/immediate" in resp.text
+        assert "token=" not in resp.text.lower()
+        assert "bearer" not in resp.text.lower()
+
+
+def test_healthz_ok():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        assert client.get("/healthz").status_code == 200
+
+
+def test_missing_jinja_raises_with_hint(monkeypatch):
+    from transmutary.dashboard import app as app_mod
+
+    monkeypatch.setattr(app_mod, "_jinja2", None)
+    with tempfile.TemporaryDirectory() as d:
+        root = os.path.join(d, "artifacts")
+        with pytest.raises(RuntimeError, match="transmutary\\[dashboard\\]"):
+            app_mod.make_dashboard_app(
+                _settings(artifact_root=root),
+                StateStore(":memory:"),
+                ArtifactStore(root),
+            )
+
+
+# --- U4: resolve_bind public opt-in gate (R-D16) -----------------------------
+
+
+def test_resolve_bind_localhost_default():
+    from transmutary.dashboard.app import resolve_bind
+
+    assert resolve_bind("127.0.0.1", 8787, allow_public=False) == ("127.0.0.1", 8787)
+    assert resolve_bind("localhost", 9000, allow_public=False) == ("localhost", 9000)
+
+
+def test_resolve_bind_public_refused_without_flag():
+    from transmutary.dashboard.app import resolve_bind
+
+    # R-D16: non-localhost without --allow-public is a hard error, not a warning.
+    with pytest.raises(SystemExit):
+        resolve_bind("0.0.0.0", 8787, allow_public=False)
+
+
+def test_resolve_bind_public_allowed_with_flag():
+    from transmutary.dashboard.app import resolve_bind
+
+    assert resolve_bind("0.0.0.0", 8787, allow_public=True) == ("0.0.0.0", 8787)

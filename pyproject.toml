@@ -60,6 +60,11 @@ Issues = "https://github.com/SeasonTemple/transmutary/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Ship the dashboard Jinja2 templates (non-.py files setuptools would otherwise
+# drop from the wheel, breaking `transmutary-dashboard` after a pip install).
+[tool.setuptools.package-data]
+"transmutary.dashboard" = ["templates/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

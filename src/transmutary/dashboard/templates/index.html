@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}transmutary — overview{% endblock %}
+{% block content %}
+
+<h2>Watchlist <span class="muted">(config ∪ promoted)</span></h2>
+{% if overview.watchlist %}
+<table>
+  <tr><th>Repo</th><th>Source</th></tr>
+  {% for entry in overview.watchlist %}
+  <tr>
+    <td><a href="/repo/{{ entry.repo }}">{{ entry.repo }}</a></td>
+    <td><span class="tag">{{ entry.source }}</span></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">No repos observed.</p>{% endif %}
+
+<h2>Supply-chain alerts</h2>
+{% if overview.supply_chain_alerts %}
+<table>
+  <tr><th>Severity</th><th>Repo</th><th>Title</th></tr>
+  {% for c in overview.supply_chain_alerts %}
+  <tr>
+    <td class="sev-{{ c.severity }}">{{ c.severity }}</td>
+    <td>{{ c.repo }}</td>
+    <td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">No supply-chain alerts.</p>{% endif %}
+
+<h2>Trend candidates</h2>
+{% if overview.trend_candidates %}
+<table>
+  <tr><th>Repo</th><th>Title</th></tr>
+  {% for c in overview.trend_candidates %}
+  <tr>
+    <td>{{ c.repo }}</td>
+    <td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">No trend candidates.</p>{% endif %}
+
+<h2>Recent reports</h2>
+{% if overview.recent_reports %}
+<table>
+  <tr><th>Kind</th><th>Severity</th><th>Repo</th><th>Title</th></tr>
+  {% for c in overview.recent_reports %}
+  <tr>
+    <td><span class="tag">{{ c.kind }}</span></td>
+    <td class="sev-{{ c.severity }}">{{ c.severity }}</td>
+    <td>{{ c.repo }}</td>
+    <td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">No reports yet.</p>{% endif %}
+
+<h2>Feeds <span class="muted">(token via Authorization header, not shown)</span></h2>
+<ul>
+  {% for f in overview.feeds %}
+  <li>{{ f.route }}: <code>{{ f.href }}</code></li>
+  {% endfor %}
+</ul>
+
+{% endblock %}
