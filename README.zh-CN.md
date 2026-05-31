@@ -9,7 +9,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 315 passing](https://img.shields.io/badge/tests-315_passing-brightgreen.svg)](#测试)
+[![Tests: 337 passing](https://img.shields.io/badge/tests-337_passing-brightgreen.svg)](#测试)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
 
@@ -180,16 +180,16 @@ git config commit.template .gitmessage
 | Phase 1 — 模式 A（采集/诊断/投递/供应链） | ✅ 完成 · F1 真实仓里程碑已验收 |
 | Phase 2 — 模式 B（趋势雷达） | ✅ 完成 |
 | Phase 3 — 调度接线（pipeline + service） | ✅ 完成 |
-| 测试 | ✅ 315 passing · ruff clean |
+| 测试 | ✅ 337 passing · ruff clean |
 
 ### 路线图
 
-按设计延后：critique→refine 报告增强、channel 接口抽象、Web 仪表盘一键晋升按钮、订阅配置、Web 仪表盘、真实常驻跑。（L2 语义分组已实现。）
+按设计延后：channel 接口抽象、Web 仪表盘一键晋升按钮、订阅配置、Web 仪表盘、真实常驻跑。（L2 语义分组与可选的 critique→refine 报告增强均已实现——见[工作原理：可选的批判→修订](#工作原理可选的批判修订r11)。）
 
 ### 测试
 
 ```bash
-.venv/bin/python -m pytest -q      # 315 passing
+.venv/bin/python -m pytest -q      # 337 passing
 .venv/bin/ruff check src tests     # clean
 ```
 
@@ -200,3 +200,20 @@ git config commit.template .gitmessage
 ### 许可
 
 [Apache-2.0](LICENSE) © SeasonTemple
+
+
+## 工作原理：可选的批判→修订（R11）
+
+诊断报告（模式 A）与说明报告（模式 B）都支持**可选**的三段式提质：
+`综合（出初稿）→ 批判 → 修订`，**默认关闭**。在每次 tick 上经
+`run_release_issue_tick` / `run_trend_tick` 的 `refine_reports=True` 显式开启。
+
+- **综合**：出单次初稿（即现状行为）。
+- **批判**：让模型对照证据批判自己的初稿（未据证断言 / 遗漏 / 逻辑漏洞）。
+- **修订**：据批判改写初稿，且不超出所给证据。
+
+批判 / 修订**指令**进可信 system 槽；初稿、批判、证据一律只进不可信 data 槽
+（注入隔离，KTD3）。关键点：**修订稿不豁免任何安全管控**——诊断的修订稿照过与
+初稿完全相同的 OSV/GHSA 交叉校验 + 裁决脱敏 + R18 源门控；批判→修订只在「初稿生成」
+之前运行，绝不绕过其后的安全管线（KTD-C）。任一阶段 LLM 故障即降级回初稿，报告
+绝不因此产不出（KTD-D）。`refine_reports=False`（默认）时行为与此前完全一致。

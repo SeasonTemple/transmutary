@@ -37,6 +37,7 @@ from .. import llm
 from ..clean import CleanInput, clean_batch
 from ..dedup import SourceItem, merge_references, url_domain
 from ..llm import LLMError, ModelTier
+from .refine import critique_refine
 from .schema import Report, ReportKind, Severity, Source
 
 # Trusted hosts whose URLs can count as FIRST-PARTY authoritative single sources
@@ -121,6 +122,10 @@ class DiagnoseOutcome:
     # The LLM free-text asserted a security verdict with no deterministic backing,
     # so it was neutralized before shipping (KTD2 — LLM 不得单方面定安全结论).
     security_verdicts_redacted: bool = False
+    # Audit trail from the optional critique-refine pass (R11). Empty when refine
+    # was off or ran cleanly; carries a degradation note when refine fell back to
+    # the draft (KTD-D).
+    refine_notes: list[str] = field(default_factory=list)
 
 
 def _now_iso() -> str:
@@ -336,6 +341,7 @@ def diagnose(
     api_key: str | None = None,
     base_url: str | None = None,
     call_fn=llm.call,
+    refine: bool = False,
 ) -> DiagnoseOutcome:
     """Produce a sourcing diagnosis Report for a triggered event (U10).
 
@@ -346,10 +352,21 @@ def diagnose(
             deterministic corroboration are blocked from the report.
         api_key / base_url: LLM credentials from config (env), forwarded to llm.py.
         call_fn: llm.call seam (mocked in tests).
+        refine: when True, run the optional critique→refine pass (R11) on the
+            DRAFT diagnosis before the security pipeline. Default False preserves
+            the prior single-pass behavior exactly (KTD-A, backward compatible).
 
     Returns:
         DiagnoseOutcome with the Report, the R18 gate decision, and any blocked
         security claims.
+
+    critique-refine (R11/KTD-C): when ``refine`` is on, the single-pass draft is
+    sent through :func:`~transmutary.report.refine.critique_refine` (STRONG tier),
+    and the REVISED text replaces the draft. Critically, this replacement happens
+    BEFORE cross-validation / sanitization / the R18 gate below — so the revised
+    text is adjudicated by EXACTLY the same security pipeline as a single-pass
+    draft and is never exempted (KTD-C). A refine-stage LLM failure degrades to the
+    draft (KTD-D); the report is still produced.
     """
     data_block, _kept = _aggregate_data_block(ctx)
 
@@ -364,6 +381,22 @@ def diagnose(
         )
     except LLMError:
         raise
+
+    # Optional critique→refine pass (R11). The REVISED draft replaces the original
+    # HERE — strictly BEFORE the cross-validate / sanitize / R18-gate steps below —
+    # so the refined text passes through the identical security pipeline as a
+    # single-pass draft and is NEVER exempted from any verdict (KTD-C). A refine
+    # LLMError degrades to the draft (KTD-D), so the report is never blocked.
+    refine_notes: list[str] = []
+    if refine:
+        diagnosis_text, refine_notes = critique_refine(
+            diagnosis_text or "",
+            data_block,
+            call_fn=call_fn,
+            tier=ModelTier.STRONG,
+            api_key=api_key,
+            base_url=base_url,
+        )
 
     # Cross-validate any security conclusions against deterministic IDs (KTD2),
     # in BOTH directions: LLM-only "vulnerable" claims are blocked, and a real
@@ -444,6 +477,7 @@ def diagnose(
         cross_validation_blocked=blocked,
         forced_hits=[fc.package for fc in forced],
         security_verdicts_redacted=verdicts_redacted,
+        refine_notes=refine_notes,
     )
 
 

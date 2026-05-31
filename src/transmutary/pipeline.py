@@ -274,7 +274,12 @@ def _related_signals(rt: PipelineRuntime, repo: str, token: str | None) -> list[
 
 
 def run_release_issue_tick(
-    rt: PipelineRuntime, repo: str, *, call_fn=llm.call, embed_fn=_UNSET
+    rt: PipelineRuntime,
+    repo: str,
+    *,
+    call_fn=llm.call,
+    embed_fn=_UNSET,
+    refine_reports: bool = False,
 ) -> ReleaseIssueTickResult:
     """Run one mode-A release/issue pipeline pass for a single watchlist repo (U3).
 
@@ -289,6 +294,11 @@ def run_release_issue_tick(
     cursor advanced (never rewound). A :class:`ConservativeReview` from the judge
     (budget/LLM failure) is captured and flagged for human review — never a silent
     drop (R19).
+
+    ``refine_reports`` (R11/KTD-A, default False) is threaded to ``diagnose`` as
+    its ``refine`` flag: when on, each diagnosis runs the critique→refine pass
+    before the security pipeline (the refined text passes the SAME cross-validate /
+    sanitize / R18 gate, KTD-C). Default False keeps the prior behavior exactly.
     """
     token = _github_token(rt)
     api_key = _llm_api_key(rt)
@@ -317,7 +327,9 @@ def run_release_issue_tick(
             severity=Severity.HIGH,
             anchor_ts=ev.ts,
         )
-        outcome = diagnose(ctx, api_key=api_key, base_url=base_url, call_fn=call_fn)
+        outcome = diagnose(
+            ctx, api_key=api_key, base_url=base_url, call_fn=call_fn, refine=refine_reports
+        )
         _deliver_report(rt, outcome.report, outcome.report.severity)
         result.diagnosed += 1
 
@@ -361,7 +373,9 @@ def run_release_issue_tick(
                 severity=Severity.HIGH,
                 anchor_ts=anchor,
             )
-            outcome = diagnose(ctx, api_key=api_key, base_url=base_url, call_fn=call_fn)
+            outcome = diagnose(
+                ctx, api_key=api_key, base_url=base_url, call_fn=call_fn, refine=refine_reports
+            )
             _deliver_report(rt, outcome.report, outcome.report.severity)
             result.diagnosed += 1
 
@@ -491,6 +505,7 @@ def run_trend_tick(
     language: str | None = None,
     call_fn=llm.call,
     embed_fn=_UNSET,
+    refine_reports: bool = False,
 ) -> TrendTickResult:
     """Run one mode-B trend pipeline pass for the configured scope (U5).
 
@@ -502,6 +517,11 @@ def run_trend_tick(
     batched LLM call (KTD7) → each surviving explanation report is delivered to
     the DIGEST route (R16). Injection in any candidate's README is isolated to the
     data slot AND per-candidate (no batch cross-contamination) by ``explain_trends``.
+
+    ``refine_reports`` (R11/KTD-A, default False) is threaded to ``explain_trends``
+    as its ``refine`` flag: when on, each representative summary runs the
+    critique→refine pass (CHEAP tier) before reports are built. Default False keeps
+    the prior behavior exactly.
     """
     api_key = _llm_api_key(rt)
     base_url = _llm_base_url(rt)
@@ -527,6 +547,7 @@ def run_trend_tick(
         base_url=base_url,
         call_fn=call_fn,
         embed_fn=_embed_fn(rt) if embed_fn is _UNSET else embed_fn,
+        refine=refine_reports,
     )
     result.skipped_unchanged = list(outcome.skipped_unchanged)
     result.reaccelerated = list(outcome.reaccelerated)

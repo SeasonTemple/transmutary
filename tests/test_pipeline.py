@@ -843,3 +843,102 @@ def test_security_tick_does_not_use_l2(monkeypatch):
     res = run_security_tick(rt, "acme/cli", call_fn=RecordingLLM(reply="Upgrade."))
     assert res.alerts == 1
     assert embed_calls["n"] == 0  # L2 never touched the authority path
+
+
+# ===========================================================================
+# U4 — refine_reports passthrough to diagnose / explain (R11/KTD-A)
+# ===========================================================================
+def _refine_counting_llm():
+    """A call_fn that distinguishes the synthesis/judge/batch stages from the
+    critique/refine stages so a test can count how many critique-refine ran."""
+
+    def _call(system, data, tier=None, *, api_key=None, base_url=None, **kw):
+        if "triage judge" in system:
+            return '{"is_fault": true, "reason": "ok"}'
+        if "trend explainer" in system:
+            return '[{"index": 0, "summary": "draft summary 0"}]'
+        if "reviewing a draft" in system.lower():
+            return "CRITIQUE: tighten."
+        if "revising a draft" in system.lower():
+            return "REFINED report body."
+        return "diagnosis body"  # initial synthesis
+
+    return _call
+
+
+def test_release_issue_tick_refine_reports_true_runs_critique_refine():
+    issues = [_issue_item(i, "down", "503 outage down", _iso(i)) for i in range(1, 6)]
+    seen = {"systems": []}
+
+    def _call(system, data, tier=None, *, api_key=None, base_url=None, **kw):
+        seen["systems"].append(system)
+        if "triage judge" in system:
+            return '{"is_fault": true, "reason": "ok"}'
+        if "reviewing a draft" in system.lower():
+            return "CRITIQUE: tighten."
+        if "revising a draft" in system.lower():
+            return "REFINED diagnosis body."
+        return "draft diagnosis body"
+
+    rt = _runtime(_settings(), _creds(), _ri_handler(issues=issues))
+    res = run_release_issue_tick(rt, "acme/cli", call_fn=_call, refine_reports=True)
+    assert res.diagnosed == 1
+    # critique + refine stages were both invoked (R11 three-stage).
+    assert any("reviewing a draft" in s.lower() for s in seen["systems"])
+    assert any("revising a draft" in s.lower() for s in seen["systems"])
+
+
+def test_release_issue_tick_default_no_refine_backward_compatible():
+    issues = [_issue_item(i, "down", "503 outage down", _iso(i)) for i in range(1, 6)]
+    seen = {"systems": []}
+
+    def _call(system, data, tier=None, *, api_key=None, base_url=None, **kw):
+        seen["systems"].append(system)
+        if "triage judge" in system:
+            return '{"is_fault": true, "reason": "ok"}'
+        return "diagnosis body"
+
+    rt = _runtime(_settings(), _creds(), _ri_handler(issues=issues))
+    res = run_release_issue_tick(rt, "acme/cli", call_fn=_call)  # default refine off
+    assert res.diagnosed == 1
+    # No critique/refine stage when refine_reports defaults to False (KTD-A).
+    assert not any("reviewing a draft" in s.lower() for s in seen["systems"])
+    assert not any("revising a draft" in s.lower() for s in seen["systems"])
+
+
+def test_trend_tick_refine_reports_true_runs_critique_refine():
+    rows = [_row("acme/ai-tool", 1000)]
+    seen = {"systems": []}
+
+    def _call(system, data, tier=None, *, api_key=None, base_url=None, **kw):
+        seen["systems"].append(system)
+        if "trend explainer" in system:
+            return '[{"index": 0, "summary": "draft summary 0"}]'
+        if "reviewing a draft" in system.lower():
+            return "CRITIQUE: tighten."
+        if "revising a draft" in system.lower():
+            return "REFINED summary."
+        return "x"
+
+    rt = _runtime(_settings(), _creds(), _trend_handler(rows))
+    res = run_trend_tick(rt, ts=1000.0, call_fn=_call, refine_reports=True)
+    assert res.delivered == 1
+    assert any("reviewing a draft" in s.lower() for s in seen["systems"])
+    assert any("revising a draft" in s.lower() for s in seen["systems"])
+
+
+def test_trend_tick_default_no_refine_backward_compatible():
+    rows = [_row("acme/ai-tool", 1000)]
+    seen = {"systems": []}
+
+    def _call(system, data, tier=None, *, api_key=None, base_url=None, **kw):
+        seen["systems"].append(system)
+        if "trend explainer" in system:
+            return '[{"index": 0, "summary": "draft summary 0"}]'
+        return "x"
+
+    rt = _runtime(_settings(), _creds(), _trend_handler(rows))
+    res = run_trend_tick(rt, ts=1000.0, call_fn=_call)  # default refine off
+    assert res.delivered == 1
+    assert not any("reviewing a draft" in s.lower() for s in seen["systems"])
+    assert not any("revising a draft" in s.lower() for s in seen["systems"])

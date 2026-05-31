@@ -44,6 +44,7 @@ from ..dedup import content_hash
 from ..llm import LLMError, ModelTier
 from ..rerank import L2_MAX_EMBED_ITEMS, group_semantic
 from ..store.state import StateStore
+from .refine import critique_refine
 from .schema import Report, ReportKind, Severity, Source
 
 # Growth bucket granularity (stars/day) for the artifact fingerprint. A repo that
@@ -88,6 +89,9 @@ class ExplainOutcome:
     l2_groups: int = 0
     # True when L2 was requested but skipped/degraded (no embed_fn → False).
     l2_degraded: bool = False
+    # Audit trail from the optional critique-refine pass (R11). Empty when refine
+    # was off or every refine ran cleanly; carries a note per degraded summary.
+    refine_notes: list[str] = field(default_factory=list)
 
 
 def _now_iso() -> str:
@@ -292,6 +296,7 @@ def explain_trends(
     call_fn=llm.call,
     anchor_ts: str | None = None,
     embed_fn=None,
+    refine: bool = False,
 ) -> ExplainOutcome:
     """Produce explanation Reports for a batch of trend candidates (U13).
 
@@ -309,6 +314,11 @@ def explain_trends(
         embed_fn: optional ``Callable[[list[str]], list[list[float]]]`` enabling L2
             semantic grouping. ``None`` (default) preserves the prior behavior
             exactly: every fresh candidate is summarized in the batch.
+        refine: when True, run the optional critique→refine pass (R11, CHEAP tier)
+            on each representative's batch summary before reports are built (and
+            before the R18 source gate in :func:`_build_report`). Default False
+            preserves the prior single-pass behavior exactly (KTD-A). A refine LLM
+            failure degrades to the original summary per representative (KTD-D).
 
     Returns:
         ExplainOutcome with one Report per surviving candidate plus audit flags.
@@ -406,6 +416,31 @@ def explain_trends(
     for batch_i, fresh_i in enumerate(rep_indices):
         summary_by_fresh[fresh_i] = rep_summaries.get(batch_i, "")
 
+    # 3b. Optional critique→refine pass (R11, CHEAP tier — mode B is cheap batch,
+    #     KTD-E). Each NON-EMPTY representative summary is refined against its own
+    #     cleaned candidate text BEFORE reports are built (and before the R18 gate
+    #     in _build_report) — the refined summary is treated identically to a
+    #     single-pass summary (KTD-C: no security bypass; the trend gate still
+    #     applies). A refine LLMError degrades to the original summary (KTD-D).
+    refine_notes: list[str] = []
+    if refine:
+        for fresh_i in rep_indices:
+            draft_summary = summary_by_fresh.get(fresh_i, "")
+            if not (draft_summary and draft_summary.strip()):
+                continue
+            rep = fresh[fresh_i]
+            evidence = cleaned_by_repo.get(rep.repo, "") or rep.description or ""
+            revised, notes = critique_refine(
+                draft_summary,
+                evidence,
+                call_fn=call_fn,
+                tier=ModelTier.CHEAP,
+                api_key=api_key,
+                base_url=base_url,
+            )
+            summary_by_fresh[fresh_i] = revised
+            refine_notes.extend(notes)
+
     # 4. Per-candidate Report (EXPLAIN, digest severity). Every fresh candidate gets
     #    a report (zero-miss); collapsed members reuse their representative's summary.
     #    Injected verdicts in any summary are sanitized; representatives note folds.
@@ -434,6 +469,7 @@ def explain_trends(
         llm_call_count=call_count,
         l2_groups=len(l2_groups),
         l2_degraded=l2_degraded,
+        refine_notes=refine_notes,
     )
 
 

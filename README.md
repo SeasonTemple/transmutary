@@ -9,7 +9,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 315 passing](https://img.shields.io/badge/tests-315_passing-brightgreen.svg)](#tests)
+[![Tests: 337 passing](https://img.shields.io/badge/tests-337_passing-brightgreen.svg)](#tests)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
 
@@ -181,16 +181,16 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 | Phase 1 — Mode A (collect / diagnose / deliver / supply-chain) | ✅ done · F1 real-repo milestone verified |
 | Phase 2 — Mode B (trend radar) | ✅ done |
 | Phase 3 — scheduling wiring (pipeline + service) | ✅ done |
-| Tests | ✅ 315 passing · ruff clean |
+| Tests | ✅ 337 passing · ruff clean |
 
 ### Roadmap
 
-Deferred by design: critique→refine report pass, channel interface abstraction, dashboard one-click promotion button, subscription config, web dashboard, live resident run. (L2 semantic grouping is implemented.)
+Deferred by design: channel interface abstraction, dashboard one-click promotion button, subscription config, web dashboard, live resident run. (L2 semantic grouping and the optional critique→refine report pass are implemented — see [How it works: optional critique→refine](#how-it-works-optional-critiquerefine-r11).)
 
 ### Tests
 
 ```bash
-.venv/bin/python -m pytest -q      # 315 passing
+.venv/bin/python -m pytest -q      # 337 passing
 .venv/bin/ruff check src tests     # clean
 ```
 
@@ -201,3 +201,27 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, the Conventional-Commits c
 ### License
 
 [Apache-2.0](LICENSE) © SeasonTemple
+
+
+## How it works: optional critique→refine (R11)
+
+Both diagnostic reports (mode A) and explanatory reports (mode B) support an
+**optional** three-stage quality pass: `synthesize (draft) → critique → refine`,
+**off by default**. It is enabled per-tick via `refine_reports=True` on
+`run_release_issue_tick` / `run_trend_tick`.
+
+- **Synthesize** — produce a single-pass draft (today's behavior).
+- **Critique** — have the model critique its own draft against the evidence
+  (unsupported claims / omissions / logic gaps).
+- **Refine** — rewrite the draft per the critique, without going beyond the
+  supplied evidence.
+
+The critique/refine **instructions** go in the trusted system slot; the draft,
+the critique, and the evidence go **only** in the untrusted data slot (injection
+isolation, KTD3). The key guarantee: **the revised text is NOT exempt from any
+security control** — a diagnostic revised draft passes the exact same OSV/GHSA
+cross-validation + verdict sanitization + R18 source gate as the single-pass
+draft; critique→refine runs only *before* draft generation and never bypasses the
+downstream security pipeline (KTD-C). Any LLM failure in either stage degrades to
+the draft, so a report is never lost to it (KTD-D). With `refine_reports=False`
+(the default), behavior is identical to before.
