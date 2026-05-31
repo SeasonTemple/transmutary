@@ -436,6 +436,64 @@ def test_resolve_bind_public_allowed_with_flag():
     assert resolve_bind("0.0.0.0", 8787, allow_public=True) == ("0.0.0.0", 8787)
 
 
+# --- U1: CSP nonce middleware (R-C1/R-C2) ------------------------------------
+
+
+def test_csp_nonce_per_request_unique():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        c1 = client.get("/").headers["content-security-policy"]
+        c2 = client.get("/").headers["content-security-policy"]
+        import re
+
+        n1 = re.search(r"'nonce-([^']+)'", c1)
+        n2 = re.search(r"'nonce-([^']+)'", c2)
+        assert n1 and n2
+        # R-C2: per-request unique nonce.
+        assert n1.group(1) != n2.group(1)
+
+
+def test_csp_no_unsafe_directives():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        csp = client.get("/").headers["content-security-policy"]
+        # R-C1: nonce is a precise allow, never a relaxation.
+        assert "unsafe-inline" not in csp
+        assert "unsafe-eval" not in csp
+        assert "script-src 'self' 'nonce-" in csp
+        assert "default-src 'self'" in csp
+
+
+def test_csp_nonce_matches_request_state():
+    from transmutary.dashboard.app import _csp_with_nonce
+
+    # fail-closed: empty nonce → no-nonce CSP (inline script blocked, not allowed).
+    no_nonce = _csp_with_nonce("")
+    assert "nonce-" not in no_nonce
+    assert no_nonce == "default-src 'self'; script-src 'self'; style-src 'self'"
+    # with nonce → precise allow.
+    withn = _csp_with_nonce("abc123")
+    assert "'nonce-abc123'" in withn
+    assert "unsafe-inline" not in withn
+
+
+def test_csp_500_uses_no_nonce_policy(monkeypatch):
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d, raise_server_exceptions=False)
+        from transmutary.dashboard import app as app_mod
+
+        monkeypatch.setattr(
+            app_mod.data, "build_overview", lambda *a, **k: (_ for _ in ()).throw(ValueError("x"))
+        )
+        resp = client.get("/")
+        assert resp.status_code == 500
+        csp = resp.headers["content-security-policy"]
+        # 500 page has no inline script → no-nonce CSP, still locked down.
+        assert "nonce-" not in csp
+        assert "unsafe-inline" not in csp
+        assert "default-src 'self'" in csp
+
+
 # --- review fixes: IPv6 host, 500 headers, sidecar trust, _safe_url, read-only ---
 
 

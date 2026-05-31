@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import sys
 
 from starlette.applications import Starlette
@@ -48,11 +49,27 @@ _DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]", "::1"})
 _DEFAULT_PORT = 8787
 
 _SECURITY_HEADERS = {
-    "Content-Security-Policy": "default-src 'self'",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
 }
+
+# CSP without a nonce — used on error responses (no inline script) and as the
+# fail-closed fallback. script-src 'self' alone blocks inline scripts entirely.
+_CSP_NO_NONCE = "default-src 'self'; script-src 'self'; style-src 'self'"
+
+
+def _csp_with_nonce(nonce: str) -> str:
+    """CSP that precisely allows ONE inline script via its per-request nonce.
+
+    Never opens unsafe-inline / unsafe-eval and never allows an external origin —
+    the nonce is a precise allow, not a relaxation. Empty nonce → fall back to the
+    no-nonce CSP (fail closed: the inline script is then blocked, never silently
+    allowed via an empty/malformed nonce token).
+    """
+    if not nonce:
+        return _CSP_NO_NONCE
+    return f"default-src 'self'; script-src 'self' 'nonce-{nonce}'; style-src 'self'"
 
 
 class _MissingJinja(RuntimeError):
@@ -107,11 +124,22 @@ class HostAllowlistMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """Attach defence-in-depth security headers to every response (R-D18)."""
+class CSPNonceMiddleware(BaseHTTPMiddleware):
+    """Generate a per-request CSP nonce and attach security headers (R-C1/R-C2/R-D18).
+
+    The nonce is stored on ``request.state.csp_nonce`` so the template can stamp it
+    onto the single trusted inline FOUC script. The response CSP allows exactly that
+    nonce — never ``unsafe-inline``/``unsafe-eval``, never an external origin. nonce
+    is 128-bit (``token_urlsafe(16)``), unique per request, never cached.
+    """
 
     async def dispatch(self, request: Request, call_next):
+        nonce = secrets.token_urlsafe(16)
+        request.state.csp_nonce = nonce
         response = await call_next(request)
+        # Only set CSP if a handler did not already set it (e.g. the 500 handler
+        # sets its own no-nonce CSP). setdefault preserves that.
+        response.headers.setdefault("Content-Security-Policy", _csp_with_nonce(nonce))
         for key, value in _SECURITY_HEADERS.items():
             response.headers.setdefault(key, value)
         return response
@@ -166,11 +194,12 @@ def make_dashboard_app(
     async def server_error(request: Request, exc: Exception) -> Response:
         # R-D17: never leak the exception detail / path / traceback.
         logger.error("dashboard request failed: %s", type(exc).__name__)
-        # R-D18: SecurityHeadersMiddleware sits OUTSIDE ServerErrorMiddleware, so a
-        # 500 produced here would otherwise miss the security headers — attach them
-        # directly so every response (incl. errors) carries them.
+        # R-D18 + R-C1: error page has no inline script, so use the no-nonce CSP.
+        # Set headers directly because ServerErrorMiddleware sits OUTSIDE the
+        # nonce middleware and would otherwise miss them.
+        headers = {"Content-Security-Policy": _CSP_NO_NONCE, **_SECURITY_HEADERS}
         return PlainTextResponse(
-            "Internal Server Error", status_code=500, headers=dict(_SECURITY_HEADERS)
+            "Internal Server Error", status_code=500, headers=headers
         )
 
     routes = [
@@ -182,7 +211,7 @@ def make_dashboard_app(
     ]
     middleware = [
         Middleware(HostAllowlistMiddleware, allowed_hosts=allowed),
-        Middleware(SecurityHeadersMiddleware),
+        Middleware(CSPNonceMiddleware),
     ]
     return Starlette(
         debug=False,  # R-D17
