@@ -387,6 +387,14 @@ class StateStore:
             cur = self._conn.execute("SELECT repo FROM promoted_repo ORDER BY repo ASC")
             return [r["repo"] for r in cur.fetchall()]
 
+    def list_promoted_meta(self) -> list[sqlite3.Row]:
+        """Return promoted rows (repo, source, promoted_at), sorted by repo."""
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT repo, source, promoted_at FROM promoted_repo ORDER BY repo ASC"
+            )
+            return cur.fetchall()
+
     def is_promoted(self, repo: str) -> bool:
         with self._lock:
             cur = self._conn.execute("SELECT 1 FROM promoted_repo WHERE repo=?", (repo,))
