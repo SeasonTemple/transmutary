@@ -11,7 +11,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 382 passing](https://img.shields.io/badge/tests-382_passing-brightgreen.svg)](#tests)
+[![Tests: 444 passing](https://img.shields.io/badge/tests-444_passing-brightgreen.svg)](#tests)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Try the demo](#try-the-demo) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
 
@@ -189,6 +189,10 @@ transmutary-dashboard             # serves on http://127.0.0.1:8787
 
 It reuses the existing Starlette stack and the store read interfaces — it never writes, opens no mutation endpoint, and adds **no** promote button (promotion stays on the CLI). Security posture: binds `127.0.0.1` by default (a non-localhost bind is **refused** unless you pass `--allow-public`, since the dashboard serves private intelligence with no built-in auth — front it with an auth proxy); a `Host`-header allow-list defeats DNS-rebinding; external repository content is HTML-escaped (XSS) and credentials/tokens are never rendered.
 
+The UI is a modern sidebar dashboard (stat tiles, Sentry-style issue stream, severity encoded by colour + icon + text for accessibility), with a light/dark theme toggle and an EN/中文 language toggle (both remembered, both rendered server-side on first paint so there is no flash). A per-request CSP nonce keeps the inline theme bootstrap script precisely allow-listed without weakening the policy.
+
+**Agent-native access** — every data endpoint supports content negotiation: request `Accept: application/json` (or `?format=json`) to get the view-model as JSON instead of HTML, with the same credential/token exclusion as the HTML path. `GET /llms.txt` describes the endpoint surface for agents (no private data).
+
 ## Architecture & docs
 
 - Domain glossary: [`CONTEXT.md`](CONTEXT.md)
@@ -224,7 +228,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 | Phase B — F4 promotion · deployment · L2 semantic grouping · critique→refine | ✅ done |
 | Offline demo (`transmutary-demo`) | ✅ done |
 | Read-only web dashboard (`transmutary-dashboard`) | ✅ done |
-| Tests | ✅ 382 passing · ruff clean |
+| Tests | ✅ 444 passing · ruff clean |
 
 ### Roadmap
 
@@ -233,7 +237,7 @@ Deferred by design: channel interface abstraction, dashboard **write** capabilit
 ### Tests
 
 ```bash
-.venv/bin/python -m pytest -q      # 382 passing
+.venv/bin/python -m pytest -q      # 444 passing
 .venv/bin/ruff check src tests     # clean
 ```
 

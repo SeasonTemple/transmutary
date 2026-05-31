@@ -11,7 +11,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 382 passing](https://img.shields.io/badge/tests-382_passing-brightgreen.svg)](#测试)
+[![Tests: 444 passing](https://img.shields.io/badge/tests-444_passing-brightgreen.svg)](#测试)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [看 demo](#看-demo) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
 
@@ -188,6 +188,10 @@ transmutary-dashboard             # 默认 http://127.0.0.1:8787
 
 复用现有 Starlette 栈与 store 读接口——只读、无任何写端点、**不开** promote 按钮（晋升仍走 CLI）。安全姿态：默认绑 `127.0.0.1`，非 localhost 绑定**硬拒**除非显式传 `--allow-public`（看板服务私有情报、无内建鉴权，公网须前置鉴权代理）；Host 头 allowlist 防 DNS rebinding；外部仓库内容 HTML 转义防 XSS；凭据/token 绝不上页。
 
+界面为现代侧边栏看板（stat tiles、Sentry 式 issue-stream 告警、severity 用色+图标+文字三通道编码便于无障碍），带亮/暗主题切换与中/英语言切换（均记忆，且服务端首屏即渲染对应语言，无闪屏）。per-request CSP nonce 让内联主题首屏脚本精确放行而不弱化策略。
+
+**Agent 友好** —— 每个数据端点支持内容协商：传 `Accept: application/json`（或 `?format=json`）即返回 view-model JSON 而非 HTML，凭据/token 排除与 HTML 路径一致。`GET /llms.txt` 向 agent 描述端点结构（不含私有数据）。
+
 ## 架构与文档
 
 - 领域术语表：[`CONTEXT.md`](CONTEXT.md)
@@ -223,7 +227,7 @@ git config commit.template .gitmessage
 | Phase B — F4 晋升 · 部署 · L2 语义分组 · critique→refine | ✅ 完成 |
 | 离线 demo（`transmutary-demo`） | ✅ 完成 |
 | 只读 Web 看板（`transmutary-dashboard`） | ✅ 完成 |
-| 测试 | ✅ 382 passing · ruff clean |
+| 测试 | ✅ 444 passing · ruff clean |
 
 ### 路线图
 
@@ -232,7 +236,7 @@ git config commit.template .gitmessage
 ### 测试
 
 ```bash
-.venv/bin/python -m pytest -q      # 382 passing
+.venv/bin/python -m pytest -q      # 444 passing
 .venv/bin/ruff check src tests     # clean
 ```
 
