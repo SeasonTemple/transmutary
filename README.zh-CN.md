@@ -11,7 +11,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 344 passing](https://img.shields.io/badge/tests-344_passing-brightgreen.svg)](#测试)
+[![Tests: 376 passing](https://img.shields.io/badge/tests-376_passing-brightgreen.svg)](#测试)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [看 demo](#看-demo) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
 
@@ -177,6 +177,17 @@ docker compose up -d
 
 镜像以非 root 用户运行；凭据运行时从 `.env` 注入；状态 DB 与私有产物持久化在 `transmutary-state` 卷。无 Docker 时直接跑入口：`transmutary-serve`（读 `TRANSMUTARY_CONFIG_DIR`，默认 `config`）。
 
+## 看板（只读）
+
+本地**只读** Web 看板，浏览器里看系统运行态与产出——有效关注清单、最近诊断/说明报告、供应链告警、趋势候选、各仓运行态（issue 基线 / star 快照 / 游标）、feed 链接。
+
+```bash
+pip install -e ".[dashboard]"     # 加 jinja2（Starlette/uvicorn 已是核心依赖）
+transmutary-dashboard             # 默认 http://127.0.0.1:8787
+```
+
+复用现有 Starlette 栈与 store 读接口——只读、无任何写端点、**不开** promote 按钮（晋升仍走 CLI）。安全姿态：默认绑 `127.0.0.1`，非 localhost 绑定**硬拒**除非显式传 `--allow-public`（看板服务私有情报、无内建鉴权，公网须前置鉴权代理）；Host 头 allowlist 防 DNS rebinding；外部仓库内容 HTML 转义防 XSS；凭据/token 绝不上页。
+
 ## 架构与文档
 
 - 领域术语表：[`CONTEXT.md`](CONTEXT.md)
@@ -211,16 +222,17 @@ git config commit.template .gitmessage
 | Phase 3 — 调度接线（pipeline + service） | ✅ 完成 |
 | Phase B — F4 晋升 · 部署 · L2 语义分组 · critique→refine | ✅ 完成 |
 | 离线 demo（`transmutary-demo`） | ✅ 完成 |
-| 测试 | ✅ 344 passing · ruff clean |
+| 只读 Web 看板（`transmutary-dashboard`） | ✅ 完成 |
+| 测试 | ✅ 376 passing · ruff clean |
 
 ### 路线图
 
-按设计延后：channel 接口抽象、Web 仪表盘一键晋升按钮、订阅配置、Web 仪表盘、真实常驻跑。（L2 语义分组与可选的 critique→refine 报告增强均已实现——见[工作原理：可选的批判→修订](#工作原理可选的批判修订r11)。）
+按设计延后：channel 接口抽象、看板**写能力**（一键晋升——独立计划，带自己的威胁模型）、订阅配置、真实常驻跑。（只读 Web 看板、L2 语义分组、可选的 critique→refine 报告增强均已实现——见[看板](#看板只读)与[工作原理：可选的批判→修订](#工作原理可选的批判修订r11)。）
 
 ### 测试
 
 ```bash
-.venv/bin/python -m pytest -q      # 344 passing
+.venv/bin/python -m pytest -q      # 376 passing
 .venv/bin/ruff check src tests     # clean
 ```
 
