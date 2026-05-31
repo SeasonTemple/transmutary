@@ -11,7 +11,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 444 passing](https://img.shields.io/badge/tests-444_passing-brightgreen.svg)](#tests)
+[![Tests: 404 passing](https://img.shields.io/badge/tests-404_passing-brightgreen.svg)](#tests)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Try the demo](#try-the-demo) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
 
@@ -228,7 +228,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 | Phase B — F4 promotion · deployment · L2 semantic grouping · critique→refine | ✅ done |
 | Offline demo (`transmutary-demo`) | ✅ done |
 | Read-only web dashboard (`transmutary-dashboard`) | ✅ done |
-| Tests | ✅ 444 passing · ruff clean |
+| Tests | ✅ 404 passing · ruff clean |
 
 ### Roadmap
 
@@ -237,7 +237,7 @@ Deferred by design: channel interface abstraction, dashboard **write** capabilit
 ### Tests
 
 ```bash
-.venv/bin/python -m pytest -q      # 444 passing
+.venv/bin/python -m pytest -q      # 404 passing
 .venv/bin/ruff check src tests     # clean
 ```
 

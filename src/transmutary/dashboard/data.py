@@ -144,7 +144,8 @@ class FeedLink:
     href: str
 
     def to_dict(self) -> dict:
-        return {"route": self.route, "href": self.href}  # local relative /feed/<route> — never carries a token (R-D9/R-D20)
+        # href is a local relative /feed/<route> — never carries a token (R-D9).
+        return {"route": self.route, "href": self.href}
 
 
 @dataclass(frozen=True)
