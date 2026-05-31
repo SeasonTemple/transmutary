@@ -35,11 +35,18 @@ dependencies = [
 transmutary = "transmutary.cli:main"
 transmutary-serve = "transmutary.service:main"
 transmutary-demo = "transmutary.demo:main"
+transmutary-dashboard = "transmutary.dashboard.app:main"
 
 [project.optional-dependencies]
 dev = [
     "pytest",
     "ruff",
+    "jinja2",
+]
+# Read-only web dashboard (transmutary-dashboard). Optional so the core install
+# stays light; Starlette/uvicorn are already core, this only adds the templating.
+dashboard = [
+    "jinja2",
 ]
 build = [
     "build",
