@@ -26,13 +26,19 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import FileResponse, PlainTextResponse, Response
+from starlette.responses import (
+    FileResponse,
+    JSONResponse,
+    PlainTextResponse,
+    Response,
+)
 from starlette.routing import Route
 
 from ..config import Settings
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
-from . import data
+from . import data, i18n
+from .llms import render_llms_txt
 
 try:  # jinja2 ships in the optional `dashboard` extra (KTD-Dash-2).
     import jinja2 as _jinja2
@@ -135,7 +141,10 @@ class CSPNonceMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         nonce = secrets.token_urlsafe(16)
-        request.state.csp_nonce = nonce
+        # Store on the ASGI scope (one dict shared with the downstream route's
+        # Request) — BaseHTTPMiddleware does NOT propagate a request.state set here
+        # to the route handler across Starlette versions, but the scope is shared.
+        request.scope["csp_nonce"] = nonce
         response = await call_next(request)
         # Only set CSP if a handler did not already set it (e.g. the 500 handler
         # sets its own no-nonce CSP). setdefault preserves that.
@@ -157,10 +166,35 @@ def make_dashboard_app(
     templates = Jinja2Templates(directory=_TEMPLATES_DIR)  # autoescape on (R-D10)
     allowed = allowed_hosts if allowed_hosts is not None else _DEFAULT_ALLOWED_HOSTS
 
+    def _lang(request: Request) -> str:
+        """Resolve the request language from the cookie (whitelist, R-I4)."""
+        return i18n.resolve_lang(request.cookies.get(i18n.LANG_COOKIE))
+
+    def _wants_json(request: Request) -> bool:
+        """Content negotiation: JSON if ?format=json or Accept: application/json."""
+        if request.query_params.get("format") == "json":
+            return True
+        accept = request.headers.get("accept", "")
+        return "application/json" in accept
+
+    def _ctx(request: Request, extra: dict) -> dict:
+        """Template context with i18n chrome strings + lang (R-I1/R-I3)."""
+        lang = _lang(request)
+        return {
+            "lang": lang,
+            "html_lang": i18n.HTML_LANG[lang],
+            "t": i18n.messages_for(lang),
+            "nonce": request.scope.get("csp_nonce", ""),
+            **extra,
+        }
+
     async def index(request: Request) -> Response:
         overview = data.build_overview(settings, store, artifacts)
+        if _wants_json(request):
+            return JSONResponse(overview.to_dict())
         return templates.TemplateResponse(
-            request, "index.html", {"overview": overview}
+            request=request, name="index.html",
+            context=_ctx(request, {"overview": overview}),
         )
 
     async def repo_page(request: Request) -> Response:
@@ -169,8 +203,13 @@ def make_dashboard_app(
         if result is None:
             return PlainTextResponse("Not Found", status_code=404)
         runtime, cards = result
+        if _wants_json(request):
+            return JSONResponse(
+                {"runtime": runtime.to_dict(), "reports": [c.to_dict() for c in cards]}
+            )
         return templates.TemplateResponse(
-            request, "repo.html", {"runtime": runtime, "cards": cards}
+            request=request, name="repo.html",
+            context=_ctx(request, {"runtime": runtime, "cards": cards}),
         )
 
     async def report_page(request: Request) -> Response:
@@ -179,17 +218,31 @@ def make_dashboard_app(
         view = data.build_report_view(artifacts, repo, filename)
         if view is None:
             return PlainTextResponse("Not Found", status_code=404)
-        return templates.TemplateResponse(request, "report.html", {"view": view})
+        if _wants_json(request):
+            return JSONResponse(view.to_dict())
+        return templates.TemplateResponse(
+            request=request, name="report.html",
+            context=_ctx(request, {"view": view}),
+        )
 
     async def healthz(request: Request) -> Response:
         return PlainTextResponse("ok")
 
+    async def llms_txt(request: Request) -> Response:
+        # Endpoint self-description for agents — NO private data (R-G1/KTD-G2).
+        return PlainTextResponse(
+            render_llms_txt(), media_type="text/markdown; charset=utf-8"
+        )
+
     _CSS_PATH = os.path.join(_STATIC_DIR, "dashboard.css")
+    _JS_PATH = os.path.join(_STATIC_DIR, "dashboard.js")
 
     async def stylesheet(request: Request) -> Response:
-        # Served from a fixed path (no path params) so there is no traversal
-        # surface; same-origin so CSP `default-src 'self'` allows it (R-D18).
+        # Fixed path (no path params) → no traversal surface; same-origin → CSP ok.
         return FileResponse(_CSS_PATH, media_type="text/css")
+
+    async def script(request: Request) -> Response:
+        return FileResponse(_JS_PATH, media_type="text/javascript")
 
     async def server_error(request: Request, exc: Exception) -> Response:
         # R-D17: never leak the exception detail / path / traceback.
@@ -207,7 +260,9 @@ def make_dashboard_app(
         Route("/repo/{owner}/{repo}", repo_page, methods=["GET"]),
         Route("/report/{owner}/{repo}/{filename}", report_page, methods=["GET"]),
         Route("/healthz", healthz, methods=["GET"]),
+        Route("/llms.txt", llms_txt, methods=["GET"]),
         Route("/static/dashboard.css", stylesheet, methods=["GET"]),
+        Route("/static/dashboard.js", script, methods=["GET"]),
     ]
     middleware = [
         Middleware(HostAllowlistMiddleware, allowed_hosts=allowed),

@@ -1,82 +1,79 @@
 {% extends "base.html" %}
-{% block title %}transmutary — overview{% endblock %}
+{% block title %}transmutary — {{ t['page.overview'] }}{% endblock %}
 {% block content %}
 
-<h2>Watchlist <span class="muted">(config ∪ promoted)</span></h2>
+<header class="topbar">
+  <h1 data-i18n="page.overview">{{ t['page.overview'] }}</h1>
+</header>
+
+<section class="stats" aria-label="summary">
+  <div class="stat"><div class="stat-l" data-i18n="stat.repos">{{ t['stat.repos'] }}</div><div class="stat-n">{{ overview.watchlist | length }}</div></div>
+  <div class="stat{% if overview.supply_chain_alerts %} crit{% endif %}"><div class="stat-l" data-i18n="stat.alerts">{{ t['stat.alerts'] }}</div><div class="stat-n">{{ overview.supply_chain_alerts | length }}</div>{% if overview.supply_chain_alerts %}<div class="stat-d" data-i18n="stat.attn">{{ t['stat.attn'] }}</div>{% endif %}</div>
+  <div class="stat"><div class="stat-l" data-i18n="stat.trends">{{ t['stat.trends'] }}</div><div class="stat-n">{{ overview.trend_candidates | length }}</div></div>
+  <div class="stat"><div class="stat-l" data-i18n="stat.reports">{{ t['stat.reports'] }}</div><div class="stat-n">{{ overview.recent_reports | length }}</div></div>
+</section>
+
+<h2 class="sec"><span data-i18n="sec.alerts">{{ t['sec.alerts'] }}</span></h2>
+{% if overview.supply_chain_alerts %}
+<div class="stream">
+  {% for c in overview.supply_chain_alerts %}
+  <a class="row sev-{{ c.severity }}" href="/report/{{ c.repo }}/{{ c.filename }}">
+    <span class="sev-bar"></span>
+    {% if c.severity == 'critical' %}<svg viewBox="0 0 16 16" class="sev-ic" aria-hidden="true"><path d="M8 1l6 3v4c0 3.5-2.5 6-6 7-3.5-1-6-3.5-6-7V4z"/></svg>
+    {% else %}<svg viewBox="0 0 16 16" class="sev-ic" aria-hidden="true"><path d="M8 2l6 11H2z"/></svg>{% endif %}
+    <span class="pill sev" aria-label="{{ c.severity }} severity">{{ c.severity }}</span>
+    <span class="row-title">{{ c.title }}</span>
+    <span class="repo">{{ c.repo }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}<p class="empty"><span class="ok" aria-hidden="true">&#x2713;</span> <span data-i18n="empty.alerts">{{ t['empty.alerts'] }}</span></p>{% endif %}
+
+<h2 class="sec"><span data-i18n="sec.watchlist">{{ t['sec.watchlist'] }}</span> <span class="muted" data-i18n="note.watchlist">{{ t['note.watchlist'] }}</span></h2>
 {% if overview.watchlist %}
-<div class="card"><div class="table-wrap">
-<table>
-  <thead><tr><th>Repo</th><th>Source</th></tr></thead>
+<div class="card"><table class="tbl">
+  <thead><tr><th scope="col" data-i18n="th.repo">{{ t['th.repo'] }}</th><th scope="col" data-i18n="th.source">{{ t['th.source'] }}</th></tr></thead>
   <tbody>
   {% for entry in overview.watchlist %}
-  <tr>
-    <td><a class="repo" href="/repo/{{ entry.repo }}">{{ entry.repo }}</a></td>
-    <td><span class="tag">{{ entry.source }}</span></td>
-  </tr>
+  <tr><td><a class="repo" href="/repo/{{ entry.repo }}">{{ entry.repo }}</a></td><td><span class="pill{% if entry.source != 'config' %} promo{% endif %}">{{ entry.source }}</span></td></tr>
   {% endfor %}
   </tbody>
-</table>
-</div></div>
-{% else %}<p class="empty">No repos observed.</p>{% endif %}
+</table></div>
+{% else %}<p class="empty" data-i18n="empty.watchlist">{{ t['empty.watchlist'] }}</p>{% endif %}
 
-<h2>Supply-chain alerts</h2>
-{% if overview.supply_chain_alerts %}
-<div class="card"><div class="table-wrap">
-<table>
-  <thead><tr><th>Severity</th><th>Repo</th><th>Title</th></tr></thead>
-  <tbody>
-  {% for c in overview.supply_chain_alerts %}
-  <tr>
-    <td><span class="sev sev-{{ c.severity }}">{{ c.severity }}</span></td>
-    <td class="repo">{{ c.repo }}</td>
-    <td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div></div>
-{% else %}<p class="empty">No supply-chain alerts.</p>{% endif %}
-
-<h2>Trend candidates</h2>
+<h2 class="sec"><span data-i18n="sec.trends">{{ t['sec.trends'] }}</span></h2>
 {% if overview.trend_candidates %}
-<div class="card"><div class="table-wrap">
-<table>
-  <thead><tr><th>Repo</th><th>Title</th></tr></thead>
-  <tbody>
+<div class="stream">
   {% for c in overview.trend_candidates %}
-  <tr>
-    <td class="repo">{{ c.repo }}</td>
-    <td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td>
-  </tr>
+  <a class="row sev-info" href="/report/{{ c.repo }}/{{ c.filename }}">
+    <span class="sev-bar"></span>
+    <svg viewBox="0 0 16 16" class="sev-ic" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v.01M8 8v3"/></svg>
+    <span class="pill info">{{ c.kind }}</span>
+    <span class="row-title">{{ c.title }}</span>
+    <span class="repo">{{ c.repo }}</span>
+  </a>
   {% endfor %}
-  </tbody>
-</table>
-</div></div>
-{% else %}<p class="empty">No trend candidates.</p>{% endif %}
+</div>
+{% else %}<p class="empty" data-i18n="empty.trends">{{ t['empty.trends'] }}</p>{% endif %}
 
-<h2>Recent reports</h2>
+<details open>
+<summary class="sec"><span data-i18n="sec.reports">{{ t['sec.reports'] }}</span></summary>
 {% if overview.recent_reports %}
-<div class="card"><div class="table-wrap">
-<table>
-  <thead><tr><th>Kind</th><th>Severity</th><th>Repo</th><th>Title</th></tr></thead>
+<div class="card"><table class="tbl">
+  <thead><tr><th scope="col" data-i18n="th.kind">{{ t['th.kind'] }}</th><th scope="col" data-i18n="th.severity">{{ t['th.severity'] }}</th><th scope="col" data-i18n="th.repo">{{ t['th.repo'] }}</th><th scope="col" data-i18n="th.title">{{ t['th.title'] }}</th></tr></thead>
   <tbody>
   {% for c in overview.recent_reports %}
-  <tr>
-    <td><span class="tag">{{ c.kind }}</span></td>
-    <td><span class="sev sev-{{ c.severity }}">{{ c.severity }}</span></td>
-    <td class="repo">{{ c.repo }}</td>
-    <td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td>
-  </tr>
+  <tr><td><span class="pill">{{ c.kind }}</span></td><td><span class="pill sev sev-{{ c.severity }}" aria-label="{{ c.severity }} severity">{{ c.severity }}</span></td><td class="repo">{{ c.repo }}</td><td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td></tr>
   {% endfor %}
   </tbody>
-</table>
-</div></div>
-{% else %}<p class="empty">No reports yet.</p>{% endif %}
+</table></div>
+{% else %}<p class="empty" data-i18n="empty.reports">{{ t['empty.reports'] }}</p>{% endif %}
+</details>
 
-<h2>Feeds <span class="muted">(token via Authorization header, not shown)</span></h2>
+<h2 class="sec"><span data-i18n="sec.feeds">{{ t['sec.feeds'] }}</span> <span class="muted" data-i18n="note.feeds">{{ t['note.feeds'] }}</span></h2>
 <ul class="feeds">
   {% for f in overview.feeds %}
-  <li>{{ f.route }}: <code>{{ f.href }}</code></li>
+  <li><span class="route">{{ f.route }}</span><code>{{ f.href }}</code></li>
   {% endfor %}
 </ul>
 

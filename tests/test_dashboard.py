@@ -603,3 +603,180 @@ def test_state_store_read_only_missing_db_raises(tmp_path):
 
     with _pytest.raises(Exception):  # noqa: B017 - mode=ro on a missing file raises
         StateStore(str(tmp_path / "nope.sqlite3"), read_only=True)
+
+
+# --- U2: server-side i18n (cookie + whitelist + dict parity) -----------------
+
+
+def test_i18n_resolve_lang_whitelist():
+    from transmutary.dashboard import i18n
+    assert i18n.resolve_lang("zh") == "zh"
+    assert i18n.resolve_lang("en") == "en"
+    # R-I4: anything outside the whitelist falls back to default — no injection.
+    assert i18n.resolve_lang("<script>") == i18n.DEFAULT_LANG
+    assert i18n.resolve_lang("fr") == i18n.DEFAULT_LANG
+    assert i18n.resolve_lang(None) == i18n.DEFAULT_LANG
+    assert i18n.resolve_lang("zh" * 500) == i18n.DEFAULT_LANG
+
+
+def test_i18n_dict_key_parity():
+    from transmutary.dashboard import i18n
+    # en and zh must carry identical keys (no missing translations).
+    assert set(i18n.MESSAGES["en"]) == set(i18n.MESSAGES["zh"])
+
+
+def test_i18n_cookie_drives_first_paint_language():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        zh = client.get("/", headers={"cookie": "tmtry-lang=zh"})
+        assert zh.status_code == 200
+        assert "总览" in zh.text  # zh chrome rendered server-side
+        assert 'lang="zh-CN"' in zh.text
+        en = client.get("/", headers={"cookie": "tmtry-lang=en"})
+        assert "Overview" in en.text
+        assert 'lang="en"' in en.text
+
+
+def test_i18n_bad_cookie_falls_back_not_injected():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/", headers={"cookie": "tmtry-lang=%3Cscript%3Ealert(1)%3C/script%3E"})
+        assert resp.status_code == 200
+        assert "<script>alert(1)" not in resp.text  # never reaches the markup
+        assert 'lang="en"' in resp.text  # fell back to default
+
+
+def test_i18n_data_not_translated():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/", headers={"cookie": "tmtry-lang=zh"})
+        # repo names / severity stay original even in zh.
+        assert "acme/cli" in resp.text
+
+
+# --- U4/U5: nonce FOUC script, zero inline style ----------------------------
+
+
+def test_head_fouc_script_carries_nonce():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/")
+        import re
+        csp = resp.headers["content-security-policy"]
+        m = re.search(r"'nonce-([^']+)'", csp)
+        assert m
+        nonce = m.group(1)
+        # the inline FOUC script must carry the SAME nonce (R-T2/R-C2).
+        assert f'nonce="{nonce}"' in resp.text
+
+
+def test_templates_have_no_inline_style():
+    with tempfile.TemporaryDirectory() as d:
+        client, store, arts, settings = _client(d)
+        store.promote_repo("hot/repo", source="mode-b")
+        for path in ("/", "/repo/acme/cli"):
+            resp = client.get(path)
+            # style-src 'self' would silently block inline style= attributes.
+            assert "style=" not in resp.text, f"inline style in {path}"
+
+
+def test_js_served_same_origin():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/static/dashboard.js")
+        assert resp.status_code == 200
+        assert "javascript" in resp.headers["content-type"]
+        # i18n DOM writes use textContent, never innerHTML (P0). Assert no actual
+        # property write — `.innerHTML` / insertAdjacentHTML — not a bare mention.
+        assert ".innerHTML" not in resp.text
+        assert "insertAdjacentHTML" not in resp.text
+        assert "textContent" in resp.text
+
+
+# --- U6: JSON content negotiation + /llms.txt -------------------------------
+
+
+def test_json_via_accept_header():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/", headers={"accept": "application/json"})
+        assert resp.status_code == 200
+        assert "application/json" in resp.headers["content-type"]
+        body = resp.json()
+        assert "watchlist" in body and "supply_chain_alerts" in body
+
+
+def test_json_via_query_param():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/?format=json")
+        assert resp.status_code == 200
+        assert "application/json" in resp.headers["content-type"]
+
+
+def test_json_excludes_credentials():
+    from transmutary.deliver.server import hash_token
+    with tempfile.TemporaryDirectory() as d:
+        client, store, arts, settings = _client(d)
+        store.add_subscriber_token(hash_token("super-secret-xyz"), "alice")
+        resp = client.get("/", headers={"accept": "application/json"})
+        blob = resp.text.lower()
+        # R-S2: same exclusion guarantee as the HTML path.
+        assert "super-secret-xyz" not in blob
+        assert "alice" not in blob
+        assert hash_token("super-secret-xyz") not in blob
+
+
+def test_json_repo_key_allowlist():
+    with tempfile.TemporaryDirectory() as d:
+        client, store, arts, settings = _client(d)
+        from transmutary.report.schema import Severity
+        arts.write(_report("acme/cli", severity=Severity.HIGH), ts=1000.0)
+        resp = client.get("/repo/acme/cli", headers={"accept": "application/json"})
+        assert resp.status_code == 200
+        runtime = resp.json()["runtime"]
+        # P1: explicit allow-list — exactly these keys, no asdict-style spill.
+        assert set(runtime.keys()) == {
+            "repo", "in_watchlist", "source", "baseline_rate",
+            "latest_stars", "star_growth", "cursor",
+        }
+
+
+def test_json_still_host_guarded():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        # JSON path still goes through the Host allow-list.
+        resp = client.get("/", headers={"accept": "application/json", "host": "evil.com"})
+        assert resp.status_code == 400
+
+
+def test_llms_txt_no_private_data():
+    with tempfile.TemporaryDirectory() as d:
+        client, store, arts, settings = _client(d)
+        store.promote_repo("secret-org/private-repo", source="mode-b")
+        resp = client.get("/llms.txt")
+        assert resp.status_code == 200
+        assert "markdown" in resp.headers["content-type"]
+        # describes endpoints, never leaks the real watched repos.
+        assert "secret-org/private-repo" not in resp.text
+        assert "/repo/{owner}/{repo}" in resp.text
+        assert "application/json" in resp.text
+
+
+def test_llms_txt_host_guarded():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/llms.txt", headers={"host": "evil.com"})
+        assert resp.status_code == 400
+
+
+def test_json_report_marks_external_trust():
+    with tempfile.TemporaryDirectory() as d:
+        client, store, arts, settings = _client(d)
+        from transmutary.report.schema import Severity
+        arts.write(_report("acme/cli", severity=Severity.HIGH), ts=1000.0)
+        resp = client.get(
+            "/report/acme/cli/1000-diagnose.md", headers={"accept": "application/json"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["_content_trust"] == "external"

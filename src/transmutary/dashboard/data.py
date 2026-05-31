@@ -55,6 +55,11 @@ class WatchEntry:
     repo: str
     source: str  # "config" | promoted source (e.g. "mode-b" / "manual")
 
+    def to_dict(self) -> dict:
+        # Explicit allow-list (NOT dataclasses.asdict) so a future field added to
+        # this dataclass can never silently leak into the JSON surface (R-S2).
+        return {"repo": self.repo, "source": self.source}
+
 
 @dataclass(frozen=True)
 class ReportCard:
@@ -65,6 +70,18 @@ class ReportCard:
     ts: int
     filename: str
 
+    def to_dict(self) -> dict:
+        # Explicit allow-list (R-S2). `title` is external-origin → trust marker.
+        return {
+            "repo": self.repo,
+            "kind": self.kind,
+            "severity": self.severity,
+            "title": self.title,
+            "ts": self.ts,
+            "filename": self.filename,
+            "_content_trust": "external",  # title comes from upstream repos
+        }
+
 
 @dataclass(frozen=True)
 class SourceLink:
@@ -72,12 +89,29 @@ class SourceLink:
     url: str | None  # already passed through _safe_url; None = not linkable
     fetched_at: str
 
+    def to_dict(self) -> dict:
+        return {
+            "source_id": self.source_id,
+            "url": self.url,
+            "fetched_at": self.fetched_at,
+        }
+
 
 @dataclass(frozen=True)
 class ReportView:
     card: ReportCard
     body: str  # raw markdown, rendered as escaped <pre> by the template (KTD-Dash-3)
     sources: tuple[SourceLink, ...]
+
+    def to_dict(self) -> dict:
+        # `body` is untrusted external markdown — a JSON consumer MUST escape it
+        # before any HTML rendering. The trust marker documents that contract.
+        return {
+            "card": self.card.to_dict(),
+            "body": self.body,
+            "sources": [s.to_dict() for s in self.sources],
+            "_content_trust": "external",
+        }
 
 
 @dataclass(frozen=True)
@@ -90,11 +124,27 @@ class RepoRuntime:
     star_growth: int | None  # latest - earliest snapshot, when ≥2 snapshots
     cursor: str | None
 
+    def to_dict(self) -> dict:
+        # Explicit allow-list (NOT dataclasses.asdict) so a future field can never
+        # silently leak into the JSON surface (R-S2).
+        return {
+            "repo": self.repo,
+            "in_watchlist": self.in_watchlist,
+            "source": self.source,
+            "baseline_rate": self.baseline_rate,
+            "latest_stars": self.latest_stars,
+            "star_growth": self.star_growth,
+            "cursor": self.cursor,
+        }
+
 
 @dataclass(frozen=True)
 class FeedLink:
     route: str
-    href: str  # local relative /feed/<route> — never carries a token (R-D9/R-D20)
+    href: str
+
+    def to_dict(self) -> dict:
+        return {"route": self.route, "href": self.href}  # local relative /feed/<route> — never carries a token (R-D9/R-D20)
 
 
 @dataclass(frozen=True)
@@ -104,6 +154,15 @@ class Overview:
     supply_chain_alerts: tuple[ReportCard, ...]
     trend_candidates: tuple[ReportCard, ...]
     feeds: tuple[FeedLink, ...]
+
+    def to_dict(self) -> dict:
+        return {
+            "watchlist": [w.to_dict() for w in self.watchlist],
+            "recent_reports": [c.to_dict() for c in self.recent_reports],
+            "supply_chain_alerts": [c.to_dict() for c in self.supply_chain_alerts],
+            "trend_candidates": [c.to_dict() for c in self.trend_candidates],
+            "feeds": [f.to_dict() for f in self.feeds],
+        }
 
 
 # --- trusted-metadata helpers (read the sidecar JSON, never parse the body) --

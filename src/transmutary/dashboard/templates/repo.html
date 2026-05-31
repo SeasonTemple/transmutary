@@ -2,44 +2,33 @@
 {% block title %}{{ runtime.repo }} — transmutary{% endblock %}
 {% block content %}
 
-<a class="back" href="/">&larr; Overview</a>
-<h2 style="margin-top:0.5rem">{{ runtime.repo }}
-  <span class="tag">{{ runtime.source }}</span>
-  {% if runtime.in_watchlist %}<span class="tag">observed</span>
-  {% else %}<span class="tag dim">archived only</span>{% endif %}
-</h2>
+<a class="back" href="/">&larr; <span data-i18n="back.overview">{{ t['back.overview'] }}</span></a>
+<header class="topbar"><h1>{{ runtime.repo }}
+  <span class="pill">{{ runtime.source }}</span>
+  {% if runtime.in_watchlist %}<span class="pill" data-i18n="tag.observed">{{ t['tag.observed'] }}</span>
+  {% else %}<span class="pill dim" data-i18n="tag.archived">{{ t['tag.archived'] }}</span>{% endif %}
+</h1></header>
 
-<div class="card"><div class="table-wrap">
-<table class="kv">
+<h2 class="sec" data-i18n="sec.runtime">{{ t['sec.runtime'] }}</h2>
+<div class="card"><table class="tbl kv">
   <tbody>
-  <tr><th>Issue baseline (rate)</th>
-      <td>{% if runtime.baseline_rate is not none %}{{ runtime.baseline_rate }}{% else %}<span class="dim">—</span>{% endif %}</td></tr>
-  <tr><th>Latest stars</th>
-      <td>{% if runtime.latest_stars is not none %}{{ runtime.latest_stars }}{% else %}<span class="dim">—</span>{% endif %}</td></tr>
-  <tr><th>Star growth</th>
-      <td>{% if runtime.star_growth is not none %}+{{ runtime.star_growth }}{% else %}<span class="dim">—</span>{% endif %}</td></tr>
-  <tr><th>Collect cursor</th>
-      <td>{% if runtime.cursor %}<code>{{ runtime.cursor }}</code>{% else %}<span class="dim">—</span>{% endif %}</td></tr>
+  <tr><th scope="row" data-i18n="field.baseline">{{ t['field.baseline'] }}</th><td>{% if runtime.baseline_rate is not none %}{{ runtime.baseline_rate }}{% else %}<span class="dim">&mdash;</span>{% endif %}</td></tr>
+  <tr><th scope="row" data-i18n="field.stars">{{ t['field.stars'] }}</th><td class="num">{% if runtime.latest_stars is not none %}{{ runtime.latest_stars }}{% else %}<span class="dim">&mdash;</span>{% endif %}</td></tr>
+  <tr><th scope="row" data-i18n="field.growth">{{ t['field.growth'] }}</th><td class="num">{% if runtime.star_growth is not none %}<span class="up">+{{ runtime.star_growth }}</span>{% else %}<span class="dim">&mdash;</span>{% endif %}</td></tr>
+  <tr><th scope="row" data-i18n="field.cursor">{{ t['field.cursor'] }}</th><td>{% if runtime.cursor %}<code>{{ runtime.cursor }}</code>{% else %}<span class="dim">&mdash;</span>{% endif %}</td></tr>
   </tbody>
-</table>
-</div></div>
+</table></div>
 
-<h2>Reports</h2>
+<h2 class="sec" data-i18n="sec.reports">{{ t['sec.reports'] }}</h2>
 {% if cards %}
-<div class="card"><div class="table-wrap">
-<table>
-  <thead><tr><th>Kind</th><th>Severity</th><th>Title</th></tr></thead>
+<div class="card"><table class="tbl">
+  <thead><tr><th scope="col" data-i18n="th.kind">{{ t['th.kind'] }}</th><th scope="col" data-i18n="th.severity">{{ t['th.severity'] }}</th><th scope="col" data-i18n="th.title">{{ t['th.title'] }}</th></tr></thead>
   <tbody>
   {% for c in cards %}
-  <tr>
-    <td><span class="tag">{{ c.kind }}</span></td>
-    <td><span class="sev sev-{{ c.severity }}">{{ c.severity }}</span></td>
-    <td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td>
-  </tr>
+  <tr><td><span class="pill">{{ c.kind }}</span></td><td><span class="pill sev sev-{{ c.severity }}" aria-label="{{ c.severity }} severity">{{ c.severity }}</span></td><td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td></tr>
   {% endfor %}
   </tbody>
-</table>
-</div></div>
-{% else %}<p class="empty">No reports for this repo.</p>{% endif %}
+</table></div>
+{% else %}<p class="empty" data-i18n="empty.repo_reports">{{ t['empty.repo_reports'] }}</p>{% endif %}
 
 {% endblock %}
