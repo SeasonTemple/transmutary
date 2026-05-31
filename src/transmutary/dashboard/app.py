@@ -25,7 +25,7 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response
+from starlette.responses import FileResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
 from ..config import Settings
@@ -43,6 +43,7 @@ except ImportError:  # pragma: no cover - exercised via monkeypatch in tests
 logger = logging.getLogger("transmutary.dashboard")
 
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 _DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]", "::1"})
 _DEFAULT_PORT = 8787
 
@@ -155,6 +156,13 @@ def make_dashboard_app(
     async def healthz(request: Request) -> Response:
         return PlainTextResponse("ok")
 
+    _CSS_PATH = os.path.join(_STATIC_DIR, "dashboard.css")
+
+    async def stylesheet(request: Request) -> Response:
+        # Served from a fixed path (no path params) so there is no traversal
+        # surface; same-origin so CSP `default-src 'self'` allows it (R-D18).
+        return FileResponse(_CSS_PATH, media_type="text/css")
+
     async def server_error(request: Request, exc: Exception) -> Response:
         # R-D17: never leak the exception detail / path / traceback.
         logger.error("dashboard request failed: %s", type(exc).__name__)
@@ -170,6 +178,7 @@ def make_dashboard_app(
         Route("/repo/{owner}/{repo}", repo_page, methods=["GET"]),
         Route("/report/{owner}/{repo}/{filename}", report_page, methods=["GET"]),
         Route("/healthz", healthz, methods=["GET"]),
+        Route("/static/dashboard.css", stylesheet, methods=["GET"]),
     ]
     middleware = [
         Middleware(HostAllowlistMiddleware, allowed_hosts=allowed),

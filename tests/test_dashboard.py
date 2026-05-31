@@ -380,6 +380,24 @@ def test_healthz_ok():
         assert client.get("/healthz").status_code == 200
 
 
+def test_stylesheet_served_same_origin_css():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/static/dashboard.css")
+        assert resp.status_code == 200
+        assert "text/css" in resp.headers["content-type"]
+        # sanity: the stylesheet actually carries our rules
+        assert ".sev-critical" in resp.text
+
+
+def test_index_links_stylesheet():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/")
+        # base.html references the same-origin stylesheet (CSP default-src 'self' OK)
+        assert '/static/dashboard.css' in resp.text
+
+
 def test_missing_jinja_raises_with_hint(monkeypatch):
     from transmutary.dashboard import app as app_mod
 
