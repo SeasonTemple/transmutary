@@ -12,10 +12,26 @@ import os
 import re
 import stat
 import time
+from dataclasses import dataclass
 
 from ..report.schema import Report
 
 REQUIRED_DIR_MODE = 0o700
+
+# A report file name is exactly ``<int-ts>-<kind>.md`` (kind ∈ diagnose/explain,
+# lowercase). Anything else (including any path separator or ``..``) is rejected
+# before a read — this is the dashboard's per-file traversal guard (R-D11).
+_REPORT_FILENAME = re.compile(r"^\d+-[a-z-]+\.md$")
+
+
+@dataclass(frozen=True)
+class ReportRef:
+    """A lightweight handle to one archived report file (read-only listing)."""
+
+    repo: str
+    ts: int
+    kind: str
+    filename: str
 
 
 class ArtifactPermissionError(Exception):
@@ -108,3 +124,72 @@ class ArtifactStore:
             fh.write(_render_markdown(report))
         os.chmod(path, 0o600)
         return path
+
+    # --- read-only listing / reading (dashboard, R-D2/R-D11) -----------------
+    def list_repos(self) -> list[str]:
+        """List per-repo archive dirs as ``owner/repo`` names (read-only).
+
+        Excludes ``_``-prefixed dirs (``_delivered`` / ``_feed``) and non-dirs.
+        Each ``owner__repo`` dir name is reverse-mapped to ``owner/repo`` and then
+        **re-validated**: the reverse-mapped name must ``sanitize_repo`` back to the
+        exact dir name, so a dir whose name reverse-maps to a traversal segment
+        (e.g. ``foo__..`` -> ``foo/..``, written by a prior bug or external tool)
+        is excluded rather than surfaced into a URL (R-D11).
+        """
+        try:
+            entries = os.listdir(self.artifact_root)
+        except FileNotFoundError:
+            return []
+        repos: list[str] = []
+        for name in entries:
+            if name.startswith("_"):
+                continue
+            if not os.path.isdir(os.path.join(self.artifact_root, name)):
+                continue
+            repo = name.replace("__", "/")
+            try:
+                if sanitize_repo(repo) != name:
+                    continue
+            except ArtifactPathError:
+                continue
+            repos.append(repo)
+        return sorted(repos)
+
+    def list_reports(self, repo: str) -> list[ReportRef]:
+        """List a repo's archived reports, newest first. Empty if none/unknown."""
+        try:
+            directory = self.repo_dir(repo)
+        except ArtifactPathError:
+            return []
+        try:
+            entries = os.listdir(directory)
+        except FileNotFoundError:
+            return []
+        refs: list[ReportRef] = []
+        for name in entries:
+            if not _REPORT_FILENAME.match(name):
+                continue
+            ts_str, rest = name.split("-", 1)
+            refs.append(
+                ReportRef(repo=repo, ts=int(ts_str), kind=rest[:-3], filename=name)
+            )
+        refs.sort(key=lambda r: r.ts, reverse=True)
+        return refs
+
+    def read_report(self, repo: str, filename: str) -> str | None:
+        """Read one report's raw markdown. None if name is illegal or not found.
+
+        ``filename`` must match ``_REPORT_FILENAME`` (no separators, no ``..``);
+        ``repo`` goes through the same containment guard as ``repo_dir`` (R-D11).
+        """
+        if not _REPORT_FILENAME.match(filename):
+            return None
+        try:
+            directory = self.repo_dir(repo)
+        except ArtifactPathError:
+            return None
+        try:
+            with open(os.path.join(directory, filename), encoding="utf-8") as fh:
+                return fh.read()
+        except (FileNotFoundError, IsADirectoryError, OSError):
+            return None
