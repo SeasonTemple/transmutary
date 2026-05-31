@@ -8,6 +8,7 @@ The artifact root is enforced 0700 at startup (KTD5).
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import stat
@@ -114,16 +115,47 @@ class ArtifactStore:
         return path
 
     def write(self, report: Report, *, ts: float | None = None) -> str:
-        """Write ``report`` to its repo dir; return the file path."""
+        """Write ``report`` to its repo dir; return the .md file path.
+
+        Also writes a trusted sidecar ``<ts>-<kind>.json`` carrying the structured
+        metadata (title / kind / severity / sources) so a reader (the dashboard)
+        consumes trusted fields directly instead of re-parsing them out of the
+        untrusted markdown body — closing the body-injection surface (R-D15).
+        """
         ts = time.time() if ts is None else ts
         directory = self.repo_dir(report.repo)
         _ensure_dir_permissions(directory)
-        fname = f"{int(ts)}-{report.kind.value}.md"
-        path = os.path.join(directory, fname)
+        stem = f"{int(ts)}-{report.kind.value}"
+        path = os.path.join(directory, f"{stem}.md")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(_render_markdown(report))
         os.chmod(path, 0o600)
+        meta_path = os.path.join(directory, f"{stem}.json")
+        with open(meta_path, "w", encoding="utf-8") as fh:
+            json.dump(report.to_dict(), fh, ensure_ascii=False)
+        os.chmod(meta_path, 0o600)
         return path
+
+    def read_meta(self, repo: str, filename: str) -> dict | None:
+        """Read a report's trusted sidecar metadata (the ``.json`` next to a ``.md``).
+
+        ``filename`` is the ``.md`` name (validated by the same whitelist as
+        :meth:`read_report`). Returns the parsed dict, or None if name is illegal,
+        the sidecar is missing, or the JSON is malformed.
+        """
+        if not _REPORT_FILENAME.match(filename):
+            return None
+        try:
+            directory = self.repo_dir(repo)
+        except ArtifactPathError:
+            return None
+        meta_path = os.path.join(directory, filename[:-3] + ".json")
+        try:
+            with open(meta_path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (FileNotFoundError, IsADirectoryError, OSError, json.JSONDecodeError):
+            return None
+        return data if isinstance(data, dict) else None
 
     # --- read-only listing / reading (dashboard, R-D2/R-D11) -----------------
     def list_repos(self) -> list[str]:

@@ -147,15 +147,27 @@ class StateStore:
     strategy from plan Risks); WAL allows concurrent reads.
     """
 
-    def __init__(self, db_path: str) -> None:
+    def __init__(self, db_path: str, *, read_only: bool = False) -> None:
         self.db_path = db_path
+        self.read_only = read_only
         parent = os.path.dirname(os.path.abspath(db_path))
         is_memory = db_path == ":memory:" or db_path.startswith("file::memory:")
+        self._lock = threading.RLock()
+
+        if read_only and not is_memory:
+            # Open strictly read-only (mode=ro): no schema init, no WAL pragma, no
+            # file creation — so a viewer (the dashboard) can never write or create
+            # the DB, and cannot contend with a live service's writes (R-D readonly).
+            # mode=ro requires the file to already exist; sqlite raises if it does not.
+            uri = f"file:{os.path.abspath(db_path)}?mode=ro"
+            self._conn = sqlite3.connect(uri, check_same_thread=False, uri=True)
+            self._conn.row_factory = sqlite3.Row
+            return
+
         if not is_memory and parent:
             os.makedirs(parent, exist_ok=True)
         if not is_memory:
             _ensure_db_permissions(db_path, create=True)
-        self._lock = threading.RLock()
         self._conn = sqlite3.connect(
             db_path, check_same_thread=False, uri=db_path.startswith("file:")
         )

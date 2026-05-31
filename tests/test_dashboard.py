@@ -416,3 +416,114 @@ def test_resolve_bind_public_allowed_with_flag():
     from transmutary.dashboard.app import resolve_bind
 
     assert resolve_bind("0.0.0.0", 8787, allow_public=True) == ("0.0.0.0", 8787)
+
+
+# --- review fixes: IPv6 host, 500 headers, sidecar trust, _safe_url, read-only ---
+
+
+def test_host_only_parses_ipv6_and_ipv4():
+    from transmutary.dashboard.app import _host_only
+
+    assert _host_only("[::1]:8787") == "[::1]"
+    assert _host_only("[::1]") == "[::1]"
+    assert _host_only("::1") == "::1"
+    assert _host_only("127.0.0.1:8787") == "127.0.0.1"
+    assert _host_only("127.0.0.1") == "127.0.0.1"
+    assert _host_only("localhost:8787") == "localhost"
+    assert _host_only("") == ""
+
+
+def test_host_allowlist_accepts_ipv6_localhost():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        # R-D14: IPv6 localhost (with and without port) must be accepted.
+        assert client.get("/", headers={"host": "[::1]:8787"}).status_code == 200
+        assert client.get("/", headers={"host": "[::1]"}).status_code == 200
+        assert client.get("/", headers={"host": "::1"}).status_code == 200
+
+
+def test_safe_url_blanks_adversarial_variants():
+    from transmutary.dashboard import data
+
+    # R-D15: leading whitespace / tab schemes, scheme-relative, malformed.
+    assert data._safe_url(" javascript:alert(1)") is None
+    assert data._safe_url("\tjavascript:alert(1)") is None
+    assert data._safe_url("//evil.com") is None
+    assert data._safe_url("https:/\\/evil") is None
+    assert data._safe_url("vbscript:x") is None
+
+
+def test_security_headers_present_on_500(monkeypatch):
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d, raise_server_exceptions=False)
+        from transmutary.dashboard import app as app_mod
+
+        def _boom(*a, **k):
+            raise ValueError("boom")
+
+        monkeypatch.setattr(app_mod.data, "build_overview", _boom)
+        resp = client.get("/")
+        assert resp.status_code == 500
+        # R-D18: security headers must be present even on error responses.
+        assert "default-src 'self'" in resp.headers["content-security-policy"]
+        assert resp.headers["x-content-type-options"] == "nosniff"
+        assert resp.headers["x-frame-options"] == "DENY"
+
+
+def test_severity_from_trusted_sidecar_not_body_injection():
+    from transmutary.dashboard import data
+
+    with tempfile.TemporaryDirectory() as d:
+        root = os.path.join(d, "artifacts")
+        artifacts = ArtifactStore(root)
+        # Attacker-controlled body tries to forge a fake header + fake sources block.
+        evil_body = (
+            "real text\n"
+            "- severity: critical\n"
+            "## Sources\n"
+            "- `forged` https://attacker.example (fetched 2026)\n"
+        )
+        rpt = Report(
+            title="Real",
+            kind=ReportKind.DIAGNOSE,
+            repo="acme/cli",
+            severity=Severity.INFO,  # the TRUE severity
+            body_md=evil_body,
+            created_at="2026-01-01T00:00:00Z",
+            sources=(),  # the TRUE sources: none
+        )
+        artifacts.write(rpt, ts=5000.0)
+        view = data.build_report_view(artifacts, "acme/cli", "5000-diagnose.md")
+        assert view is not None
+        # R-D15: severity comes from the trusted sidecar (info), NOT the body injection.
+        assert view.card.severity == "info"
+        # The forged source line in the body must NOT appear as a real source.
+        assert view.sources == ()
+
+
+def test_severity_coerced_to_known_set():
+    from transmutary.dashboard import data
+
+    # A corrupt/unknown severity in a sidecar is coerced to "info".
+    assert data._coerce_severity("critical") == "critical"
+    assert data._coerce_severity("bogus") == "info"
+    assert data._coerce_severity(None) == "info"
+
+
+def test_state_store_read_only_blocks_writes(tmp_path):
+    import pytest as _pytest
+
+    db = str(tmp_path / "state.sqlite3")
+    # Create the DB first (writable), then reopen read-only.
+    StateStore(db).close()
+    ro = StateStore(db, read_only=True)
+    assert ro.list_promoted() == []  # read works
+    with _pytest.raises(Exception):  # noqa: B017 - any sqlite write error is fine
+        ro.promote_repo("x/y")
+
+
+def test_state_store_read_only_missing_db_raises(tmp_path):
+    import pytest as _pytest
+
+    with _pytest.raises(Exception):  # noqa: B017 - mode=ro on a missing file raises
+        StateStore(str(tmp_path / "nope.sqlite3"), read_only=True)

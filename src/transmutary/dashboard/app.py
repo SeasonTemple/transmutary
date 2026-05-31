@@ -66,6 +66,27 @@ def _require_jinja() -> None:
         )
 
 
+def _host_only(host: str) -> str:
+    """Extract the hostname from a Host header, robust to IPv6 literals (R-D14).
+
+    ``[::1]:8787`` and ``[::1]`` → ``[::1]``; ``127.0.0.1:8787`` → ``127.0.0.1``;
+    bare ``::1`` (no brackets) is returned as-is. Only a trailing ``:port`` after a
+    bracketed IPv6 or on a plain host is stripped — never an interior IPv6 colon.
+    """
+    if not host:
+        return ""
+    if host.startswith("["):
+        end = host.find("]")
+        if end != -1:
+            return host[: end + 1]  # keep the brackets to match the allowlist
+        return host
+    # Plain host or IPv4: strip a single trailing :port if present. A bare IPv6
+    # like '::1' has multiple colons and no port → leave it untouched.
+    if host.count(":") == 1:
+        return host.rsplit(":", 1)[0]
+    return host
+
+
 class HostAllowlistMiddleware(BaseHTTPMiddleware):
     """Reject requests whose Host header is not in the allow-list (R-D14).
 
@@ -79,8 +100,7 @@ class HostAllowlistMiddleware(BaseHTTPMiddleware):
         self._allowed = allowed_hosts
 
     async def dispatch(self, request: Request, call_next):
-        host = request.headers.get("host", "")
-        hostname = host.rsplit(":", 1)[0] if host else ""
+        hostname = _host_only(request.headers.get("host", ""))
         if hostname not in self._allowed:
             return PlainTextResponse("Bad Request", status_code=400)
         return await call_next(request)
@@ -138,7 +158,12 @@ def make_dashboard_app(
     async def server_error(request: Request, exc: Exception) -> Response:
         # R-D17: never leak the exception detail / path / traceback.
         logger.error("dashboard request failed: %s", type(exc).__name__)
-        return PlainTextResponse("Internal Server Error", status_code=500)
+        # R-D18: SecurityHeadersMiddleware sits OUTSIDE ServerErrorMiddleware, so a
+        # 500 produced here would otherwise miss the security headers — attach them
+        # directly so every response (incl. errors) carries them.
+        return PlainTextResponse(
+            "Internal Server Error", status_code=500, headers=dict(_SECURITY_HEADERS)
+        )
 
     routes = [
         Route("/", index, methods=["GET"]),
@@ -212,8 +237,12 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real serv
     _require_jinja()
 
     config_dir = os.environ.get("TRANSMUTARY_CONFIG_DIR", "config")
-    settings = load_settings(config_dir)
-    store = StateStore(settings.delivery.state_db_path)
+    # A read-only viewer needs no credentials — do not load them (avoids forcing
+    # all TRANSMUTARY_* secrets into the process just to view the dashboard).
+    settings = load_settings(config_dir, require_credentials=False)
+    # Open the state DB strictly read-only: the dashboard never writes and must not
+    # contend with a live service's writes.
+    store = StateStore(settings.delivery.state_db_path, read_only=True)
     artifacts = ArtifactStore(settings.delivery.artifact_root)
     app = make_dashboard_app(
         settings, store, artifacts, allowed_hosts=_allowed_hosts_for(host)

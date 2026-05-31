@@ -15,7 +15,6 @@ the templates consume. Two invariants live here:
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from ..config import Settings
@@ -23,17 +22,14 @@ from ..service import effective_repos
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
 
-# Schemes allowed to survive into an href. Everything else (javascript:, data:,
-# vbscript:, …) is blanked so autoescape's text-context guard is not bypassed.
-
 # Severities that route to the urgent / supply-chain bucket on the overview.
 # Mirrors Severity.is_urgent (critical + high → immediate route).
 _ALERT_SEVERITIES = frozenset({"critical", "high"})
 
-# Parse one rendered source line: ``- `id` url (fetched ts)`` (see
-# ArtifactStore._render_markdown). Tolerant: a line that does not match is skipped
-# (e.g. the "待核实信号" no-sources marker), so sources are best-effort.
-_SOURCE_LINE = re.compile(r"^- `(?P<id>[^`]*)` (?P<url>\S+) \(fetched (?P<fetched>.*)\)$")
+# Severity values that may reach a CSS class / alert bucket. Anything outside this
+# closed set (e.g. a corrupt sidecar) is coerced to "info" so no arbitrary string
+# flows into the template (defence-in-depth even though autoescape covers it).
+_KNOWN_SEVERITIES = frozenset({"critical", "high", "normal", "info"})
 
 
 def _safe_url(url: str | None) -> str | None:
@@ -110,52 +106,36 @@ class Overview:
     feeds: tuple[FeedLink, ...]
 
 
-# --- parsing helpers ---------------------------------------------------------
+# --- trusted-metadata helpers (read the sidecar JSON, never parse the body) --
 
 
-def _parse_meta(body: str) -> tuple[str, str]:
-    """Extract (title, severity) from a rendered report markdown header."""
-    title = ""
-    severity = "info"
-    for line in body.splitlines():
-        if not title and line.startswith("# "):
-            title = line[2:].strip()
-        elif line.startswith("- severity:"):
-            severity = line.split(":", 1)[1].strip()
-        elif line.startswith("## "):
-            break  # header ends at the first section
-    return title or "(untitled)", severity
+def _coerce_severity(value: object) -> str:
+    """Constrain a severity to the known closed set (else 'info')."""
+    return value if value in _KNOWN_SEVERITIES else "info"
 
 
-def _parse_sources(body: str) -> tuple[SourceLink, ...]:
-    """Parse the ``## Sources`` block into sanitised SourceLinks (R-D15)."""
+def _sources_from_meta(meta: dict) -> tuple[SourceLink, ...]:
+    """Build sanitised SourceLinks from the trusted sidecar (R-D15)."""
     out: list[SourceLink] = []
-    in_sources = False
-    for line in body.splitlines():
-        if line.startswith("## Sources"):
-            in_sources = True
+    for s in meta.get("sources", []) or []:
+        if not isinstance(s, dict):
             continue
-        if not in_sources:
-            continue
-        m = _SOURCE_LINE.match(line.strip())
-        if m:
-            out.append(
-                SourceLink(
-                    source_id=m.group("id"),
-                    url=_safe_url(m.group("url")),
-                    fetched_at=m.group("fetched"),
-                )
+        out.append(
+            SourceLink(
+                source_id=str(s.get("source_id", "")),
+                url=_safe_url(s.get("url")),
+                fetched_at=str(s.get("fetched_at", "")),
             )
+        )
     return tuple(out)
 
 
-def _card(repo: str, ref, body: str) -> ReportCard:
-    title, severity = _parse_meta(body)
+def _card_from_meta(repo: str, ref, meta: dict) -> ReportCard:
     return ReportCard(
         repo=repo,
-        kind=ref.kind,
-        severity=severity,
-        title=title,
+        kind=str(meta.get("kind", ref.kind)),
+        severity=_coerce_severity(meta.get("severity")),
+        title=str(meta.get("title", "(untitled)")),
         ts=ref.ts,
         filename=ref.filename,
     )
@@ -165,10 +145,10 @@ def _all_cards(artifacts: ArtifactStore) -> list[ReportCard]:
     cards: list[ReportCard] = []
     for repo in artifacts.list_repos():
         for ref in artifacts.list_reports(repo):
-            body = artifacts.read_report(repo, ref.filename)
-            if body is None:
+            meta = artifacts.read_meta(repo, ref.filename)
+            if meta is None:
                 continue
-            cards.append(_card(repo, ref, body))
+            cards.append(_card_from_meta(repo, ref, meta))
     cards.sort(key=lambda c: c.ts, reverse=True)
     return cards
 
@@ -256,9 +236,9 @@ def build_repo_runtime(
         cursor=store.get_cursor(repo),
     )
     cards = tuple(
-        _card(repo, ref, body)
+        _card_from_meta(repo, ref, meta)
         for ref in refs
-        if (body := artifacts.read_report(repo, ref.filename)) is not None
+        if (meta := artifacts.read_meta(repo, ref.filename)) is not None
     )
     return runtime, cards
 
@@ -266,15 +246,25 @@ def build_repo_runtime(
 def build_report_view(
     artifacts: ArtifactStore, repo: str, filename: str
 ) -> ReportView | None:
-    """Single report view: raw body + sanitised sources. None if not found."""
+    """Single report view: raw body + trusted card/sources. None if not found.
+
+    The body is the raw markdown (rendered as escaped ``<pre>``); the card fields
+    and sources come from the trusted sidecar JSON (R-D15), never re-parsed from
+    the untrusted body.
+    """
     body = artifacts.read_report(repo, filename)
     if body is None:
         return None
-    title, severity = _parse_meta(body)
-    # kind is the trailing token of the filename: <ts>-<kind>.md
-    kind = filename.rsplit("-", 1)[-1][:-3]
+    meta = artifacts.read_meta(repo, filename)
+    if meta is None:
+        return None
     ts = int(filename.split("-", 1)[0])
     card = ReportCard(
-        repo=repo, kind=kind, severity=severity, title=title, ts=ts, filename=filename
+        repo=repo,
+        kind=str(meta.get("kind", "")),
+        severity=_coerce_severity(meta.get("severity")),
+        title=str(meta.get("title", "(untitled)")),
+        ts=ts,
+        filename=filename,
     )
-    return ReportView(card=card, body=body, sources=_parse_sources(body))
+    return ReportView(card=card, body=body, sources=_sources_from_meta(meta))

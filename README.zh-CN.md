@@ -11,7 +11,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 374 passing](https://img.shields.io/badge/tests-374_passing-brightgreen.svg)](#测试)
+[![Tests: 382 passing](https://img.shields.io/badge/tests-382_passing-brightgreen.svg)](#测试)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [看 demo](#看-demo) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
 
@@ -223,7 +223,7 @@ git config commit.template .gitmessage
 | Phase B — F4 晋升 · 部署 · L2 语义分组 · critique→refine | ✅ 完成 |
 | 离线 demo（`transmutary-demo`） | ✅ 完成 |
 | 只读 Web 看板（`transmutary-dashboard`） | ✅ 完成 |
-| 测试 | ✅ 374 passing · ruff clean |
+| 测试 | ✅ 382 passing · ruff clean |
 
 ### 路线图
 
@@ -232,7 +232,7 @@ git config commit.template .gitmessage
 ### 测试
 
 ```bash
-.venv/bin/python -m pytest -q      # 374 passing
+.venv/bin/python -m pytest -q      # 382 passing
 .venv/bin/ruff check src tests     # clean
 ```
 
