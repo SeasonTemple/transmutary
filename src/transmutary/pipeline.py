@@ -35,7 +35,6 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from . import llm
 from .clean import CleanInput
 from .collect.deps import resolve_repo_dependencies
 from .collect.github import collect_repo, make_client
@@ -57,6 +56,20 @@ logger = logging.getLogger("transmutary.pipeline")
 # llm.embed via _embed_fn(rt); tests pass an explicit value (a mock, or None to
 # disable L2) so pipeline tests never reach the real embedding endpoint.
 _UNSET = object()
+
+
+def _llm_call_default():
+    """Return the real ``llm.call``, deferred until first invocation.
+
+    The pipeline tick default for ``call_fn`` was previously
+    ``call_fn=llm.call`` — a module-level reference that pulled litellm into
+    the import path of anyone importing the pipeline (e.g. the scheduler
+    service). Resolving through this helper keeps the litellm import out of
+    the ``from transmutary import service`` chain until a tick actually fires.
+    """
+    from .llm import call as _call
+
+    return _call
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +193,9 @@ def _embed_fn(rt: PipelineRuntime):
     full L3 (zero-miss, KTD-B) — the tick never crashes. The supply-chain tick does
     NOT use this: authority signals bypass L2 (KTD-C).
     """
+    # Local import: keep litellm out of the service -> pipeline import path.
+    from . import llm
+
     api_key = _llm_api_key(rt)
     base_url = _llm_base_url(rt)
 
@@ -283,7 +299,7 @@ def run_release_issue_tick(
     rt: PipelineRuntime,
     repo: str,
     *,
-    call_fn=llm.call,
+    call_fn=_UNSET,
     embed_fn=_UNSET,
     refine_reports: bool = False,
 ) -> ReleaseIssueTickResult:
@@ -353,7 +369,7 @@ def run_release_issue_tick(
                 baseline_rate=baseline_rate,
                 api_key=api_key,
                 base_url=base_url,
-                call_fn=call_fn,
+                call_fn=_llm_call_default() if call_fn is _UNSET else call_fn,
                 embed_fn=_embed_fn(rt) if embed_fn is _UNSET else embed_fn,
             )
         except ConservativeReview as exc:
@@ -431,7 +447,7 @@ class SecurityTickResult:
 
 
 def run_security_tick(
-    rt: PipelineRuntime, repo: str, *, call_fn=llm.call
+    rt: PipelineRuntime, repo: str, *, call_fn=_UNSET
 ) -> SecurityTickResult:
     """Run one mode-A supply-chain pipeline pass for a single watchlist repo (U4).
 
@@ -480,7 +496,11 @@ def run_security_tick(
         if not decision.is_new:
             continue  # same advisory across cycles is suppressed (AE4)
         report = build_alert(
-            hit, repo=repo, api_key=api_key, base_url=base_url, call_fn=call_fn
+            hit,
+            repo=repo,
+            api_key=api_key,
+            base_url=base_url,
+            call_fn=_llm_call_default() if call_fn is _UNSET else call_fn,
         )
         # Force the immediate (high-risk) route regardless of report severity (F3).
         _deliver_report(rt, report, Severity.CRITICAL)
@@ -509,7 +529,7 @@ def run_trend_tick(
     ts: float,
     snapshot_candidates: list[TrendCandidate] | None = None,
     language: str | None = None,
-    call_fn=llm.call,
+    call_fn=_UNSET,
     embed_fn=_UNSET,
     refine_reports: bool = False,
 ) -> TrendTickResult:
@@ -551,7 +571,7 @@ def run_trend_tick(
         rt.store,
         api_key=api_key,
         base_url=base_url,
-        call_fn=call_fn,
+        call_fn=_llm_call_default() if call_fn is _UNSET else call_fn,
         embed_fn=_embed_fn(rt) if embed_fn is _UNSET else embed_fn,
         refine=refine_reports,
     )

@@ -33,10 +33,8 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from .. import llm
 from ..clean import CleanInput, clean_batch
 from ..dedup import SourceItem, merge_references, url_domain
-from ..llm import LLMError, ModelTier
 from .refine import critique_refine
 from .schema import Report, ReportKind, Severity, Source
 
@@ -340,7 +338,7 @@ def diagnose(
     security_claims: list[SecurityClaim] | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
-    call_fn=llm.call,
+    call_fn=None,
     refine: bool = False,
 ) -> DiagnoseOutcome:
     """Produce a sourcing diagnosis Report for a triggered event (U10).
@@ -369,6 +367,13 @@ def diagnose(
     draft (KTD-D); the report is still produced.
     """
     data_block, _kept = _aggregate_data_block(ctx)
+
+    # Local import: keep litellm out of the import path of anyone pulling
+    # diagnose (pipeline → diagnose used to drag llm in at import time).
+    from ..llm import LLMError, ModelTier, call as _llm_call
+
+    if call_fn is None:
+        call_fn = _llm_call
 
     # All untrusted aggregated text → llm.py DATA slot ONLY (R23/KTD3).
     try:

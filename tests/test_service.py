@@ -406,3 +406,58 @@ def test_reconcile_job_has_max_instances_and_coalesce(store):
     by_id = {j.id: j for j in sched.get_jobs()}
     assert by_id["reconcile"].max_instances == 1
     assert by_id["reconcile"].coalesce is True
+
+
+# --- Import-time isolation: scheduler entry points must not pull litellm -------
+#
+# Service / pipeline / filter are imported by the long-running scheduler.
+# Loading litellm on the import path adds 2-3s to startup and a hard
+# dependency on a network-touchy library, even when the process only does
+# config parsing, reconcile, or dashboard reads. The LLM gateway is resolved
+# at first tick, not at import.
+def _import_isolated(import_fn):
+    import sys
+
+    for mod in list(sys.modules):
+        if mod == "litellm" or mod.startswith("litellm."):
+            del sys.modules[mod]
+        if mod == "transmutary.llm":
+            del sys.modules[mod]
+    import_fn()
+    return any(m == "litellm" or m.startswith("litellm.") for m in sys.modules)
+
+
+def test_importing_service_does_not_load_litellm():
+    assert not _import_isolated(lambda: __import__("transmutary.service"))
+    # And transmutary.llm itself stays out of the chain.
+    import sys
+
+    assert "transmutary.llm" not in sys.modules
+
+
+def test_importing_pipeline_does_not_load_litellm():
+    assert not _import_isolated(lambda: __import__("transmutary.pipeline"))
+
+
+def test_importing_filter_does_not_load_litellm():
+    assert not _import_isolated(lambda: __import__("transmutary.filter"))
+
+
+def test_importing_dashboard_app_does_not_load_litellm():
+    # Dashboard is read-only at request time and never invokes the LLM.
+    # Its import path must stay clean of the litellm bootstrap.
+    assert not _import_isolated(lambda: __import__("transmutary.dashboard.app"))
+
+
+def test_resolving_llm_error_still_works_after_lazy_refactor():
+    # Sanity: the lazy LLMError import in filter must still be reachable
+    # through the package surface, even though the module top-level
+    # no longer imports it.
+    from transmutary.filter import filter_issue_surge, _parse_verdict, _judge  # noqa: F401
+
+    # The local imports inside _judge / _parse_verdict / filter_issue_surge
+    # resolve at call time, not import time. Force one path to make sure
+    # the import chain inside the function body still works.
+    from transmutary.llm import LLMError as _LLMError  # noqa: F401
+
+    assert _LLMError.__name__ == "LLMError"

@@ -28,8 +28,6 @@ revised text is adjudicated identically to the original, never exempted.
 
 from __future__ import annotations
 
-from .. import llm
-from ..llm import LLMError, ModelTier
 
 # Critique stage: trusted instruction (system slot). The model is told to find
 # weaknesses in the draft WITHOUT inventing facts beyond the supplied evidence —
@@ -88,8 +86,8 @@ def critique_refine(
     draft: str,
     evidence: str,
     *,
-    call_fn=llm.call,
-    tier: ModelTier = ModelTier.STRONG,
+    call_fn=None,
+    tier=None,
     api_key: str | None = None,
     base_url: str | None = None,
 ) -> tuple[str, list[str]]:
@@ -127,6 +125,14 @@ def critique_refine(
     applies to a single-pass draft (KTD-C).
     """
     notes: list[str] = []
+    # Local import: keep litellm out of the import path of anyone pulling
+    # refine in (e.g. report.diagnose -> refine).
+    from ..llm import LLMError, ModelTier, call as _llm_call
+
+    if call_fn is None:
+        call_fn = _llm_call
+    if tier is None:
+        tier = ModelTier.STRONG
     try:
         critique = call_fn(
             _CRITIQUE_SYSTEM,

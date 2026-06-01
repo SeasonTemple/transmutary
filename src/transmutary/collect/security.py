@@ -34,8 +34,6 @@ import feedparser
 import httpx
 import re
 
-from .. import llm
-from ..llm import LLMError, ModelTier
 from ..report.schema import Report, ReportKind, Severity, Source
 from .github import SSRFError, _require_no_redirects
 
@@ -293,7 +291,7 @@ def build_alert(
     repo: str,
     api_key: str | None = None,
     base_url: str | None = None,
-    call_fn=llm.call,
+    call_fn=None,
 ) -> Report:
     """Build a high-risk supply-chain alert Report for one advisory hit (F3).
 
@@ -311,6 +309,12 @@ def build_alert(
         )
 
     advice = ""
+    # Local import: keep litellm out of the import path of anyone pulling
+    # collect.security in (e.g. pipeline -> security).
+    from ..llm import LLMError, ModelTier, call as _llm_call
+
+    if call_fn is None:
+        call_fn = _llm_call
     try:
         # Advisory text is UNTRUSTED data → llm.py data slot only (KTD3/R23).
         advice = call_fn(

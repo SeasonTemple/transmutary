@@ -28,9 +28,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from . import llm
 from .dedup import keyword_bucket
-from .llm import LLMBudgetExceeded, LLMError, ModelTier
 from .rerank import L2_MAX_EMBED_ITEMS, group_semantic
 
 # --- Trigger defaults (shipped; configurable later) -------------------------
@@ -162,13 +160,21 @@ def _judge(
     *,
     api_key: str | None,
     base_url: str | None,
-    call_fn=llm.call,
+    call_fn=None,
 ) -> tuple[bool, str]:
     """Run the L3 judge through llm.py. Returns (is_fault, reason).
 
     The untrusted issue texts are passed as the DATA block (KTD3) — never the
     instruction slot — so injection cannot rewrite the verdict.
     """
+    # Local import: filter is imported by the scheduler entry point (service
+    # -> pipeline -> filter), and we want the litellm bootstrap to stay out
+    # of that import path. The judge is only invoked at runtime, so loading
+    # llm here is the right place.
+    from .llm import ModelTier, call as _llm_call
+
+    if call_fn is None:
+        call_fn = _llm_call
     data_block = "\n\n---\n\n".join(
         f"[issue {i + 1}] {o.text}" for i, o in enumerate(observations)
     )
@@ -184,6 +190,9 @@ def _judge(
 
 def _parse_verdict(raw: str) -> tuple[bool, str]:
     """Parse the judge's JSON verdict. Conservative on unparseable output."""
+    # Local import: same reasoning as _judge above.
+    from .llm import LLMError
+
     try:
         # Tolerate models that wrap JSON in prose: grab the first {...}.
         start = raw.index("{")
@@ -239,7 +248,7 @@ def filter_issue_surge(
     abs_floor: int = DEFAULT_ABS_FLOOR,
     api_key: str | None = None,
     base_url: str | None = None,
-    call_fn=llm.call,
+    call_fn=None,
     embed_fn=None,
 ) -> FilterDecision:
     """Run the L1→L2→L3 funnel for one repo's issue batch (U9).
@@ -292,6 +301,13 @@ def filter_issue_surge(
     any_fault = False
     fault_reasons: list[str] = []
     judge_calls = 0
+    # Local import: same reasoning as _judge — keep litellm out of the
+    # service -> pipeline -> filter import path. Resolved only when we
+    # actually reach the L3 funnel.
+    from .llm import LLMBudgetExceeded, LLMError, call as _llm_call
+
+    if call_fn is None:
+        call_fn = _llm_call
     try:
         for group in groups:
             judge_calls += 1

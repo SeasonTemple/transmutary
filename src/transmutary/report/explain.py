@@ -37,11 +37,9 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from .. import llm
 from ..clean import CleanInput, clean_batch
 from ..collect.trend import TrendCandidate
 from ..dedup import content_hash
-from ..llm import LLMError, ModelTier
 from ..rerank import L2_MAX_EMBED_ITEMS, group_semantic
 from ..store.state import StateStore
 from .refine import critique_refine
@@ -293,7 +291,7 @@ def explain_trends(
     *,
     api_key: str | None = None,
     base_url: str | None = None,
-    call_fn=llm.call,
+    call_fn=None,
     anchor_ts: str | None = None,
     embed_fn=None,
     refine: bool = False,
@@ -393,6 +391,12 @@ def explain_trends(
 
     # 3. ONE batch LLM call (KTD7). Untrusted candidate text → llm.py DATA slot.
     data_block = _build_data_block(reps_cleaned)
+    # Local import: same reasoning as diagnose — keep litellm out of any
+    # module that pulls explain in.
+    from ..llm import LLMError, ModelTier, call as _llm_call
+
+    if call_fn is None:
+        call_fn = _llm_call
     call_count = 0
     rep_summaries: dict[int, str] = {}
     try:
