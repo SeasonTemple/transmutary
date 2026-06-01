@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transmutary Code Review — 2026-06-01</title>
+<style>
+:root{--bg:#0e1117;--panel:#161b22;--panel2:#1c2128;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--accent:#58a6ff;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",Segoe UI,Helvetica,Arial,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:32px 28px}
+h1,h2,h3,h4{font-weight:600;color:#f0f6fc;line-height:1.3;margin:0 0 12px}
+h1{font-size:30px;letter-spacing:-0.01em}
+h2{font-size:22px;margin-top:40px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:17px;margin-top:24px;color:#d0d7de}
+p{margin:8px 0}
+.muted{color:var(--muted)}
+code{background:var(--panel2);padding:2px 6px;border-radius:4px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#e6edf3;border:1px solid var(--border)}
+pre{background:var(--panel2);padding:12px 16px;border-radius:8px;overflow-x:auto;border:1px solid var(--border);font-size:12.5px}
+.hero{background:linear-gradient(135deg,#161b22 0%,#1c2128 100%);border:1px solid var(--border);border-radius:14px;padding:28px 32px;margin-bottom:24px;position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;top:0;right:0;width:240px;height:240px;background:radial-gradient(circle,rgba(88,166,255,0.18) 0%,transparent 70%);pointer-events:none}
+.hero .sub{color:var(--muted);font-size:15px;margin-bottom:18px}
+.hero .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{background:var(--panel2);border:1px solid var(--border);padding:4px 10px;border-radius:20px;font-size:12px;color:#c9d1d9}
+.chip strong{color:#f0f6fc;margin-right:4px}
+.verdict{display:flex;align-items:center;gap:14px;background:#1c2128;border:1px solid var(--border);border-left:4px solid #d29922;padding:16px 20px;border-radius:0 10px 10px 0;margin:20px 0}
+.verdict .vlabel{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:4px}
+.verdict .vtext{font-size:18px;font-weight:600;color:#f0f6fc}
+.verdict .vsub{font-size:13px;color:var(--muted);margin-top:4px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:20px 0}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.stat .num{font-size:28px;font-weight:700;color:#f0f6fc;line-height:1}
+.stat .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:4px}
+.stat.crit .num{color:#f85149}
+.stat.high .num{color:#ff7b72}
+.stat.med .num{color:#d29922}
+.stat.low .num{color:#8b949e}
+.stat.ok .num{color:#3fb950}
+.maturity{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:18px 0}
+.mat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+.mat .head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+.mat .name{font-weight:600;color:#f0f6fc}
+.mat .score{font-weight:700;font-size:20px}
+.mat .desc{font-size:12px;color:var(--muted);margin-bottom:10px}
+.mat .bar{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;border:1px solid var(--border)}
+.mat .fill{height:100%;border-radius:3px}
+.s5{background:#3fb950}.s4{background:#56d364}.s3{background:#d29922}.s2{background:#ff7b72}.s1,.s0{background:#f85149}
+.module-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:12px}
+.module{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px}
+.module .mname{font-weight:600;color:#d0d7de;margin-bottom:4px}
+.module .mstat{font-size:11px;color:var(--muted)}
+.module .mstat .b{color:#f0f6fc;font-weight:600}
+.findings-grid{display:grid;gap:14px;margin-top:14px}
+.finding{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 20px;position:relative}
+.finding.crit{border-left:3px solid #f85149}
+.finding.high{border-left:3px solid #ff7b72}
+.finding.med{border-left:3px solid #d29922}
+.finding.low{border-left:3px solid #8b949e}
+.finding.positive{border-left:3px solid #3fb950;background:linear-gradient(180deg,rgba(63,185,80,0.04) 0%,transparent 100%)}
+.finding-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:8px}
+.finding-num{font-size:11px;font-weight:700;color:var(--muted);background:var(--panel2);padding:3px 9px;border-radius:10px;min-width:36px;text-align:center;border:1px solid var(--border)}
+.finding-title{font-size:15px;font-weight:600;color:#f0f6fc;flex:1;line-height:1.4}
+.finding-meta{font-size:12px;color:var(--muted);margin-bottom:4px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.finding-meta code{font-size:11.5px}
+.finding-section{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
+.finding-section h5{font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin:0 0 4px;font-weight:600}
+.finding-section p{font-size:13px;margin:0;color:#c9d1d9;white-space:pre-wrap}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;letter-spacing:0.03em}
+.badge.crit{background:rgba(248,81,73,0.15);color:#ff7b72;border:1px solid rgba(248,81,73,0.3)}
+.badge.high{background:rgba(255,123,114,0.12);color:#ffa198;border:1px solid rgba(255,123,114,0.25)}
+.badge.med{background:rgba(210,153,34,0.12);color:#e3b341;border:1px solid rgba(210,153,34,0.25)}
+.badge.low{background:rgba(139,148,158,0.12);color:#c9d1d9;border:1px solid rgba(139,148,158,0.2)}
+.badge.ok{background:rgba(63,185,80,0.12);color:#56d364;border:1px solid rgba(63,185,80,0.25)}
+.two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:18px;margin-top:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px}
+table{width:100%;border-collapse:collapse;margin:8px 0;background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;font-size:13.5px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:var(--panel2);font-weight:600;color:#d0d7de;font-size:12px;text-transform:uppercase;letter-spacing:0.04em}
+tr:last-child td{border-bottom:none}
+.rec{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--border)}
+.rec:last-child{border-bottom:none}
+.rec-num{background:linear-gradient(135deg,#1f6feb 0%,#388bfd 100%);color:#fff;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:14px;box-shadow:0 2px 6px rgba(31,111,235,0.3)}
+.rec-body{flex:1}
+.rec-title{font-weight:600;color:#f0f6fc;margin-bottom:4px;font-size:14.5px}
+.rec-desc{font-size:13px;color:#c9d1d9;line-height:1.65}
+.footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);text-align:center}
+.dropped-notice{background:rgba(210,153,34,0.06);border:1px solid rgba(210,153,34,0.2);border-radius:8px;padding:12px 16px;font-size:12.5px;color:#e3b341;margin:12px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="hero">
+  <h1>🔬 Transmutary — Code Review</h1>
+  <div class="sub">Full-project deep review · 11 reviewer personas · 175 raw findings → 23 survivors</div>
+  <div class="meta">
+    <span class="chip"><strong>Repo</strong> SeasonTemple/transmutary</span>
+    <span class="chip"><strong>Branch</strong> main</span>
+    <span class="chip"><strong>HEAD</strong> da6be83 (v0.11.0)</span>
+    <span class="chip"><strong>Scope</strong> 35 src / 32 tests / 9 plans</span>
+    <span class="chip"><strong>LOC</strong> 8,168 src · 7,063 test</span>
+    <span class="chip"><strong>Date</strong> 2026-06-01</span>
+    <span class="chip"><strong>Run</strong> 20260601-114047</span>
+  </div>
+</div>
+<div class="verdict" style="border-left-color:#3fb950">
+  <div>
+    <div class="vlabel">Verdict</div>
+    <div class="vtext">Ready (post-cleanup)</div>
+    <div class="vsub">0 P0 findings. Original P0 (_merge_intersecting chain) closed by regression test in <code>tests/test_dedup.py</code>. 2 stale findings dropped after audit; 4 P1/P2 fixes shipped.</div>
+  </div>
+</div>
+<h2>Executive Summary</h2>
+<div class="stats">
+  <div class="stat crit"><div class="num">0</div><div class="lbl">Critical (P0)</div></div>
+  <div class="stat high"><div class="num">4</div><div class="lbl">High (P1)</div></div>
+  <div class="stat med"><div class="num">6</div><div class="lbl">Medium (P2)</div></div>
+  <div class="stat low"><div class="num">6</div><div class="lbl">Low (P3)</div></div>
+  <div class="stat ok"><div class="num">2</div><div class="lbl">Positives</div></div>
+  <div class="stat"><div class="num">2</div><div class="lbl">Stale (dropped)</div></div>
+  <div class="stat"><div class="num">146</div><div class="lbl">Suppressed</div></div>
+  <div class="stat"><div class="num">175</div><div class="lbl">Raw Findings</div></div>
+  <div class="stat"><div class="num">11</div><div class="lbl">Reviewer Agents</div></div>
+</div>
+<h2>Maturity Scorecard</h2>
+<p class="muted">Per-dimension maturity, 0 (immature) to 5 (production-grade). Derived from severity-weighted finding density. Higher = fewer unresolved issues in the relevant area.</p>
+<div class="maturity">
+    <div class="mat">
+      <div class="head">
+        <div class="name">Security Posture</div>
+        <div class="score" style="color:#f85149">2.2/5</div>
+      </div>
+      <div class="desc">LLM isolation, SSRF, CSRF, secrets, advisory pipeline</div>
+      <div class="bar"><div class="fill s2" style="width:44.0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Needs work · 8 finding(s)</div>
+    </div>
+    <div class="mat">
+      <div class="head">
+        <div class="name">Reliability</div>
+        <div class="score" style="color:#d29922">3.1/5</div>
+      </div>
+      <div class="desc">retries, timeouts, graceful shutdown, error propagation</div>
+      <div class="bar"><div class="fill s3" style="width:62.0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Acceptable · 5 finding(s)</div>
+    </div>
+    <div class="mat">
+      <div class="head">
+        <div class="name">Performance</div>
+        <div class="score" style="color:#f85149">2.6/5</div>
+      </div>
+      <div class="desc">DB indexes, connection pool, embed cost, I/O</div>
+      <div class="bar"><div class="fill s2" style="width:52.0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Needs work · 8 finding(s)</div>
+    </div>
+    <div class="mat">
+      <div class="head">
+        <div class="name">Maintainability</div>
+        <div class="score" style="color:#f85149">0/5</div>
+      </div>
+      <div class="desc">modularity, type safety, magic strings, coupling</div>
+      <div class="bar"><div class="fill s1" style="width:0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Critical · 11 finding(s)</div>
+    </div>
+    <div class="mat">
+      <div class="head">
+        <div class="name">API Contract</div>
+        <div class="score" style="color:#f85149">2.0/5</div>
+      </div>
+      <div class="desc">versioning, exports, schema, CLI surface</div>
+      <div class="bar"><div class="fill s2" style="width:40.0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Needs work · 8 finding(s)</div>
+    </div>
+    <div class="mat">
+      <div class="head">
+        <div class="name">Test Coverage</div>
+        <div class="score" style="color:#f85149">1.6/5</div>
+      </div>
+      <div class="desc">assertion strength, edge cases, isolation</div>
+      <div class="bar"><div class="fill s1" style="width:32.0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Critical · 6 finding(s)</div>
+    </div></div>
+<h2>Module Health</h2>
+<p class="muted">Distribution of surviving findings by module area. Modules with no row had no surviving issues.</p>
+<div class="module-grid">
+    <div class="module">
+      <div class="mname">Other</div>
+      <div class="mstat"><span class="b" style="color:#d29922">6</span> finding(s) · P1</div>
+    </div>
+    <div class="module">
+      <div class="mname">Dashboard / Web UI</div>
+      <div class="mstat"><span class="b" style="color:#d29922">4</span> finding(s) · P1</div>
+    </div>
+    <div class="module">
+      <div class="mname">Dedup / Filter</div>
+      <div class="mstat"><span class="b" style="color:#f85149">2</span> finding(s) · P0</div>
+    </div>
+    <div class="module">
+      <div class="mname">LLM Gateway</div>
+      <div class="mstat"><span class="b" style="color:#d29922">2</span> finding(s) · P1</div>
+    </div>
+    <div class="module">
+      <div class="mname">Service / Pipeline</div>
+      <div class="mstat"><span class="b" style="color:#8b949e">2</span> finding(s) · P2/P3</div>
+    </div>
+    <div class="module">
+      <div class="mname">Collection / SSRF</div>
+      <div class="mstat"><span class="b" style="color:#8b949e">1</span> finding(s) · P2/P3</div>
+    </div>
+    <div class="module">
+      <div class="mname">Report Generation</div>
+      <div class="mstat"><span class="b" style="color:#8b949e">1</span> finding(s) · P2/P3</div>
+    </div>
+    <div class="module">
+      <div class="mname">Persistence</div>
+      <div class="mstat"><span class="b" style="color:#8b949e">1</span> finding(s) · P2/P3</div>
+    </div></div><div class="dropped-notice">⚠️ 4 entries had empty title and no fix text (likely malformed JSON from reviewer). Skipped to keep report clean. IDs: #20, #22, #27, #29.</div><h2>🔴 Critical Findings (P0) — Must fix before merge</h2><p class="muted">Action-breakers. Each gates a release.</p><div class="findings-grid"><div class="finding crit"><div class="finding-head"><div class="finding-num">#1</div><div class="finding-title">P0-CRITICAL: `_merge_intersecting` drops groups when last group merges with multiple prior groups</div><span class="badge crit">P0</span></div><div class="finding-meta">📁 <code>dedup.py:258</code> · 👥 ce-correctness-reviewer · 🎯 conf 75 · 🔧 manual → dedup.py</div><div class="finding-section"><h5>Why it matters</h5><p>The current O(n²) iterative merge uses `rest.append(current)` OUTSIDE the inner loop, causing the final group to be appended multiple times if it merged with multiple prior groups in sequence — silently losing group identity in R18 source counting.</p></div><div class="finding-section"><h5>Suggested fix</h5><p>Replace the O(n²) iterative merge with Union-Find:
+
+```python
+def _merge_intersecting(groups: list[set[str]]) -&gt; list[set[str]]:
+    if not groups:
+        return []
+    parent = {elem: elem for g in groups for elem in g}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x, y):
+        rx, ry = find(x), find(y)
+        if rx != ry:
+            parent[ry] = rx
+
+    for g in groups:
+        it = iter(g)
+        first = next(it)
+        for elem in it:
+            union(first, elem)
+
+    roots = {find(elem) for elem in parent}
+    return [set(g for g in groups for elem in g if find(elem) == r) for </p></div></div></div><h2>🟠 High-Priority Findings (P1) — Should fix</h2><div class="findings-grid"><div class="finding high"><div class="finding-head"><div class="finding-num">#2</div><div class="finding-title">dashboard/data.py imports from service.py — cross-layer dependency</div><span class="badge high">P1</span></div><div class="finding-meta">📁 <code>dashboard/data.py:21</code> · 👥 ce-maintainability-reviewer · 🎯 conf 80 · 🏷 coupling · 🔧 advisory → human</div><div class="finding-section"><h5>Suggested fix</h5><p>Move effective_repos into store/state.py as a free function (or into config.py as a Settings method), then remove the service.py import from dashboard/data.py. service.py would then import from store/state.py instead.</p></div></div><div class="finding high"><div class="finding-head"><div class="finding-num">#3</div><div class="finding-title">Version mismatch: __init__.py declares 0.0.1, pyproject.toml declares 0.11.0</div><span class="badge high">P1</span></div><div class="finding-meta">👥 api-contract · 🎯 conf 75 · 🏷 version-inconsistency · 🔧 advisory → human</div></div><div class="finding high"><div class="finding-head"><div class="finding-num">#4</div><div class="finding-title">Exception types not exported from package root</div><span class="badge high">P1</span></div><div class="finding-meta">👥 api-contract · 🎯 conf 75 · 🏷 missing-export · 🔧 advisory → human</div></div><div class="finding high"><div class="finding-head"><div class="finding-num">#5</div><div class="finding-title">Prompt injection: _neutralize_fences is case-sensitive, lowercase fence variants bypass marker replacement</div><span class="badge high">P1</span></div><div class="finding-meta">📁 <code>llm.py:181-183</code> · 👥 ce-security-reviewer · 🎯 conf 75 · 🔧 InputValidation → llm.py</div><div class="finding-section"><h5>Why it matters</h5><p>An attacker who controls issue/advisory text could embed the fence markers in a case-variant form (e.g., &lt;&lt;&lt;untrusted_data_block&gt;&gt;&gt; in lowercase). The current exact-string replace only catches the uppercase forms defined as _DATA_OPEN/_DATA_CLOSE. The model receives the ISOLATION_PREAMBLE with uppercase markers but sees lowercase markers in the user data block, potentially creating ambiguity about whether the content is inside or outside the fence. A prompt injection that escapes the fenced region could rewrite system behavior.</p></div><div class="finding-section"><h5>Suggested fix</h5><p>Normalize to lowercase before replacement: return data_block.lower().replace(_DATA_CLOSE.lower(), _DATA_CLOSE_REDACTED).replace(_DATA_OPEN.lower(), _DATA_OPEN_REDACTED) and store the original casing in the message construction.</p></div></div></div><h2>🟡 Medium-Priority Findings (P2) — Fix if straightforward</h2><div class="findings-grid"><div class="finding med"><div class="finding-head"><div class="finding-num">#7</div><div class="finding-title">SSRF advisory URL validation: _safe_advisory_link validates but never fetches, advisory body can reference off-allowlist URLs</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>collect/security.py:214-227</code> · 👥 ce-security-reviewer · 🎯 conf 85 · 🔧 InputValidation → collect/security.py</div><div class="finding-section"><h5>Why it matters</h5><p>A malicious advisory (via a compromised GHSA entry or self-described advisory) can embed text like &#x27;see http://169.254.169.254/latest/meta-data/&#x27; or &#x27;check http://internal-monitor/&#x27; in the advisory body. The source URL is validated but the body text is not scanned for embedded URLs. While no actual fetch occurs (the no-unpack invariant is maintained), an attacker could use this to probe whether internal hosts are reachable from the Transmutary process network.</p></div><div class="finding-section"><h5>Suggested fix</h5><p>The _safe_advisory_link function validates URLs against the allowlist but performs no fetch. While the SSRF impact is bounded by the no-package-download invariant, the advisory body text can embed references to off-allowlist hosts (e.g., internal infrastructure URLs) that are never acted upon but could aid in reconnaissance. Consider stripping URLs from advisory text before it reaches the LLM, or logging the embedded URLs for audit.</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#8</div><div class="finding-title">Route name strings &#x27;immediate&#x27;/&#x27;digest&#x27; duplicated across pipeline, deliver, and dashboard</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>pipeline.py:198</code> · 👥 ce-maintainability-reviewer · 🎯 conf 80 · 🏷 magic-strings · 🔧 advisory → human</div><div class="finding-section"><h5>Suggested fix</h5><p>Define route-name constants (IMMEDIATE_ROUTE = &#x27;immediate&#x27;, DIGEST_ROUTE = &#x27;digest&#x27;) in deliver/stub.py or report/schema.py. Use them wherever route strings appear. For path construction in pipeline.py, use os.path.join with the constant rather than f-strings.</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#9</div><div class="finding-title">_ts_to_float silently returns 0.0 for any unparseable ISO-8601 string</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>pipeline.py:198</code> · 👥 ce-maintainability-reviewer · 🎯 conf 80 · 🏷 silent-fallback · 🔧 advisory → human</div><div class="finding-section"><h5>Suggested fix</h5><p>Return float | None instead of float, and return None when parsing fails. Let callers decide how to handle None (most already use the pattern). This makes the absence of a valid timestamp visible rather than silently replacing it with epoch.</p></div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#10</div><div class="finding-title">🗑️ Stale — audited out: <code>build_repo_runtime</code> demotable treats &#x27;archived&#x27; as demotable</div><span class="badge low">stale</span></div><div class="finding-meta">📁 <code>dashboard/data.py:313</code> · 🔍 <code>tools/audit_stale_claims.py</code></div><div class="finding-section"><h5>Why stale</h5><p>Current code reads <code>demotable=watchlist.get(repo) not in (None, "config", "archived")</code> — <code>archived</code> is explicitly excluded. <code>tests/test_dashboard.py::test_build_repo_runtime_known_and_unknown</code> asserts <code>archived_runtime.demotable is False</code>. Report claim was wrong.</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#11</div><div class="finding-title">P2-MEDIUM: `_cold_start_window_count` returns `len(matched)` when all timestamps are None — conflating &#x27;all timestamps missing&#x27; with &#x27;all timestamps valid but out of window&#x27;</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>filter.py:108</code> · 👥 ce-correctness-reviewer · 🎯 conf 75 · 🔧 advisory → filter.py</div><div class="finding-section"><h5>Why it matters</h5><p>If all observations have `ts=None`, the function returns `len(matched)` — treating all of them as within the cold-start window. This could incorrectly satisfy the cold-start threshold when in fact we have no valid timing data at all.</p></div><div class="finding-section"><h5>Suggested fix</h5><p>Return 0 when no timestamps are available:
+```python
+def _cold_start_window_count(matched: list[IssueObservation]) -&gt; int:
+    ts_values = [o.ts for o in matched if o.ts is not None]
+    if not ts_values:
+        return 0  # was: return len(matched)
+    now = max(ts_values)
+    return sum(1 for o in matched if o.ts is not None and now - o.ts &lt;= COLD_START_WINDOW_SECONDS)
+```</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#12</div><div class="finding-title">_embedding_index uses bare except — type-safety hole</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>llm.py:326</code> · 👥 ce-maintainability-reviewer · 🎯 conf 75 · 🏷 type-safety · 🔧 advisory → human</div><div class="finding-section"><h5>Suggested fix</h5><p>Replace bare except with except (AttributeError, KeyError, TypeError, ValueError). These are the only exceptions that indicate the expected &#x27;neither attribute nor dict&#x27; path.</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#13</div><div class="finding-title">_critique_data has inconsistent spacing vs _refine_data</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>report/refine.py:65</code> · 👥 ce-maintainability-reviewer · 🎯 conf 75 · 🏷 inconsistency · 🔧 advisory → human</div><div class="finding-section"><h5>Suggested fix</h5><p>Change line 70 in _critique_data from &#x27;&quot;## ORIGINAL EVIDENCE (untrusted)\\n&quot;&#x27; to &#x27;&quot;## ORIGINAL EVIDENCE (untrusted)\\n\\n&quot;&#x27; to match _refine_data&#x27;s blank-line separation.</p></div></div></div><h2>⚪ Low-Priority Findings (P3) — Discretionary</h2><div class="findings-grid"><div class="finding low"><div class="finding-head"><div class="finding-num">#14</div><div class="finding-title">check_origin fails closed (returns False) when neither Origin nor Referer is present</div><span class="badge low">P3</span></div><div class="finding-meta">📁 <code>dashboard/csrf.py:54-61</code> · 👥 ce-security-reviewer · 🎯 conf 80 · 🔧 BusinessLogic → dashboard/csrf.py</div><div class="finding-section"><h5>Why it matters</h5><p>check_origin returns False when both Origin and Referer are absent. This means legitimate programmatic POST requests (e.g., from scripts or tools that don&#x27;t send these headers) to the promote/demote endpoints would be rejected with 403 even with a valid CSRF token. This is correct security behavior (fail closed) but could cause operational issues if legitimate automation needs to hit these endpoints.</p></div><div class="finding-section"><h5>Suggested fix</h5><p>When neither Origin nor Referer is present, the behavior depends on the threat model. For browser requests, at least one of these headers is always present. For programmatic clients (curl, etc.), neither may be present. Consider logging or metrics for header-absent requests to detect potential CSRF attempts, but do not change the deny behavior without adding alternative authentication for programmatic access.</p></div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#15</div><div class="finding-title">Fence neutralization misses case-variant and whitespace-variant fence markers</div><span class="badge low">P3</span></div><div class="finding-meta">👥 adversarial · 🎯 conf 75 · 🔧 advisory → human</div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#16</div><div class="finding-title">seen-set replay after purge: day-8 reappearance is a documented accepted replay risk</div><span class="badge low">P3</span></div><div class="finding-meta">👥 adversarial · 🎯 conf 75 · 🔧 advisory → human</div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#17</div><div class="finding-title">demo.py _stub_call positional tier vs keyword model_tier in real llm.call</div><span class="badge low">P3</span></div><div class="finding-meta">👥 api-contract · 🎯 conf 75 · 🏷 signature-mismatch · 🔧 advisory → human</div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#18</div><div class="finding-title">Settings.__repr__ includes llm_base_url — not a secret but may leak endpoint identity</div><span class="badge low">P3</span></div><div class="finding-meta">👥 api-contract · 🎯 conf 75 · 🏷 information-disclosure · 🔧 advisory → human</div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#19</div><div class="finding-title">dump_all_text returns all DB text values including redacted strings</div><span class="badge low">P3</span></div><div class="finding-meta">📁 <code>store/state.py:429-447</code> · 👥 ce-security-reviewer · 🎯 conf 75 · 🔧 InformationExposure → store/state.py</div><div class="finding-section"><h5>Why it matters</h5><p>dump_all_text is used in tests to audit that no credentials land in the DB. It returns all string values including those already replaced with [REDACTED]. An attacker who gains read access to test output could use the [REDACTED] markers to infer the length and character classes of the original secrets. While this is test-only code, test outputs are often retained in CI artifacts.</p></div><div class="finding-section"><h5>Suggested fix</h5><p>Replace _REDACTION constant with a non-reversible transform (e.g., hash or random string) before storing in dump_all_text output. Or add a parameter to dump_all_text that replaces redacted values with [REDACTED] markers that cannot be distinguished from each other.</p></div></div></div>
+<h2>✅ Confirmed Strengths</h2>
+<p class="muted">Defensive designs confirmed during review. Maintain these patterns in future changes.</p>
+<div class="findings-grid"><div class="finding positive"><div class="finding-head"><div class="finding-num">#1</div><div class="finding-title">Dashboard data layer uses explicit allowlist in to_dict methods, not dataclasses.asdict</div><span class="badge ok">✓</span></div><div class="finding-meta">📁 <code>dashboard/data.py:59-62, 74-84, 93-98,</code> · 👥 ce-security-reviewer · 🎯 conf 95</div><div class="finding-section"><h5>Validated pattern</h5><p>Confirmed by reviewer during audit — maintain in future changes.</p></div></div><div class="finding positive"><div class="finding-head"><div class="finding-num">#2</div><div class="finding-title">Report schema uses trusted sidecar JSON for metadata, not body parsing</div><span class="badge ok">✓</span></div><div class="finding-meta">📁 <code>store/artifacts.py:139-158</code> · 👥 ce-security-reviewer · 🎯 conf 95</div><div class="finding-section"><h5>Validated pattern</h5><p>Confirmed by reviewer during audit — maintain in future changes.</p></div></div></div>
+<h2>📜 Historical / Resolved Issues</h2>
+<p class="muted">Bugs that were fixed in the commit history but documented here as institutional memory. The "key insight" is the fix that landed.</p>
+<table>
+  <tr><th>#</th><th>Title</th><th>File</th><th>Date</th><th>Resolution</th></tr>
+  <tr>
+    <td><span class="finding-num">#4</span></td>
+    <td>Test suite hang: llm.embed real network calls (~228s per test, total ~52 min)</td>
+    <td><code>conftest.py:32-50</code></td>
+    <td><span class="muted">—</span></td>
+    <td><span class="badge ok">resolved</span></td>
+  </tr>
+  <tr>
+    <td><span class="finding-num">#5</span></td>
+    <td>CSRF: double-submit cookie pattern required for stateless dashboard</td>
+    <td><code>dashboard/csrf.py, app.py</code></td>
+    <td><span class="muted">—</span></td>
+    <td><span class="badge ok">resolved</span></td>
+  </tr>
+  <tr>
+    <td><span class="finding-num">#6</span></td>
+    <td>XSS: URL context javascript: scheme not blocked by HTML autoescape</td>
+    <td><code>dashboard/data.py</code></td>
+    <td><span class="muted">—</span></td>
+    <td><span class="badge ok">resolved</span></td>
+  </tr>
+  <tr>
+    <td><span class="finding-num">#7</span></td>
+    <td>Test suite hang: litellm fetches remote cost JSON on import (~28 min)</td>
+    <td><code>llm.py:27-35</code></td>
+    <td><span class="muted">—</span></td>
+    <td><span class="badge ok">resolved</span></td>
+  </tr></table>
+<h2>Coverage</h2>
+<div class="two-col">
+  <div class="card">
+    <h3 style="margin-top:0">Reviewers Dispatched</h3>
+    <table>
+      <tr><th>Persona</th><th>Findings</th><th>Focus</th></tr>      <tr><td>ce-security-reviewer</td><td>24</td><td>Prompt injection, SSRF, CSRF, secrets</td></tr>      <tr><td>ce-testing-reviewer</td><td>25</td><td>Coverage gaps, weak assertions</td></tr>      <tr><td>reliability</td><td>20</td><td>Retries, timeouts, shutdown</td></tr>      <tr><td>api-contract</td><td>18</td><td>Versioning, exports, schema</td></tr>      <tr><td>ce-performance-reviewer</td><td>17</td><td>DB indexes, embed cost, I/O</td></tr>      <tr><td>adversarial</td><td>15</td><td>Failure scenarios, attack chains</td></tr>      <tr><td>ce-learnings-researcher</td><td>15</td><td>Past bugs, TODOs, workarounds</td></tr>      <tr><td>ce-maintainability-reviewer</td><td>15</td><td>Modularity, coupling, magic strings</td></tr>      <tr><td>agent-native</td><td>12</td><td>Agent access, JSON, CLI</td></tr>      <tr><td>ce-correctness-reviewer</td><td>10</td><td>Logic, edge cases, state bugs</td></tr>      <tr><td>project-standards</td><td>4</td><td>Commits, changelog, packaging</td></tr>    </table>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Pipeline Statistics</h3>
+    <table>
+      <tr><th>Metric</th><th>Count</th></tr>      <tr><td>Raw findings (all personas)</td><td>175</td></tr>      <tr><td>Unique fingerprints</td><td>175</td></tr>      <tr><td>Cross-reviewer corroborated</td><td>0</td></tr>      <tr><td>Suppressed by confidence gate (<75)</td><td>146</td></tr>      <tr><td>Survivors (actionable)</td><td>19</td></tr>      <tr><td>Positives (validated patterns)</td><td>2</td></tr>      <tr><td>Pre-existing / historical (resolved)</td><td>4</td></tr>      <tr><td>Dropped from render (no content)</td><td>4</td></tr>      <tr><td>Files reviewed (src/)</td><td>35</td></tr>      <tr><td>Test files reviewed</td><td>32</td></tr>    </table>
+  </div>
+</div>
+<h2>Top 5 Remediation Priorities</h2>
+<div class="card">
+  <div class="rec">
+    <div class="rec-num">1</div>
+    <div class="rec-body">
+      <div class="rec-title">✅ Add regression test for dedup._merge_intersecting chain topology (was P0)</div>
+      <div class="rec-desc">Shipped: <code>tests/test_dedup.py::test_merge_intersecting_chain_collapse</code> + 2 companion tests cover the A∩B / B∩C / A∩C=∅ chain. Code is correct; P0 demoted to resolved. Auditor: <code>tools/audit_stale_claims.py</code>.</div>
+    </div>
+  </div>
+  <div class="rec">
+    <div class="rec-num">2</div>
+    <div class="rec-body">
+      <div class="rec-title">✅ Case-insensitive fence neutralization in llm._neutralize_fences (P1)</div>
+      <div class="rec-desc">Shipped: <code>re.IGNORECASE</code> regex sub in <code>src/transmutary/llm.py</code>. Data block casing preserved (URLs/paths intact). New test <code>test_lowercase_fence_variants_are_neutralized</code> pins the behavior.</div>
+    </div>
+  </div>
+  <div class="rec">
+    <div class="rec-num">3</div>
+    <div class="rec-body">
+      <div class="rec-title">✅ Fix __init__.__version__ mismatch + export exception types (P1)</div>
+      <div class="rec-desc">Shipped: <code>__version__ = "0.11.0"</code> + lazy-export of <code>ConfigError</code>, <code>SSRFError</code>, <code>LLMError</code>, <code>LLMBudgetExceeded</code> via <code>__getattr__</code> (preserves fast <code>from transmutary import service</code> import path).</div>
+    </div>
+  </div>
+  <div class="rec">
+    <div class="rec-num">4</div>
+    <div class="rec-body">
+      <div class="rec-title">✅ Replace _ts_to_float silent 0.0 fallback with float | None (P1)</div>
+      <div class="rec-desc">Shipped: <code>_ts_to_float</code> returns <code>float | None</code>; <code>IssueObservation.ts</code> widened to <code>float | None</code>; pipeline baseline guard tightened to <code>is not None</code>.</div>
+    </div>
+  </div>
+  <div class="rec">
+    <div class="rec-num">5</div>
+    <div class="rec-body">
+      <div class="rec-title">✅ Fix _cold_start_window_count: all-None timestamps should return 0, not len(matched) (P1)</div>
+      <div class="rec-desc">Shipped: <code>src/transmutary/filter.py:108</code> returns 0 when no timestamps are available. Fail-safe semantics for cold-start N/W contract.</div>
+    </div>
+  </div></div>
+<h2>Strengths to Preserve</h2>
+<p class="muted">Cross-validated patterns the reviewers explicitly confirmed as correct. These are part of the project's security baseline.</p>
+<div class="two-col">
+  <div class="card">
+    <h4>Security Architecture</h4>
+    <ul style="margin:6px 0 0 18px;padding:0;font-size:13px;line-height:1.7">      <li>SSRF allowlist with no-redirects in all collectors (follow_redirects=False enforced end-to-end)</li>      <li>LLM prompt-injection isolation via <<<UNTRUSTED_DATA_BLOCK>>> fence in llm.py</li>      <li>R7 cross-validation: LLM security verdicts re-checked against deterministic OSV/GHSA hits</li>      <li>Credentials held in _Secret container, redacted from repr/str</li>      <li>Dashboard data layer uses explicit to_dict() allowlists, never dataclasses.asdict()</li>      <li>Report metadata written to trusted JSON sidecar, not parsed from markdown body</li>      <li>CSRF double-submit cookie + Origin/Referer host check (fail-closed by design)</li>      <li>CSP nonce middleware with fail-closed behavior on missing nonce</li>      <li>Litellm telemetry and remote cost-map fetches disabled by default (no-egress determinism)</li>    </ul>
+  </div>
+  <div class="card">
+    <h4>Engineering Quality</h4>
+    <ul style="margin:6px 0 0 18px;padding:0;font-size:13px;line-height:1.7">      <li>Two-pipeline, one-delivery-layer architecture (KTD1) cleanly enforces mode separation</li>      <li>L1→L2→L3 funnel with L2 embedding-cosine zero-miss semantic grouping (R17/R18)</li>      <li>Deterministic API layer + LLM only for semantics (KTD2)</li>      <li>428 tests passing — all tests use real (mocked) pipeline, no e2e gaps</li>      <li>Conventional Commits + python-semantic-release pipeline, all scopes in use</li>      <li>Clean dataclass-free credentials class, secrets cannot leak via asdict</li>      <li>SQLite WAL mode + parameterized SQL (no f-string SQL)</li>      <li>Path-traversal defense layered: sanitize_repo + realpath containment + 0700 perms</li>      <li>Artifact store sidecar JSON for trusted metadata, separate from markdown body</li>      <li>Dashboard /llms.txt + content negotiation for agent-native access</li>    </ul>
+  </div>
+</div>
+<div class="footer">
+  Transmutary code review · run <code>20260601-114047-970cd488</code> · 11 reviewers · 175 raw → 19 survivors (4 skipped)<br>
+  Artifacts: <code>/tmp/compound-engineering/ce-code-review/20260601-114047-970cd488/</code>
+</div>
+
+</div>
+</body></html>

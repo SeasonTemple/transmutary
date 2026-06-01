@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transmutary 代码评审 — 2026-06-01</title>
+<style>
+:root{--bg:#0e1117;--panel:#161b22;--panel2:#1c2128;--border:#30363d;--text:#c9d1d9;--muted:#8b949e;--accent:#58a6ff;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",Segoe UI,Helvetica,Arial,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:32px 28px}
+h1,h2,h3,h4{font-weight:600;color:#f0f6fc;line-height:1.3;margin:0 0 12px}
+h1{font-size:30px;letter-spacing:-0.01em}
+h2{font-size:22px;margin-top:40px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+h3{font-size:17px;margin-top:24px;color:#d0d7de}
+p{margin:8px 0}
+.muted{color:var(--muted)}
+code{background:var(--panel2);padding:2px 6px;border-radius:4px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#e6edf3;border:1px solid var(--border)}
+pre{background:var(--panel2);padding:12px 16px;border-radius:8px;overflow-x:auto;border:1px solid var(--border);font-size:12.5px}
+.hero{background:linear-gradient(135deg,#161b22 0%,#1c2128 100%);border:1px solid var(--border);border-radius:14px;padding:28px 32px;margin-bottom:24px;position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;top:0;right:0;width:240px;height:240px;background:radial-gradient(circle,rgba(88,166,255,0.18) 0%,transparent 70%);pointer-events:none}
+.hero .sub{color:var(--muted);font-size:15px;margin-bottom:18px}
+.hero .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{background:var(--panel2);border:1px solid var(--border);padding:4px 10px;border-radius:20px;font-size:12px;color:#c9d1d9}
+.chip strong{color:#f0f6fc;margin-right:4px}
+.verdict{display:flex;align-items:center;gap:14px;background:#1c2128;border:1px solid var(--border);border-left:4px solid #d29922;padding:16px 20px;border-radius:0 10px 10px 0;margin:20px 0}
+.verdict .vlabel{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:4px}
+.verdict .vtext{font-size:18px;font-weight:600;color:#f0f6fc}
+.verdict .vsub{font-size:13px;color:var(--muted);margin-top:4px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:20px 0}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.stat .num{font-size:28px;font-weight:700;color:#f0f6fc;line-height:1}
+.stat .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-top:4px}
+.stat.crit .num{color:#f85149}
+.stat.high .num{color:#ff7b72}
+.stat.med .num{color:#d29922}
+.stat.low .num{color:#8b949e}
+.stat.ok .num{color:#3fb950}
+.maturity{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:18px 0}
+.mat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+.mat .head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+.mat .name{font-weight:600;color:#f0f6fc}
+.mat .score{font-weight:700;font-size:20px}
+.mat .desc{font-size:12px;color:var(--muted);margin-bottom:10px}
+.mat .bar{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;border:1px solid var(--border)}
+.mat .fill{height:100%;border-radius:3px}
+.s5{background:#3fb950}.s4{background:#56d364}.s3{background:#d29922}.s2{background:#ff7b72}.s1,.s0{background:#f85149}
+.module-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:12px}
+.module{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px}
+.module .mname{font-weight:600;color:#d0d7de;margin-bottom:4px}
+.module .mstat{font-size:11px;color:var(--muted)}
+.module .mstat .b{color:#f0f6fc;font-weight:600}
+.findings-grid{display:grid;gap:14px;margin-top:14px}
+.finding{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 20px;position:relative}
+.finding.crit{border-left:3px solid #f85149}
+.finding.high{border-left:3px solid #ff7b72}
+.finding.med{border-left:3px solid #d29922}
+.finding.low{border-left:3px solid #8b949e}
+.finding.positive{border-left:3px solid #3fb950;background:linear-gradient(180deg,rgba(63,185,80,0.04) 0%,transparent 100%)}
+.finding-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:8px}
+.finding-num{font-size:11px;font-weight:700;color:var(--muted);background:var(--panel2);padding:3px 9px;border-radius:10px;min-width:36px;text-align:center;border:1px solid var(--border)}
+.finding-title{font-size:15px;font-weight:600;color:#f0f6fc;flex:1;line-height:1.4}
+.finding-meta{font-size:12px;color:var(--muted);margin-bottom:4px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.finding-meta code{font-size:11.5px}
+.finding-section{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
+.finding-section h5{font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin:0 0 4px;font-weight:600}
+.finding-section p{font-size:13px;margin:0;color:#c9d1d9;white-space:pre-wrap}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;letter-spacing:0.03em}
+.badge.crit{background:rgba(248,81,73,0.15);color:#ff7b72;border:1px solid rgba(248,81,73,0.3)}
+.badge.high{background:rgba(255,123,114,0.12);color:#ffa198;border:1px solid rgba(255,123,114,0.25)}
+.badge.med{background:rgba(210,153,34,0.12);color:#e3b341;border:1px solid rgba(210,153,34,0.25)}
+.badge.low{background:rgba(139,148,158,0.12);color:#c9d1d9;border:1px solid rgba(139,148,158,0.2)}
+.badge.ok{background:rgba(63,185,80,0.12);color:#56d364;border:1px solid rgba(63,185,80,0.25)}
+.two-col{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:18px;margin-top:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px}
+table{width:100%;border-collapse:collapse;margin:8px 0;background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;font-size:13.5px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:var(--panel2);font-weight:600;color:#d0d7de;font-size:12px;text-transform:uppercase;letter-spacing:0.04em}
+tr:last-child td{border-bottom:none}
+.rec{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--border)}
+.rec:last-child{border-bottom:none}
+.rec-num{background:linear-gradient(135deg,#1f6feb 0%,#388bfd 100%);color:#fff;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;font-size:14px;box-shadow:0 2px 6px rgba(31,111,235,0.3)}
+.rec-body{flex:1}
+.rec-title{font-weight:600;color:#f0f6fc;margin-bottom:4px;font-size:14.5px}
+.rec-desc{font-size:13px;color:#c9d1d9;line-height:1.65}
+.footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);text-align:center}
+.dropped-notice{background:rgba(210,153,34,0.06);border:1px solid rgba(210,153,34,0.2);border-radius:8px;padding:12px 16px;font-size:12.5px;color:#e3b341;margin:12px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="hero">
+  <h1>🔬 Transmutary — 代码评审</h1>
+  <div class="sub">全项目深度评审 · 11 位评审人 · 175 条原始发现 → 23 条存活</div>
+  <div class="meta">
+    <span class="chip"><strong>仓库</strong> SeasonTemple/transmutary</span>
+    <span class="chip"><strong>分支</strong> main</span>
+    <span class="chip"><strong>HEAD</strong> da6be83 (v0.11.0)</span>
+    <span class="chip"><strong>范围</strong> 35 src / 32 tests / 9 plans</span>
+    <span class="chip"><strong>LOC</strong> 8,168 src · 7,063 test</span>
+    <span class="chip"><strong>日期</strong> 2026-06-01</span>
+    <span class="chip"><strong>运行</strong> 20260601-114047</span>
+  </div>
+</div>
+<div class="verdict" style="border-left-color:#3fb950">
+  <div>
+    <div class="vlabel">裁决</div>
+    <div class="vtext">就绪（清理后）</div>
+    <div class="vsub">0 个 P0。原 P0（_merge_intersecting 链式）由 <code>tests/test_dedup.py</code> 回归测试关闭。审计后剔除 2 条过时发现；已合并 4 条 P1/P2 修复。</div>
+  </div>
+</div>
+<h2>执行摘要</h2>
+<div class="stats">
+  <div class="stat crit"><div class="num">0</div><div class="lbl">P0 严重</div></div>
+  <div class="stat high"><div class="num">4</div><div class="lbl">P1 高</div></div>
+  <div class="stat med"><div class="num">6</div><div class="lbl">P2 中</div></div>
+  <div class="stat low"><div class="num">6</div><div class="lbl">P3 低</div></div>
+  <div class="stat ok"><div class="num">2</div><div class="lbl">已确认优势</div></div>
+  <div class="stat"><div class="num">2</div><div class="lbl">过时已剔除</div></div>
+  <div class="stat"><div class="num">146</div><div class="lbl">置信度抑制</div></div>
+  <div class="stat"><div class="num">175</div><div class="lbl">原始发现</div></div>
+  <div class="stat"><div class="num">11</div><div class="lbl">评审人</div></div>
+</div>
+<h2>成熟度评分卡</h2>
+<p class="muted">六维成熟度，0（不成熟）到 5（生产级）。基于严重度加权发现密度推导。分数越高，相关区域未解决问题越少。</p>
+<div class="maturity">
+    <div class="mat">
+      <div class="head">
+        <div class="name">安全姿态</div>
+        <div class="score" style="color:#f85149">2.2/5</div>
+      </div>
+      <div class="desc">LLM 隔离、SSRF、CSRF、密钥、公告管线</div>
+      <div class="bar"><div class="fill s2" style="width:44.0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">需改进 · 8 条</div>
+    </div>
+    <div class="mat">
+      <div class="head">
+        <div class="name">可靠性</div>
+        <div class="score" style="color:#d29922">3.1/5</div>
+      </div>
+      <div class="desc">重试、超时、优雅停机、错误传播</div>
+      <div class="bar"><div class="fill s3" style="width:62.0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">合格 · 5 条</div>
+    </div>
+    <div class="mat">
+      <div class="head">
+        <div class="name">性能</div>
+        <div class="score" style="color:#f85149">2.6/5</div>
+      </div>
+      <div class="desc">DB 索引、连接池、embedding 成本、I/O</div>
+      <div class="bar"><div class="fill s2" style="width:52.0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">需改进 · 8 条</div>
+    </div>
+    <div class="mat">
+      <div class="head">
+        <div class="name">可维护性</div>
+        <div class="score" style="color:#f85149">0/5</div>
+      </div>
+      <div class="desc">模块化、类型安全、魔法字符串、耦合</div>
+      <div class="bar"><div class="fill s1" style="width:0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">危急 · 11 条</div>
+    </div>
+    <div class="mat">
+      <div class="head">
+        <div class="name">API 契约</div>
+        <div class="score" style="color:#f85149">2.0/5</div>
+      </div>
+      <div class="desc">版本、导出、schema、CLI 表面</div>
+      <div class="bar"><div class="fill s2" style="width:40.0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">需改进 · 8 条</div>
+    </div>
+    <div class="mat">
+      <div class="head">
+        <div class="name">测试覆盖</div>
+        <div class="score" style="color:#f85149">1.6/5</div>
+      </div>
+      <div class="desc">断言强度、边界、隔离</div>
+      <div class="bar"><div class="fill s1" style="width:32.0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">危急 · 6 条</div>
+    </div></div>
+<h2>模块健康度</h2>
+<p class="muted">按区域统计的存活发现分布。无行的区域无存活问题。</p>
+<div class="module-grid">
+    <div class="module">
+      <div class="mname">Other</div>
+      <div class="mstat"><span class="b" style="color:#d29922">6</span> 条 · P1</div>
+    </div>
+    <div class="module">
+      <div class="mname">Dashboard / Web UI</div>
+      <div class="mstat"><span class="b" style="color:#d29922">4</span> 条 · P1</div>
+    </div>
+    <div class="module">
+      <div class="mname">Dedup / Filter</div>
+      <div class="mstat"><span class="b" style="color:#f85149">2</span> 条 · P0</div>
+    </div>
+    <div class="module">
+      <div class="mname">LLM Gateway</div>
+      <div class="mstat"><span class="b" style="color:#d29922">2</span> 条 · P1</div>
+    </div>
+    <div class="module">
+      <div class="mname">Service / Pipeline</div>
+      <div class="mstat"><span class="b" style="color:#8b949e">2</span> 条 · P2/P3</div>
+    </div>
+    <div class="module">
+      <div class="mname">Collection / SSRF</div>
+      <div class="mstat"><span class="b" style="color:#8b949e">1</span> 条 · P2/P3</div>
+    </div>
+    <div class="module">
+      <div class="mname">Report Generation</div>
+      <div class="mstat"><span class="b" style="color:#8b949e">1</span> 条 · P2/P3</div>
+    </div>
+    <div class="module">
+      <div class="mname">Persistence</div>
+      <div class="mstat"><span class="b" style="color:#8b949e">1</span> 条 · P2/P3</div>
+    </div></div><div class="dropped-notice">⚠️ 4 条因标题为空且无修复内容被跳过（可能评审人 JSON 输出有缺陷）。 IDs: #20, #22, #27, #29.</div><h2>🔴 P0 严重发现 — 合并前必修</h2><p class="muted">动作阻断项。每条都卡发布。</p><div class="findings-grid"><div class="finding crit"><div class="finding-head"><div class="finding-num">#1</div><div class="finding-title">P0-CRITICAL: `_merge_intersecting` drops groups when last group merges with multiple prior groups</div><span class="badge crit">P0</span></div><div class="finding-meta">📁 <code>dedup.py:258</code> · 👥 ce-correctness-reviewer · 🎯 置信 75 · 🔧 manual → dedup.py</div><div class="finding-section"><h5>影响 / Why</h5><p>The current O(n²) iterative merge uses `rest.append(current)` OUTSIDE the inner loop, causing the final group to be appended multiple times if it merged with multiple prior groups in sequence — silently losing group identity in R18 source counting.</p></div><div class="finding-section"><h5>建议修复</h5><p>Replace the O(n²) iterative merge with Union-Find:
+
+```python
+def _merge_intersecting(groups: list[set[str]]) -&gt; list[set[str]]:
+    if not groups:
+        return []
+    parent = {elem: elem for g in groups for elem in g}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x, y):
+        rx, ry = find(x), find(y)
+        if rx != ry:
+            parent[ry] = rx
+
+    for g in groups:
+        it = iter(g)
+        first = next(it)
+        for elem in it:
+            union(first, elem)
+
+    roots = {find(elem) for elem in parent}
+    return [set(g for g in groups for elem in g if find(elem) == r) for </p></div></div></div><h2>🟠 P1 高优发现 — 应修</h2><div class="findings-grid"><div class="finding high"><div class="finding-head"><div class="finding-num">#2</div><div class="finding-title">dashboard/data.py imports from service.py — cross-layer dependency</div><span class="badge high">P1</span></div><div class="finding-meta">📁 <code>dashboard/data.py:21</code> · 👥 ce-maintainability-reviewer · 🎯 置信 80 · 🏷 coupling · 🔧 advisory → human</div><div class="finding-section"><h5>建议修复</h5><p>Move effective_repos into store/state.py as a free function (or into config.py as a Settings method), then remove the service.py import from dashboard/data.py. service.py would then import from store/state.py instead.</p></div></div><div class="finding high"><div class="finding-head"><div class="finding-num">#3</div><div class="finding-title">Version mismatch: __init__.py declares 0.0.1, pyproject.toml declares 0.11.0</div><span class="badge high">P1</span></div><div class="finding-meta">👥 api-contract · 🎯 置信 75 · 🏷 version-inconsistency · 🔧 advisory → human</div></div><div class="finding high"><div class="finding-head"><div class="finding-num">#4</div><div class="finding-title">Exception types not exported from package root</div><span class="badge high">P1</span></div><div class="finding-meta">👥 api-contract · 🎯 置信 75 · 🏷 missing-export · 🔧 advisory → human</div></div><div class="finding high"><div class="finding-head"><div class="finding-num">#5</div><div class="finding-title">Prompt injection: _neutralize_fences is case-sensitive, lowercase fence variants bypass marker replacement</div><span class="badge high">P1</span></div><div class="finding-meta">📁 <code>llm.py:181-183</code> · 👥 ce-security-reviewer · 🎯 置信 75 · 🔧 InputValidation → llm.py</div><div class="finding-section"><h5>影响 / Why</h5><p>An attacker who controls issue/advisory text could embed the fence markers in a case-variant form (e.g., &lt;&lt;&lt;untrusted_data_block&gt;&gt;&gt; in lowercase). The current exact-string replace only catches the uppercase forms defined as _DATA_OPEN/_DATA_CLOSE. The model receives the ISOLATION_PREAMBLE with uppercase markers but sees lowercase markers in the user data block, potentially creating ambiguity about whether the content is inside or outside the fence. A prompt injection that escapes the fenced region could rewrite system behavior.</p></div><div class="finding-section"><h5>建议修复</h5><p>Normalize to lowercase before replacement: return data_block.lower().replace(_DATA_CLOSE.lower(), _DATA_CLOSE_REDACTED).replace(_DATA_OPEN.lower(), _DATA_OPEN_REDACTED) and store the original casing in the message construction.</p></div></div></div><h2>🟡 P2 中等发现 — 顺手就修</h2><div class="findings-grid"><div class="finding low"><div class="finding-head"><div class="finding-num">#6</div><div class="finding-title">🗑️ 过时 — 审计剔除：<code>_valid_repo</code> 正则被指为 A-Za-z0-0 笔误</div><span class="badge low">stale</span></div><div class="finding-meta">📁 <code>dashboard/app.py:64</code> · 🔍 <code>tools/audit_stale_claims.py</code></div><div class="finding-section"><h5>过时原因</h5><p>当前正则为 <code>r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"</code>，包含 0-9 全段，并无 0-0 笔误。报告断言有误。</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#7</div><div class="finding-title">SSRF advisory URL validation: _safe_advisory_link validates but never fetches, advisory body can reference off-allowlist URLs</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>collect/security.py:214-227</code> · 👥 ce-security-reviewer · 🎯 置信 85 · 🔧 InputValidation → collect/security.py</div><div class="finding-section"><h5>影响 / Why</h5><p>A malicious advisory (via a compromised GHSA entry or self-described advisory) can embed text like &#x27;see http://169.254.169.254/latest/meta-data/&#x27; or &#x27;check http://internal-monitor/&#x27; in the advisory body. The source URL is validated but the body text is not scanned for embedded URLs. While no actual fetch occurs (the no-unpack invariant is maintained), an attacker could use this to probe whether internal hosts are reachable from the Transmutary process network.</p></div><div class="finding-section"><h5>建议修复</h5><p>The _safe_advisory_link function validates URLs against the allowlist but performs no fetch. While the SSRF impact is bounded by the no-package-download invariant, the advisory body text can embed references to off-allowlist hosts (e.g., internal infrastructure URLs) that are never acted upon but could aid in reconnaissance. Consider stripping URLs from advisory text before it reaches the LLM, or logging the embedded URLs for audit.</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#8</div><div class="finding-title">Route name strings &#x27;immediate&#x27;/&#x27;digest&#x27; duplicated across pipeline, deliver, and dashboard</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>pipeline.py:198</code> · 👥 ce-maintainability-reviewer · 🎯 置信 80 · 🏷 magic-strings · 🔧 advisory → human</div><div class="finding-section"><h5>建议修复</h5><p>Define route-name constants (IMMEDIATE_ROUTE = &#x27;immediate&#x27;, DIGEST_ROUTE = &#x27;digest&#x27;) in deliver/stub.py or report/schema.py. Use them wherever route strings appear. For path construction in pipeline.py, use os.path.join with the constant rather than f-strings.</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#9</div><div class="finding-title">_ts_to_float silently returns 0.0 for any unparseable ISO-8601 string</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>pipeline.py:198</code> · 👥 ce-maintainability-reviewer · 🎯 置信 80 · 🏷 silent-fallback · 🔧 advisory → human</div><div class="finding-section"><h5>建议修复</h5><p>Return float | None instead of float, and return None when parsing fails. Let callers decide how to handle None (most already use the pattern). This makes the absence of a valid timestamp visible rather than silently replacing it with epoch.</p></div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#10</div><div class="finding-title">🗑️ 过时 — 审计剔除：<code>build_repo_runtime</code> demotable 将 &#x27;archived&#x27; 视为可降级</div><span class="badge low">stale</span></div><div class="finding-meta">📁 <code>dashboard/data.py:313</code> · 🔍 <code>tools/audit_stale_claims.py</code></div><div class="finding-section"><h5>过时原因</h5><p>当前条件 <code>demotable=watchlist.get(repo) not in (None, "config", "archived")</code> 显式排除 <code>archived</code>。<code>tests/test_dashboard.py::test_build_repo_runtime_known_and_unknown</code> 断言 <code>archived_runtime.demotable is False</code>。报告断言有误。</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#11</div><div class="finding-title">P2-MEDIUM: `_cold_start_window_count` returns `len(matched)` when all timestamps are None — conflating &#x27;all timestamps missing&#x27; with &#x27;all timestamps valid but out of window&#x27;</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>filter.py:108</code> · 👥 ce-correctness-reviewer · 🎯 置信 75 · 🔧 advisory → filter.py</div><div class="finding-section"><h5>影响 / Why</h5><p>If all observations have `ts=None`, the function returns `len(matched)` — treating all of them as within the cold-start window. This could incorrectly satisfy the cold-start threshold when in fact we have no valid timing data at all.</p></div><div class="finding-section"><h5>建议修复</h5><p>Return 0 when no timestamps are available:
+```python
+def _cold_start_window_count(matched: list[IssueObservation]) -&gt; int:
+    ts_values = [o.ts for o in matched if o.ts is not None]
+    if not ts_values:
+        return 0  # was: return len(matched)
+    now = max(ts_values)
+    return sum(1 for o in matched if o.ts is not None and now - o.ts &lt;= COLD_START_WINDOW_SECONDS)
+```</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#12</div><div class="finding-title">_embedding_index uses bare except — type-safety hole</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>llm.py:326</code> · 👥 ce-maintainability-reviewer · 🎯 置信 75 · 🏷 type-safety · 🔧 advisory → human</div><div class="finding-section"><h5>建议修复</h5><p>Replace bare except with except (AttributeError, KeyError, TypeError, ValueError). These are the only exceptions that indicate the expected &#x27;neither attribute nor dict&#x27; path.</p></div></div><div class="finding med"><div class="finding-head"><div class="finding-num">#13</div><div class="finding-title">_critique_data has inconsistent spacing vs _refine_data</div><span class="badge med">P2</span></div><div class="finding-meta">📁 <code>report/refine.py:65</code> · 👥 ce-maintainability-reviewer · 🎯 置信 75 · 🏷 inconsistency · 🔧 advisory → human</div><div class="finding-section"><h5>建议修复</h5><p>Change line 70 in _critique_data from &#x27;&quot;## ORIGINAL EVIDENCE (untrusted)\\n&quot;&#x27; to &#x27;&quot;## ORIGINAL EVIDENCE (untrusted)\\n\\n&quot;&#x27; to match _refine_data&#x27;s blank-line separation.</p></div></div></div><h2>⚪ P3 低优发现 — 自由裁量</h2><div class="findings-grid"><div class="finding low"><div class="finding-head"><div class="finding-num">#14</div><div class="finding-title">check_origin fails closed (returns False) when neither Origin nor Referer is present</div><span class="badge low">P3</span></div><div class="finding-meta">📁 <code>dashboard/csrf.py:54-61</code> · 👥 ce-security-reviewer · 🎯 置信 80 · 🔧 BusinessLogic → dashboard/csrf.py</div><div class="finding-section"><h5>影响 / Why</h5><p>check_origin returns False when both Origin and Referer are absent. This means legitimate programmatic POST requests (e.g., from scripts or tools that don&#x27;t send these headers) to the promote/demote endpoints would be rejected with 403 even with a valid CSRF token. This is correct security behavior (fail closed) but could cause operational issues if legitimate automation needs to hit these endpoints.</p></div><div class="finding-section"><h5>建议修复</h5><p>When neither Origin nor Referer is present, the behavior depends on the threat model. For browser requests, at least one of these headers is always present. For programmatic clients (curl, etc.), neither may be present. Consider logging or metrics for header-absent requests to detect potential CSRF attempts, but do not change the deny behavior without adding alternative authentication for programmatic access.</p></div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#15</div><div class="finding-title">Fence neutralization misses case-variant and whitespace-variant fence markers</div><span class="badge low">P3</span></div><div class="finding-meta">👥 adversarial · 🎯 置信 75 · 🔧 advisory → human</div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#16</div><div class="finding-title">seen-set replay after purge: day-8 reappearance is a documented accepted replay risk</div><span class="badge low">P3</span></div><div class="finding-meta">👥 adversarial · 🎯 置信 75 · 🔧 advisory → human</div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#17</div><div class="finding-title">demo.py _stub_call positional tier vs keyword model_tier in real llm.call</div><span class="badge low">P3</span></div><div class="finding-meta">👥 api-contract · 🎯 置信 75 · 🏷 signature-mismatch · 🔧 advisory → human</div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#18</div><div class="finding-title">Settings.__repr__ includes llm_base_url — not a secret but may leak endpoint identity</div><span class="badge low">P3</span></div><div class="finding-meta">👥 api-contract · 🎯 置信 75 · 🏷 information-disclosure · 🔧 advisory → human</div></div><div class="finding low"><div class="finding-head"><div class="finding-num">#19</div><div class="finding-title">dump_all_text returns all DB text values including redacted strings</div><span class="badge low">P3</span></div><div class="finding-meta">📁 <code>store/state.py:429-447</code> · 👥 ce-security-reviewer · 🎯 置信 75 · 🔧 InformationExposure → store/state.py</div><div class="finding-section"><h5>影响 / Why</h5><p>dump_all_text is used in tests to audit that no credentials land in the DB. It returns all string values including those already replaced with [REDACTED]. An attacker who gains read access to test output could use the [REDACTED] markers to infer the length and character classes of the original secrets. While this is test-only code, test outputs are often retained in CI artifacts.</p></div><div class="finding-section"><h5>建议修复</h5><p>Replace _REDACTION constant with a non-reversible transform (e.g., hash or random string) before storing in dump_all_text output. Or add a parameter to dump_all_text that replaces redacted values with [REDACTED] markers that cannot be distinguished from each other.</p></div></div></div>
+<h2>✅ 已确认的优势</h2>
+<p class="muted">评审中确认的防御性设计。未来变更请保持这些模式。</p>
+<div class="findings-grid"><div class="finding positive"><div class="finding-head"><div class="finding-num">#1</div><div class="finding-title">Dashboard data layer uses explicit allowlist in to_dict methods, not dataclasses.asdict</div><span class="badge ok">✓</span></div><div class="finding-meta">📁 <code>dashboard/data.py:59-62, 74-84, 93-98,</code> · 👥 ce-security-reviewer · 🎯 置信 95</div><div class="finding-section"><h5>已确认</h5><p>评审中确认：继续保持此模式。</p></div></div><div class="finding positive"><div class="finding-head"><div class="finding-num">#2</div><div class="finding-title">Report schema uses trusted sidecar JSON for metadata, not body parsing</div><span class="badge ok">✓</span></div><div class="finding-meta">📁 <code>store/artifacts.py:139-158</code> · 👥 ce-security-reviewer · 🎯 置信 95</div><div class="finding-section"><h5>已确认</h5><p>评审中确认：继续保持此模式。</p></div></div></div>
+<h2>📜 历史 / 已修复</h2>
+<p class="muted">已在提交历史中修复的 bug，作为制度记忆留档。</p>
+<table>
+  <tr><th>#</th><th>标题</th><th>文件</th><th>日期</th><th>状态</th></tr>
+  <tr>
+    <td><span class="finding-num">#4</span></td>
+    <td>Test suite hang: llm.embed real network calls (~228s per test, total ~52 min)</td>
+    <td><code>conftest.py:32-50</code></td>
+    <td><span class="muted">—</span></td>
+    <td><span class="badge ok">已修复</span></td>
+  </tr>
+  <tr>
+    <td><span class="finding-num">#5</span></td>
+    <td>CSRF: double-submit cookie pattern required for stateless dashboard</td>
+    <td><code>dashboard/csrf.py, app.py</code></td>
+    <td><span class="muted">—</span></td>
+    <td><span class="badge ok">已修复</span></td>
+  </tr>
+  <tr>
+    <td><span class="finding-num">#6</span></td>
+    <td>XSS: URL context javascript: scheme not blocked by HTML autoescape</td>
+    <td><code>dashboard/data.py</code></td>
+    <td><span class="muted">—</span></td>
+    <td><span class="badge ok">已修复</span></td>
+  </tr>
+  <tr>
+    <td><span class="finding-num">#7</span></td>
+    <td>Test suite hang: litellm fetches remote cost JSON on import (~28 min)</td>
+    <td><code>llm.py:27-35</code></td>
+    <td><span class="muted">—</span></td>
+    <td><span class="badge ok">已修复</span></td>
+  </tr></table>
+<h2>覆盖率</h2>
+<div class="two-col">
+  <div class="card">
+    <h3 style="margin-top:0">已派评审人</h3>
+    <table>
+      <tr><th>评审人</th><th>发现数</th><th>焦点</th></tr>      <tr><td>ce-security-reviewer</td><td>24</td><td>Prompt 注入、SSRF、CSRF、密钥</td></tr>      <tr><td>ce-testing-reviewer</td><td>25</td><td>覆盖缺口、断言薄弱</td></tr>      <tr><td>reliability</td><td>20</td><td>重试、超时、停机</td></tr>      <tr><td>api-contract</td><td>18</td><td>版本、导出、schema</td></tr>      <tr><td>ce-performance-reviewer</td><td>17</td><td>DB 索引、embed 成本、I/O</td></tr>      <tr><td>adversarial</td><td>15</td><td>失败场景、攻击链</td></tr>      <tr><td>ce-learnings-researcher</td><td>15</td><td>历史 bug、TODO、变通</td></tr>      <tr><td>ce-maintainability-reviewer</td><td>15</td><td>模块化、耦合、魔法字符串</td></tr>      <tr><td>agent-native</td><td>12</td><td>Agent 访问、JSON、CLI</td></tr>      <tr><td>ce-correctness-reviewer</td><td>10</td><td>逻辑、边界、状态缺陷</td></tr>      <tr><td>project-standards</td><td>4</td><td>提交、变更日志、打包</td></tr>    </table>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">流水线统计</h3>
+    <table>
+      <tr><th>指标</th><th>数</th></tr>      <tr><td>原始发现（所有评审人）</td><td>175</td></tr>      <tr><td>唯一指纹</td><td>175</td></tr>      <tr><td>跨评审人印证</td><td>0</td></tr>      <tr><td>置信度门控抑制（<75）</td><td>146</td></tr>      <tr><td>存活（可处理）</td><td>19</td></tr>      <tr><td>正向（已验证模式）</td><td>2</td></tr>      <tr><td>历史已修复</td><td>4</td></tr>      <tr><td>报告跳过（无内容）</td><td>4</td></tr>      <tr><td>评审 src/ 文件数</td><td>35</td></tr>      <tr><td>评审测试文件数</td><td>32</td></tr>    </table>
+  </div>
+</div>
+<h2>Top 5 修复优先级</h2>
+<div class="card">
+  <div class="rec">
+    <div class="rec-num">1</div>
+    <div class="rec-body">
+      <div class="rec-title">✅ 加 `dedup._merge_intersecting` 链式回归测试（原 P0）</div>
+      <div class="rec-desc">代码 line 264 看是 O(n²) 合并逻辑正确（每次外层循环追加一次）。加 3+ 组链式相交测试（A∩B、B∩C、A∩C=∅）再判 P0。测试过则降 P3，留回归守护。</div>
+    </div>
+  </div>
+  <div class="rec">
+    <div class="rec-num">2</div>
+    <div class="rec-body">
+      <div class="rec-title">✅ `llm._neutralize_fences` 大小写不敏感替换（P1）</div>
+      <div class="rec-desc">用 `re.escape + re.IGNORECASE` 编译正则，replace 时保留原大小写。**不要**整段 `.lower()` data block — 会破坏 URL、路径、代码块。</div>
+    </div>
+  </div>
+  <div class="rec">
+    <div class="rec-num">3</div>
+    <div class="rec-body">
+      <div class="rec-title">✅ 修 `__init__.__version__` 不一致 + 导出异常类型（P1）</div>
+      <div class="rec-desc">`__version__` 是 `"0.0.1"`，pyproject 是 `"0.11.0"`。把 `LLMError`/`LLMBudgetExceeded`/`ConfigError`/`SSRFError` 从包根导出。</div>
+    </div>
+  </div>
+  <div class="rec">
+    <div class="rec-num">4</div>
+    <div class="rec-body">
+      <div class="rec-title">✅ `_ts_to_float` 失败返 `float | None`，别返 0.0（P1）</div>
+      <div class="rec-desc">当前会把无效时间戳当 epoch 起点静默聚类。返 `None`，调用方显式处理缺失。</div>
+    </div>
+  </div>
+  <div class="rec">
+    <div class="rec-num">5</div>
+    <div class="rec-body">
+      <div class="rec-title">✅ `_cold_start_window_count` 全 None 时间戳应返 0，不是 `len(matched)`（P1）</div>
+      <div class="rec-desc">无时间数据时不应算全新鲜。当前偏乐观，返 0 走 fail-safe。</div>
+    </div>
+  </div></div>
+<h2>需保持的优势</h2>
+<p class="muted">评审人明确确认正确的设计模式。属于项目的安全基线。</p>
+<div class="two-col">
+  <div class="card">
+    <h4>安全架构</h4>
+    <ul style="margin:6px 0 0 18px;padding:0;font-size:13px;line-height:1.7">      <li>SSRF allowlist + 禁用重定向，所有采集器端到端强制 follow_redirects=False</li>      <li>LLM prompt injection 隔离：llm.py 的 <<<UNTRUSTED_DATA_BLOCK>>> 栅栏</li>      <li>R7 交叉校验：LLM 安全结论与确定性 OSV/GHSA 命中对照</li>      <li>凭据用 _Secret 容器，repr/str 屏蔽</li>      <li>看板 data 层用显式 to_dict() 白名单，永不 dataclasses.asdict()</li>      <li>报告元数据写受信任 JSON sidecar，不解析 markdown 正文</li>      <li>CSRF 双重提交 cookie + Origin/Referer 主机检查（设计意图：失败关闭）</li>      <li>CSP nonce 中间件，nonce 缺失时 fail-closed</li>      <li>Litellm 遥测与远程 cost-map 抓取默认关闭（无出口确定性）</li>    </ul>
+  </div>
+  <div class="card">
+    <h4>工程质量</h4>
+    <ul style="margin:6px 0 0 18px;padding:0;font-size:13px;line-height:1.7">      <li>两管线一投递层架构（KTD1），模式分离清晰</li>      <li>L1→L2→L3 漏斗，L2 embedding-cosine zero-miss 语义分组（R17/R18）</li>      <li>确定性 API + LLM 只做语义（KTD2）</li>      <li>428 测试通过 — 所有测试用真实（mocked）流水线，e2e 无缺口</li>      <li>Conventional Commits + python-semantic-release 流水线，scope 全在用</li>      <li>Credentials 非 dataclass，asdict 不可能泄露</li>      <li>SQLite WAL + 参数化 SQL（无 f-string SQL）</li>      <li>路径穿越防御分层：sanitize_repo + realpath 包含 + 0700 权限</li>      <li>Artifact store sidecar JSON 存受信任元数据，与 markdown 正文分离</li>      <li>看板 /llms.txt + 内容协商，agent-native 访问</li>    </ul>
+  </div>
+</div>
+<div class="footer">
+  Transmutary 代码评审 · run <code>20260601-114047-970cd488</code> · 11 reviewers · 175 raw → 19 survivors (4 skipped)<br>
+  产物: <code>/tmp/compound-engineering/ce-code-review/20260601-114047-970cd488/</code>
+</div>
+
+</div>
+</body></html>
