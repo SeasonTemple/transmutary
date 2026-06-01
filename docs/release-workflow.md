@@ -44,13 +44,20 @@ note at `docs/release-notes/vX.Y.Z.md`.
 
 5. Merge to `main`. The release workflow verifies the repo, runs
    python-semantic-release, then checks `docs/release-notes/<tag>.md` for the
-   tag it just published and overwrites the GitHub Release body with that file.
+   tag it just published, overwrites the GitHub Release body with that file,
+   and publishes the Docker image to GHCR:
+
+   - `ghcr.io/seasontemple/transmutary:vX.Y.Z`
+   - `ghcr.io/seasontemple/transmutary:X.Y.Z`
+   - `ghcr.io/seasontemple/transmutary:latest`
 
 ## Guardrails
 
 - Missing release-note file fails the release job.
 - Missing `## 中文` or `## English` fails the release job.
 - Template placeholders must be removed before publishing.
+- Docker images are built from the released tag, not from the pre-release
+  workflow checkout.
 - The generated `CHANGELOG.md` remains machine-derived history. The curated
   `docs/release-notes/` files are the source of truth for GitHub Release body.
 
@@ -62,3 +69,6 @@ If a release was already published with generated notes:
 python tools/release_notes.py check vX.Y.Z
 gh release edit vX.Y.Z --notes-file docs/release-notes/vX.Y.Z.md
 ```
+
+If the Docker image is missing for an already-published tag, run the manual
+`Docker Image` workflow with input `tag=vX.Y.Z`.

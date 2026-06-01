@@ -179,6 +179,7 @@ transmutary list-watchlist                # config 仓 + 晋升仓，标注来�
 经 Docker 跑常驻服务（内嵌分级调度器）：
 
 ```bash
+docker pull ghcr.io/seasontemple/transmutary:latest
 cp .env.example .env            # 填凭据（gitignored，不入镜像）
 # 备好 ./config/{watchlist,trend_scope,delivery}.yaml
 #   delivery.yaml：state_db_path 与 artifact_root 指向 /var/lib/transmutary 下
@@ -188,6 +189,12 @@ docker compose --profile dashboard up -d dashboard
 ```
 
 镜像以非 root 用户运行；凭据运行时从 `.env` 注入；状态 DB 与私有产物持久化在 `transmutary-state` 卷。dashboard profile 共享同一份 config 挂载与 state 卷，默认只绑定宿主机 `127.0.0.1:8787`，Settings UI 需要 `TRANSMUTARY_ADMIN_TOKEN`。若要公网访问，应放在 HTTPS / 鉴权 / 限流反代后。无 Docker 时直接跑入口：`transmutary-serve` 与 `transmutary-dashboard`（均读 `TRANSMUTARY_CONFIG_DIR`，默认 `config`）。
+
+Release 镜像发布到 GHCR：`ghcr.io/seasontemple/transmutary:vX.Y.Z`、
+`ghcr.io/seasontemple/transmutary:X.Y.Z` 与
+`ghcr.io/seasontemple/transmutary:latest`。本地源码构建可用
+`docker build -t transmutary:local .`，再以
+`TRANSMUTARY_IMAGE=transmutary:local docker compose up -d` 启动。
 
 ## 看板
 
@@ -224,7 +231,8 @@ Settings 区是带身份认证的 admin control plane，用于非 secret 配置�
 
 GitHub Release 正文不再依赖自动生成说明。每个发布 tag 必须有
 `docs/release-notes/vX.Y.Z.md` 双语说明，包含 `## 中文` 与 `## English`；
-release workflow 发布后会用该文件覆盖 Release body。
+release workflow 发布后会用该文件覆盖 Release body。发布产物包括 Python
+wheel/sdist 和 GHCR Docker 镜像。
 
 clone 后启用一次本地提交校验钩子：
 

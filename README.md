@@ -180,6 +180,7 @@ The effective watchlist is `config watchlist ∪ promoted_repo`. The CLI runs in
 Run the resident service (embedded tiered scheduler) via Docker:
 
 ```bash
+docker pull ghcr.io/seasontemple/transmutary:latest
 cp .env.example .env            # fill credentials (gitignored, never baked into the image)
 # prepare ./config/{watchlist,trend_scope,delivery}.yaml
 #   delivery.yaml: point state_db_path & artifact_root under /var/lib/transmutary
@@ -189,6 +190,12 @@ docker compose --profile dashboard up -d dashboard
 ```
 
 The image runs as a non-root user; credentials come from `.env` at runtime; the state DB and private artifacts persist in the `transmutary-state` volume. The dashboard profile shares the same config mount and state volume, binds `127.0.0.1:8787` by default, and expects `TRANSMUTARY_ADMIN_TOKEN` for the settings UI. For public access, keep it behind HTTPS/auth/rate limiting. Without Docker, run the entrypoints directly: `transmutary-serve` and `transmutary-dashboard` (both read `TRANSMUTARY_CONFIG_DIR`, default `config`).
+
+Release images are published to GHCR as
+`ghcr.io/seasontemple/transmutary:vX.Y.Z`, `ghcr.io/seasontemple/transmutary:X.Y.Z`,
+and `ghcr.io/seasontemple/transmutary:latest`. For a local source build, use
+`docker build -t transmutary:local .` and run compose with
+`TRANSMUTARY_IMAGE=transmutary:local`.
 
 ## Dashboard
 
@@ -226,6 +233,7 @@ Releases are version-automated with [python-semantic-release](https://python-sem
 GitHub Release body is curated, not left to generated notes. Each published tag
 must have a bilingual note at `docs/release-notes/vX.Y.Z.md` with both `## 中文`
 and `## English`; the release workflow applies that file after publishing.
+Release assets include the Python wheel/sdist and a GHCR Docker image.
 
 Enable the local commit-message hook once after cloning:
 

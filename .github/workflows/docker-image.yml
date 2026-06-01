@@ -1,0 +1,51 @@
+name: Docker Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish, e.g. v0.12.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup | Checkout released tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Docker | Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker | Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker | Metadata
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/seasontemple/transmutary
+          tags: |
+            type=raw,value=${{ inputs.tag }}
+            type=semver,pattern={{version}},value=${{ inputs.tag }}
+            type=raw,value=latest
+
+      - name: Docker | Build and push GHCR image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}

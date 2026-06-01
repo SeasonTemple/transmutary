@@ -6,8 +6,10 @@
 #   3. docker compose up -d
 services:
   transmutary:
-    build: .
-    image: transmutary:latest
+    # Release image by default. For local source builds:
+    #   docker build -t transmutary:local .
+    #   TRANSMUTARY_IMAGE=transmutary:local docker compose up -d
+    image: ${TRANSMUTARY_IMAGE:-ghcr.io/seasontemple/transmutary:latest}
     restart: unless-stopped
     env_file:
       - .env                      # 凭据：TRANSMUTARY_GITHUB_TOKEN / LLM / SMTP / RSS（不入库）
@@ -22,8 +24,7 @@ services:
     # 服务无对外端口；私有 RSS feed 由 deliver 写卷内文件，按需另起 server 暴露。
 
   dashboard:
-    build: .
-    image: transmutary:latest
+    image: ${TRANSMUTARY_IMAGE:-ghcr.io/seasontemple/transmutary:latest}
     restart: unless-stopped
     profiles: ["dashboard"]
     env_file:

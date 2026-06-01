@@ -4,7 +4,7 @@ on:
   push:
     branches: ["main"]
 
-# 仅 contents 写权限即可建 tag + GitHub Release（不发 PyPI）。
+# contents 用于建 tag + GitHub Release；packages 用于推 GHCR Docker 镜像。
 permissions:
   contents: read
 
@@ -31,6 +31,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: write
+      packages: write
     steps:
       - name: Setup | Checkout on release branch
         uses: actions/checkout@v6
@@ -64,3 +65,43 @@ jobs:
         run: |
           python tools/release_notes.py check "$RELEASE_TAG"
           gh release edit "$RELEASE_TAG" --notes-file "docs/release-notes/$RELEASE_TAG.md"
+
+      - name: Docker | Checkout released tag
+        if: steps.release.outputs.released == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          git fetch --tags --force
+          git checkout "$RELEASE_TAG"
+
+      - name: Docker | Set up Buildx
+        if: steps.release.outputs.released == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker | Login to GHCR
+        if: steps.release.outputs.released == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker | Metadata
+        if: steps.release.outputs.released == 'true'
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/seasontemple/transmutary
+          tags: |
+            type=raw,value=${{ steps.release.outputs.tag }}
+            type=semver,pattern={{version}},value=${{ steps.release.outputs.tag }}
+            type=raw,value=latest
+
+      - name: Docker | Build and push GHCR image
+        if: steps.release.outputs.released == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
