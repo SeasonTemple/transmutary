@@ -11,7 +11,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 404 passing](https://img.shields.io/badge/tests-404_passing-brightgreen.svg)](#tests)
+[![Tests: 428 passing](https://img.shields.io/badge/tests-428_passing-brightgreen.svg)](#tests)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Try the demo](#try-the-demo) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
 
@@ -178,16 +178,18 @@ docker compose up -d
 
 The image runs as a non-root user; credentials come from `.env` at runtime; the state DB and private artifacts persist in the `transmutary-state` volume. Without Docker, run the entrypoint directly: `transmutary-serve` (reads `TRANSMUTARY_CONFIG_DIR`, default `config`).
 
-## Dashboard (read-only)
+## Dashboard
 
-A local, **read-only** web view over the system's runtime state and archived reports — open it in a browser to see the effective watchlist, recent diagnostic/explanatory reports, supply-chain alerts, trend candidates, per-repo runtime (issue baseline / star snapshots / cursor), and feed links.
+A local web view over the system's runtime state and archived reports — open it in a browser to see the effective watchlist, recent diagnostic/explanatory reports, supply-chain alerts, trend candidates, per-repo runtime (issue baseline / star snapshots / cursor), and feed links.
 
 ```bash
 pip install -e ".[dashboard]"     # adds jinja2 (Starlette/uvicorn are already core)
 transmutary-dashboard             # serves on http://127.0.0.1:8787
 ```
 
-It reuses the existing Starlette stack and the store read interfaces — it never writes, opens no mutation endpoint, and adds **no** promote button (promotion stays on the CLI). Security posture: binds `127.0.0.1` by default (a non-localhost bind is **refused** unless you pass `--allow-public`, since the dashboard serves private intelligence with no built-in auth — front it with an auth proxy); a `Host`-header allow-list defeats DNS-rebinding; external repository content is HTML-escaped (XSS) and credentials/tokens are never rendered.
+It reuses the existing Starlette stack and store interfaces. On localhost it can promote/demote Mode B candidates through a server-side confirmation flow; the POST only writes the shared `promoted_repo` table, so the resident service picks it up on the next reconcile pass without restart. Security posture: binds `127.0.0.1` by default; a non-localhost bind is **refused** unless you pass `--allow-public`; public binds stay **read-only** unless you also pass `--allow-public-writes`. Write requests require a double-submit CSRF token, `SameSite=Strict` cookie, Origin/Referer host check, same-origin form action, and a confirmation page. Public writes have no built-in identity auth — put the dashboard behind an HTTPS authenticating proxy with rate limits / repo allow-lists before enabling them.
+
+External repository content is HTML-escaped (XSS), dangerous source URLs are blanked, and credentials/tokens are never rendered. The dashboard write path does not edit `watchlist.yaml` / `trend_scope.yaml`; those higher-risk config writes and full token identity auth remain deferred.
 
 The UI is a modern sidebar dashboard (stat tiles, Sentry-style issue stream, severity encoded by colour + icon + text for accessibility), with a light/dark theme toggle and an EN/中文 language toggle (both remembered, both rendered server-side on first paint so there is no flash). A per-request CSP nonce keeps the inline theme bootstrap script precisely allow-listed without weakening the policy.
 
@@ -227,17 +229,17 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 | Phase 3 — scheduling wiring (pipeline + service) | ✅ done |
 | Phase B — F4 promotion · deployment · L2 semantic grouping · critique→refine | ✅ done |
 | Offline demo (`transmutary-demo`) | ✅ done |
-| Read-only web dashboard (`transmutary-dashboard`) | ✅ done |
-| Tests | ✅ 404 passing · ruff clean |
+| Web dashboard (`transmutary-dashboard`) | ✅ done |
+| Tests | ✅ 428 passing · ruff clean |
 
 ### Roadmap
 
-Deferred by design: channel interface abstraction, dashboard **write** capability (one-click promote — a separate plan with its own threat model), subscription config, live resident run. (The read-only web dashboard, L2 semantic grouping, and the optional critique→refine report pass are implemented — see [Dashboard](#dashboard-read-only) and [How it works: optional critique→refine](#how-it-works-optional-critiquerefine-r11).)
+Deferred by design: channel interface abstraction, dashboard token identity auth, web editing for `watchlist.yaml` / `trend_scope.yaml`, subscription config, live resident run. (The dashboard, one-click promote/demote UI, L2 semantic grouping, and the optional critique→refine report pass are implemented — see [Dashboard](#dashboard) and [How it works: optional critique→refine](#how-it-works-optional-critiquerefine-r11).)
 
 ### Tests
 
 ```bash
-.venv/bin/python -m pytest -q      # 404 passing
+.venv/bin/python -m pytest -q      # 428 passing
 .venv/bin/ruff check src tests     # clean
 ```
 

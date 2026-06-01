@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ question }} — transmutary{% endblock %}
+{% block content %}
+
+<a class="back" href="/">&larr; <span data-i18n="back.overview">{{ t['back.overview'] }}</span></a>
+<header class="topbar"><h1>{{ question }}</h1></header>
+
+<div class="card">
+  <p><span class="repo">{{ repo }}</span></p>
+  <form method="post" action="{{ action }}">
+    <input type="hidden" name="repo" value="{{ repo }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="action" type="submit">{{ t['confirm'] }}</button>
+    <a class="back" href="/">{{ t['cancel'] }}</a>
+  </form>
+</div>
+
+{% endblock %}

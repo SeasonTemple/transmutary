@@ -71,7 +71,7 @@ body {
 .snav a:hover { background: var(--bg-elevated); color: var(--text-primary); }
 .snav a.active { background: var(--bg-elevated); color: var(--text-primary); border-left-color: var(--accent); font-weight: 600; }
 .snav a:focus-visible, .theme-btn:focus-visible, .lang-btn:focus-visible,
-a:focus-visible, summary:focus-visible {
+a:focus-visible, summary:focus-visible, button:focus-visible {
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 .ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; flex-shrink: 0; }
@@ -122,8 +122,10 @@ details > summary.sec { cursor: pointer; }
 .sev-bar { grid-area: bar; width: 3px; align-self: stretch; border-radius: 3px; margin: -.7rem 0; }
 .sev-ic { grid-area: ic; width: 18px; height: 18px; fill: none; stroke-width: 1.4; margin-left: .9rem; }
 .row .pill { grid-area: pill; }
-.row-title { grid-area: title; font-weight: 600; font-size: .92rem; }
+.row-title { grid-area: title; font-weight: 600; font-size: .92rem; color: inherit; text-decoration: none; }
+.row-title:hover { text-decoration: underline; }
 .repo { grid-area: repo; font-family: var(--mono); font-size: .8rem; color: var(--text-secondary); }
+.row-action { grid-area: meta; justify-self: start; }
 .row-meta { grid-area: meta; font-size: .8rem; color: var(--text-tertiary); }
 .sev-critical .sev-bar { background: var(--sev-critical); } .sev-critical .sev-ic { stroke: var(--sev-critical); }
 .sev-high .sev-bar { background: var(--sev-high); } .sev-high .sev-ic { stroke: var(--sev-high); }
@@ -152,6 +154,7 @@ details > summary.sec { cursor: pointer; }
 .tbl td { padding: .6rem .9rem; border-bottom: 1px solid var(--border-subtle); }
 .tbl tbody tr:last-child td { border-bottom: none; }
 .tbl tbody tr:hover td { background: var(--bg-elevated); }
+.tbl .act { text-align: right; white-space: nowrap; }
 .kv th { width: 14rem; color: var(--text-secondary); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: .85rem; background: var(--bg-surface); }
 .up { color: var(--up); font-weight: 600; }
 .dim { color: var(--text-tertiary); }
@@ -170,6 +173,16 @@ code { font-family: var(--mono); font-size: .8rem; background: var(--bg-elevated
 /* report */
 .back { display: inline-block; margin-bottom: .5rem; color: var(--accent); text-decoration: none; font-size: .9rem; }
 .back:hover { text-decoration: underline; }
+.action-link, .row-action, button.action {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 2rem; padding: .3rem .7rem; border: 1px solid var(--border);
+  border-radius: var(--r); background: var(--bg-base); color: var(--accent);
+  text-decoration: none; font: 600 .82rem var(--sans); cursor: pointer;
+}
+.action-link:hover, .row-action:hover, button.action:hover {
+  background: var(--bg-elevated); text-decoration: none;
+}
+form { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; padding: 0 0 1rem; }
 .report-meta { display: flex; gap: .5rem; align-items: center; margin: .25rem 0 1rem; flex-wrap: wrap; }
 pre {
   background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--r);

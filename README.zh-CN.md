@@ -11,7 +11,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 404 passing](https://img.shields.io/badge/tests-404_passing-brightgreen.svg)](#测试)
+[![Tests: 428 passing](https://img.shields.io/badge/tests-428_passing-brightgreen.svg)](#测试)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [看 demo](#看-demo) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
 
@@ -177,16 +177,18 @@ docker compose up -d
 
 镜像以非 root 用户运行；凭据运行时从 `.env` 注入；状态 DB 与私有产物持久化在 `transmutary-state` 卷。无 Docker 时直接跑入口：`transmutary-serve`（读 `TRANSMUTARY_CONFIG_DIR`，默认 `config`）。
 
-## 看板（只读）
+## 看板
 
-本地**只读** Web 看板，浏览器里看系统运行态与产出——有效关注清单、最近诊断/说明报告、供应链告警、趋势候选、各仓运行态（issue 基线 / star 快照 / 游标）、feed 链接。
+本地 Web 看板，浏览器里看系统运行态与产出——有效关注清单、最近诊断/说明报告、供应链告警、趋势候选、各仓运行态（issue 基线 / star 快照 / 游标）、feed 链接。
 
 ```bash
 pip install -e ".[dashboard]"     # 加 jinja2（Starlette/uvicorn 已是核心依赖）
 transmutary-dashboard             # 默认 http://127.0.0.1:8787
 ```
 
-复用现有 Starlette 栈与 store 读接口——只读、无任何写端点、**不开** promote 按钮（晋升仍走 CLI）。安全姿态：默认绑 `127.0.0.1`，非 localhost 绑定**硬拒**除非显式传 `--allow-public`（看板服务私有情报、无内建鉴权，公网须前置鉴权代理）；Host 头 allowlist 防 DNS rebinding；外部仓库内容 HTML 转义防 XSS；凭据/token 绝不上页。
+复用现有 Starlette 栈与 store 接口。localhost 下可在看板通过服务端确认流 promote/demote 模式 B 候选仓；POST 只写共享的 `promoted_repo` 表，常驻 service 下一轮 reconcile 自动拾取，无需重启。安全姿态：默认绑 `127.0.0.1`；非 localhost 绑定**硬拒**除非显式传 `--allow-public`；公网绑定默认仍**只读**，必须再传 `--allow-public-writes` 才暴露写端点。写请求要求 double-submit CSRF token、`SameSite=Strict` cookie、Origin/Referer host 校验、同源 form action 与确认页。公网写没有内建身份鉴权——启用前必须放在 HTTPS 鉴权代理后，并在代理层加速率限制 / 仓名白名单。
+
+外部仓库内容 HTML 转义防 XSS，危险 source URL 会被清空，凭据/token 绝不上页。看板写路径不编辑 `watchlist.yaml` / `trend_scope.yaml`；这些高风险配置写入与完整 token 身份鉴权仍延后。
 
 界面为现代侧边栏看板（stat tiles、Sentry 式 issue-stream 告警、severity 用色+图标+文字三通道编码便于无障碍），带亮/暗主题切换与中/英语言切换（均记忆，且服务端首屏即渲染对应语言，无闪屏）。per-request CSP nonce 让内联主题首屏脚本精确放行而不弱化策略。
 
@@ -226,17 +228,17 @@ git config commit.template .gitmessage
 | Phase 3 — 调度接线（pipeline + service） | ✅ 完成 |
 | Phase B — F4 晋升 · 部署 · L2 语义分组 · critique→refine | ✅ 完成 |
 | 离线 demo（`transmutary-demo`） | ✅ 完成 |
-| 只读 Web 看板（`transmutary-dashboard`） | ✅ 完成 |
-| 测试 | ✅ 404 passing · ruff clean |
+| Web 看板（`transmutary-dashboard`） | ✅ 完成 |
+| 测试 | ✅ 428 passing · ruff clean |
 
 ### 路线图
 
-按设计延后：channel 接口抽象、看板**写能力**（一键晋升——独立计划，带自己的威胁模型）、订阅配置、真实常驻跑。（只读 Web 看板、L2 语义分组、可选的 critique→refine 报告增强均已实现——见[看板](#看板只读)与[工作原理：可选的批判→修订](#工作原理可选的批判修订r11)。）
+按设计延后：channel 接口抽象、看板 token 身份鉴权、Web 编辑 `watchlist.yaml` / `trend_scope.yaml`、订阅配置、真实常驻跑。（Web 看板、一键 promote/demote UI、L2 语义分组、可选的 critique→refine 报告增强均已实现——见[看板](#看板)与[工作原理：可选的批判→修订](#工作原理可选的批判修订r11)。）
 
 ### 测试
 
 ```bash
-.venv/bin/python -m pytest -q      # 404 passing
+.venv/bin/python -m pytest -q      # 428 passing
 .venv/bin/ruff check src tests     # clean
 ```
 

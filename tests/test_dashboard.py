@@ -92,6 +92,11 @@ def test_build_watchlist_tags_sources():
     assert by_repo["acme/gateway"] == "config"
     assert by_repo["hot/repo"] == "mode-b"
 
+    by_entry = {e.repo: e for e in entries}
+    assert by_entry["acme/cli"].demotable is False
+    assert by_entry["hot/repo"].demotable is True
+    assert by_entry["hot/repo"].to_dict()["demotable"] is True
+
 
 # --- build_overview (R-D2/R-D3/R-D4) -----------------------------------------
 
@@ -123,6 +128,24 @@ def test_build_overview_buckets_and_orders():
         assert {f.href for f in ov.feeds} == {"/feed/immediate", "/feed/digest"}
         for f in ov.feeds:
             assert "token" not in f.href.lower()
+        assert ov.promotable_repos == frozenset()
+        assert ov.to_dict()["promotable_repos"] == []
+
+
+def test_build_overview_tracks_promotable_trend_candidates():
+    from transmutary.dashboard import data
+
+    with tempfile.TemporaryDirectory() as d:
+        root = os.path.join(d, "artifacts")
+        store = StateStore(":memory:")
+        artifacts = ArtifactStore(root)
+        artifacts.write(
+            _report("hot/repo", kind=ReportKind.EXPLAIN, severity=Severity.INFO),
+            ts=2000.0,
+        )
+        ov = data.build_overview(_settings(artifact_root=root), store, artifacts)
+        assert ov.promotable_repos == frozenset({"hot/repo"})
+        assert ov.to_dict()["promotable_repos"] == ["hot/repo"]
 
 
 def test_build_overview_empty_store():
@@ -160,11 +183,28 @@ def test_build_repo_runtime_known_and_unknown():
         assert result is not None
         runtime, cards = result
         assert runtime.in_watchlist is True
+        assert runtime.promotable is False
+        assert runtime.demotable is False
         assert runtime.baseline_rate == 2.5
         assert runtime.latest_stars == 180
         assert runtime.star_growth == 80
         assert runtime.cursor == "2026-01-01"
         assert len(cards) == 1
+
+        store.promote_repo("hot/repo", source="mode-b")
+        artifacts.write(_report("hot/repo"), ts=2000.0)
+        promoted_result = data.build_repo_runtime(s, store, artifacts, "hot/repo")
+        assert promoted_result is not None
+        promoted_runtime, _ = promoted_result
+        assert promoted_runtime.promotable is False
+        assert promoted_runtime.demotable is True
+
+        artifacts.write(_report("archived/repo"), ts=3000.0)
+        archived_result = data.build_repo_runtime(s, store, artifacts, "archived/repo")
+        assert archived_result is not None
+        archived_runtime, _ = archived_result
+        assert archived_runtime.promotable is True
+        assert archived_runtime.demotable is False
 
         # unknown repo with no archive → None (no oracle)
         s = _settings(artifact_root=root)
@@ -227,7 +267,7 @@ def test_view_models_carry_no_tokens_or_credentials():
 # --- U3: Starlette app via TestClient ----------------------------------------
 
 
-def _client(d, *, seed=True, raise_server_exceptions=True):
+def _client(d, *, seed=True, raise_server_exceptions=True, write_store=None):
     """Dashboard app + TestClient over in-memory store + tmp artifacts."""
     from starlette.testclient import TestClient
 
@@ -239,13 +279,21 @@ def _client(d, *, seed=True, raise_server_exceptions=True):
     if seed:
         artifacts.write(_report("acme/cli", severity=Severity.CRITICAL), ts=1000.0)
     settings = _settings(artifact_root=root)
-    app = make_dashboard_app(settings, store, artifacts)
+    app = make_dashboard_app(settings, store, artifacts, write_store=write_store)
     client = TestClient(
         app,
         base_url="http://localhost",
         raise_server_exceptions=raise_server_exceptions,
     )
     return client, store, artifacts, settings
+
+
+def _csrf(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    token = client.cookies.get("tmtry-csrf")
+    assert token
+    return token
 
 
 def test_index_lists_watchlist_with_source():
@@ -326,7 +374,7 @@ def test_unknown_repo_404():
         assert client.get("/repo/no/repo").status_code == 404
 
 
-def test_routes_are_get_only():
+def test_routes_are_get_only_except_promote_writes():
     with tempfile.TemporaryDirectory() as d:
         client, *_ = _client(d)
         from starlette.routing import Route
@@ -334,7 +382,10 @@ def test_routes_are_get_only():
         for route in client.app.routes:
             if isinstance(route, Route):
                 # R-D7: read-only — only GET (Starlette auto-adds HEAD).
-                assert route.methods <= {"GET", "HEAD"}
+                if route.path in {"/promote", "/demote"}:
+                    assert route.methods <= {"GET", "POST", "HEAD"}
+                else:
+                    assert route.methods <= {"GET", "HEAD"}
 
 
 def test_host_header_allowlist():
@@ -387,6 +438,166 @@ def test_healthz_ok():
     with tempfile.TemporaryDirectory() as d:
         client, *_ = _client(d)
         assert client.get("/healthz").status_code == 200
+
+
+# --- promote UI U2: write routes --------------------------------------------
+
+
+def test_promote_post_requires_write_store():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.post(
+            "/promote",
+            data={"repo": "hot/repo", "csrf_token": "unused"},
+            headers={"origin": "http://localhost"},
+        )
+        assert resp.status_code == 404
+        assert "read-only" in client.get("/").text
+
+
+def test_resolve_write_store_localhost_opens_rw_store(tmp_path):
+    from transmutary.dashboard.app import resolve_write_store
+
+    settings = _settings(artifact_root=str(tmp_path), repos=("acme/cli",))
+    settings = dataclasses.replace(
+        settings,
+        delivery=dataclasses.replace(
+            settings.delivery, state_db_path=str(tmp_path / "state.sqlite")
+        ),
+    )
+    store = resolve_write_store(settings, is_local=True, allow_public_writes=False)
+    try:
+        assert store is not None
+        assert store.read_only is False
+        store.promote_repo("hot/repo")
+        assert store.is_promoted("hot/repo") is True
+    finally:
+        assert store is not None
+        store.close()
+
+
+def test_resolve_write_store_public_requires_explicit_gate(tmp_path, caplog):
+    from transmutary.dashboard.app import resolve_write_store
+
+    settings = _settings(artifact_root=str(tmp_path), repos=("acme/cli",))
+    settings = dataclasses.replace(
+        settings,
+        delivery=dataclasses.replace(
+            settings.delivery, state_db_path=str(tmp_path / "state.sqlite")
+        ),
+    )
+    assert resolve_write_store(settings, is_local=False, allow_public_writes=False) is None
+
+    store = resolve_write_store(settings, is_local=False, allow_public_writes=True)
+    try:
+        assert store is not None
+        assert "PUBLIC write endpoints" in caplog.text
+    finally:
+        assert store is not None
+        store.close()
+
+
+def test_promote_post_writes_table_and_redirects():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store)
+        assert "writes enabled" in client.get("/").text
+        token = _csrf(client)
+        resp = client.post(
+            "/promote",
+            data={"repo": "hot/repo", "csrf_token": token},
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/"
+        assert write_store.is_promoted("hot/repo") is True
+
+
+def test_demote_post_removes_promoted_repo():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        write_store.promote_repo("hot/repo")
+        client, *_ = _client(d, write_store=write_store)
+        token = _csrf(client)
+        resp = client.post(
+            "/demote",
+            data={"repo": "hot/repo", "csrf_token": token},
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert write_store.is_promoted("hot/repo") is False
+
+
+@pytest.mark.parametrize(
+    ("data", "headers"),
+    [
+        ({"repo": "hot/repo"}, {"origin": "http://localhost"}),
+        ({"repo": "hot/repo", "csrf_token": "bad"}, {"origin": "http://localhost"}),
+        ({"repo": "hot/repo", "csrf_token": "TOKEN"}, {"origin": "http://evil.com"}),
+        ({"repo": "hot/repo", "csrf_token": "TOKEN"}, {}),
+    ],
+)
+def test_promote_post_rejects_csrf_and_origin_failures(data, headers):
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store)
+        token = _csrf(client)
+        payload = {k: (token if v == "TOKEN" else v) for k, v in data.items()}
+        resp = client.post("/promote", data=payload, headers=headers)
+        assert resp.status_code == 403
+        assert "Request rejected" in resp.text
+        assert write_store.is_promoted("hot/repo") is False
+
+
+@pytest.mark.parametrize("repo", ["hot", "javascript:alert(1)/x", "hot/repo extra"])
+def test_promote_post_rejects_invalid_repo(repo):
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store)
+        token = _csrf(client)
+        resp = client.post(
+            "/promote",
+            data={"repo": repo, "csrf_token": token},
+            headers={"origin": "http://localhost"},
+        )
+        assert resp.status_code == 400
+        assert write_store.list_promoted() == []
+
+
+def test_demote_post_rejects_non_promoted_repo():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store)
+        token = _csrf(client)
+        resp = client.post(
+            "/demote",
+            data={"repo": "acme/cli", "csrf_token": token},
+            headers={"origin": "http://localhost"},
+        )
+        assert resp.status_code == 400
+        assert "promoted" in resp.text or "晋升" in resp.text
+
+
+def test_promote_confirm_page_contains_csrf_form_and_does_not_write():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store)
+        token = _csrf(client)
+        resp = client.get("/promote?repo=hot/repo")
+        assert resp.status_code == 200
+        assert 'action="/promote"' in resp.text
+        assert 'name="repo" value="hot/repo"' in resp.text
+        assert f'name="csrf_token" value="{token}"' in resp.text
+        assert write_store.is_promoted("hot/repo") is False
+
+
+def test_write_store_none_hides_confirm_routes_too():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        assert client.get("/promote?repo=hot/repo").status_code == 404
+        assert client.get("/demote?repo=hot/repo").status_code == 404
 
 
 def test_stylesheet_served_same_origin_css():
@@ -471,6 +682,7 @@ def test_csp_no_unsafe_directives():
         assert "unsafe-eval" not in csp
         assert "script-src 'self' 'nonce-" in csp
         assert "default-src 'self'" in csp
+        assert "form-action 'self'" in csp
 
 
 def test_csp_nonce_matches_request_state():
@@ -479,7 +691,9 @@ def test_csp_nonce_matches_request_state():
     # fail-closed: empty nonce → no-nonce CSP (inline script blocked, not allowed).
     no_nonce = _csp_with_nonce("")
     assert "nonce-" not in no_nonce
-    assert no_nonce == "default-src 'self'; script-src 'self'; style-src 'self'"
+    assert no_nonce == (
+        "default-src 'self'; script-src 'self'; style-src 'self'; form-action 'self'"
+    )
     # with nonce → precise allow.
     withn = _csp_with_nonce("abc123")
     assert "'nonce-abc123'" in withn
@@ -501,6 +715,85 @@ def test_csp_500_uses_no_nonce_policy(monkeypatch):
         assert "nonce-" not in csp
         assert "unsafe-inline" not in csp
         assert "default-src 'self'" in csp
+        assert "form-action 'self'" in csp
+
+
+# --- promote UI U1: CSRF double-submit primitives ----------------------------
+
+
+def test_csrf_token_issue_and_verify():
+    from transmutary.dashboard.csrf import issue_token, verify_token
+
+    token = issue_token()
+    other = issue_token()
+    assert token != other
+    assert len(token) >= 32
+    assert verify_token(token, token) is True
+    assert verify_token(token, other) is False
+    assert verify_token("", token) is False
+    assert verify_token(token, None) is False
+    assert verify_token("a" * 43, "b" * 43) is False
+
+
+def test_check_origin_accepts_allowed_origin_and_referer():
+    from starlette.requests import Request
+
+    from transmutary.dashboard.csrf import check_origin
+
+    allowed = frozenset({"localhost", "127.0.0.1", "[::1]"})
+
+    def req(headers):
+        return Request({"type": "http", "method": "POST", "path": "/", "headers": [
+            (k.lower().encode(), v.encode()) for k, v in headers.items()
+        ]})
+
+    assert check_origin(req({"origin": "http://localhost"}), allowed) is True
+    assert check_origin(req({"origin": "http://127.0.0.1:8787"}), allowed) is True
+    assert check_origin(req({"origin": "http://[::1]:8787"}), allowed) is True
+    assert check_origin(req({"referer": "http://localhost/promote"}), allowed) is True
+
+
+def test_check_origin_rejects_cross_site_null_and_missing_headers():
+    from starlette.requests import Request
+
+    from transmutary.dashboard.csrf import check_origin
+
+    allowed = frozenset({"localhost"})
+
+    def req(headers):
+        return Request({"type": "http", "method": "POST", "path": "/", "headers": [
+            (k.lower().encode(), v.encode()) for k, v in headers.items()
+        ]})
+
+    assert check_origin(req({"origin": "http://evil.com"}), allowed) is False
+    assert check_origin(req({"origin": "null", "referer": "http://localhost/"}), allowed) is True
+    assert check_origin(req({"origin": "null"}), allowed) is False
+    assert check_origin(req({}), allowed) is False
+
+
+def test_csrf_middleware_sets_strict_httponly_cookie_and_reuses_it():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d, write_store=StateStore(":memory:"))
+        first = client.get("/")
+        cookie = first.cookies.get("tmtry-csrf")
+        assert cookie
+        set_cookie = first.headers["set-cookie"]
+        assert "tmtry-csrf=" in set_cookie
+        assert "SameSite=strict" in set_cookie
+        assert "HttpOnly" in set_cookie
+        assert "Path=/" in set_cookie
+
+        second = client.get("/")
+        assert client.cookies.get("tmtry-csrf") == cookie
+        assert "set-cookie" not in second.headers
+
+
+def test_csrf_middleware_disabled_when_dashboard_is_read_only():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)
+        resp = client.get("/")
+        assert "tmtry-csrf" not in resp.cookies
+        assert "set-cookie" not in resp.headers
 
 
 # --- review fixes: IPv6 host, 500 headers, sidecar trust, _safe_url, read-only ---
@@ -747,7 +1040,7 @@ def test_json_repo_key_allowlist():
         # P1: explicit allow-list — exactly these keys, no asdict-style spill.
         assert set(runtime.keys()) == {
             "repo", "in_watchlist", "source", "baseline_rate",
-            "latest_stars", "star_growth", "cursor",
+            "latest_stars", "star_growth", "cursor", "promotable", "demotable",
         }
 
 

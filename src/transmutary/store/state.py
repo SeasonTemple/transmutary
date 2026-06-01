@@ -147,9 +147,16 @@ class StateStore:
     strategy from plan Risks); WAL allows concurrent reads.
     """
 
-    def __init__(self, db_path: str, *, read_only: bool = False) -> None:
+    def __init__(
+        self,
+        db_path: str,
+        *,
+        read_only: bool = False,
+        busy_timeout_ms: int | None = None,
+    ) -> None:
         self.db_path = db_path
         self.read_only = read_only
+        timeout = None if busy_timeout_ms is None else max(0, int(busy_timeout_ms))
         parent = os.path.dirname(os.path.abspath(db_path))
         is_memory = db_path == ":memory:" or db_path.startswith("file::memory:")
         self._lock = threading.RLock()
@@ -162,6 +169,8 @@ class StateStore:
             uri = f"file:{os.path.abspath(db_path)}?mode=ro"
             self._conn = sqlite3.connect(uri, check_same_thread=False, uri=True)
             self._conn.row_factory = sqlite3.Row
+            if timeout is not None:
+                self._conn.execute(f"PRAGMA busy_timeout={timeout}")
             return
 
         if not is_memory and parent:
@@ -172,6 +181,8 @@ class StateStore:
             db_path, check_same_thread=False, uri=db_path.startswith("file:")
         )
         self._conn.row_factory = sqlite3.Row
+        if timeout is not None:
+            self._conn.execute(f"PRAGMA busy_timeout={timeout}")
         if not is_memory:
             try:
                 self._conn.execute("PRAGMA journal_mode=WAL")
