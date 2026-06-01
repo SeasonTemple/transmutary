@@ -95,6 +95,16 @@ def test_stub_call_distinguishes_diagnose_vs_explain_vs_judge():
     assert "Suspected root cause" in diag2
 
 
+def test_stub_call_accepts_real_llm_call_model_tier_keyword():
+    """Demo stub keeps the same keyword surface as transmutary.llm.call."""
+    out = demo._stub_call(
+        "...supply-chain remediation assistant...",
+        "data",
+        model_tier="cheap",
+    )
+    assert "ansi-regex" in out
+
+
 def test_mock_client_has_redirects_off_ssrf_contract():
     client = demo.make_mock_client()
     assert client.follow_redirects is False

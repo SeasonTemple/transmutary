@@ -168,13 +168,19 @@ class LLMBudgetExceeded(LLMError):
 _DATA_OPEN_REDACTED = "<<<UNTRUSTED_DATA_BLOCK_REDACTED>>>"
 _DATA_CLOSE_REDACTED = "<<<END_UNTRUSTED_DATA_BLOCK_REDACTED>>>"
 
-# Case-insensitive fence patterns. Lowercase / mixed-case fence markers from
-# attacker-controlled data would otherwise bypass the exact-string replacement
-# and create ambiguity about whether content is inside or outside the genuine
-# fence. The replacement text is always the canonical uppercase REDACTED token
-# so the genuine fence in the user-role wrapper remains the only valid one.
-_FENCE_OPEN_RE = re.compile(re.escape(_DATA_OPEN), re.IGNORECASE)
-_FENCE_CLOSE_RE = re.compile(re.escape(_DATA_CLOSE), re.IGNORECASE)
+def _fence_pattern(marker: str) -> re.Pattern[str]:
+    inner = marker.removeprefix("<<<").removesuffix(">>>")
+    return re.compile(r"<<<\s*" + re.escape(inner) + r"\s*>>>", re.IGNORECASE)
+
+
+# Case-insensitive fence patterns. Lowercase / mixed-case / whitespace-padded
+# fence markers from attacker-controlled data would otherwise bypass the exact
+# replacement and create ambiguity about whether content is inside or outside
+# the genuine fence. The replacement text is always the canonical uppercase
+# REDACTED token so the genuine fence in the user-role wrapper remains the only
+# valid one.
+_FENCE_OPEN_RE = _fence_pattern(_DATA_OPEN)
+_FENCE_CLOSE_RE = _fence_pattern(_DATA_CLOSE)
 
 
 def _neutralize_fences(data_block: str) -> str:
@@ -183,11 +189,11 @@ def _neutralize_fences(data_block: str) -> str:
     Without this, attacker-controlled text (an issue body, a GHSA/OSV advisory) can
     embed the literal close marker, planting its own pseudo-instructions AFTER what
     the model is told is the trusted fence — defeating the data/instruction split.
-    We replace any case-variant occurrence of the open/close markers with inert
-    REDACTED tokens so the genuine fence the model relies on cannot be forged.
-    Close is replaced before open so the open replacement cannot recreate a close
-    token. The rest of the data block keeps its original casing — URLs, paths,
-    and code are not munged.
+    We replace any case-variant or whitespace-padded occurrence of the open/close
+    markers with inert REDACTED tokens so the genuine fence the model relies on
+    cannot be forged. Close is replaced before open so the open replacement
+    cannot recreate a close token. The rest of the data block keeps its original
+    casing — URLs, paths, and code are not munged.
     """
     data_block = _FENCE_CLOSE_RE.sub(_DATA_CLOSE_REDACTED, data_block)
     data_block = _FENCE_OPEN_RE.sub(_DATA_OPEN_REDACTED, data_block)

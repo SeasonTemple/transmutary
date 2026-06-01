@@ -288,7 +288,16 @@ def make_mock_client() -> httpx.Client:
 # ---------------------------------------------------------------------------
 # Stub LLM (KTD-B - deterministic fake report text, never touches a real model)
 # ---------------------------------------------------------------------------
-def _stub_call(system, data, tier=None, *, api_key=None, base_url=None, **kwargs):
+def _stub_call(
+    system,
+    data,
+    model_tier=None,
+    *,
+    tier=None,
+    api_key=None,
+    base_url=None,
+    **kwargs,
+):
     """A deterministic ``call_fn`` seam standing in for ``llm.call``.
 
     Dispatch is on the TRUSTED system instruction only (never the untrusted data
