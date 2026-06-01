@@ -18,9 +18,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..config import Settings
-from ..service import effective_repos
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
+from ..watchlist import effective_repos
 
 # Severities that route to the urgent / supply-chain bucket on the overview.
 # Mirrors Severity.is_urgent (critical + high → immediate route).
@@ -226,7 +226,7 @@ def _all_cards(artifacts: ArtifactStore) -> list[ReportCard]:
 def build_watchlist(settings: Settings, store: StateStore) -> tuple[WatchEntry, ...]:
     """Effective watchlist (config ∪ promoted), each entry tagged with its source.
 
-    Reuses :func:`service.effective_repos` as the single source of truth for the
+    Reuses :func:`watchlist.effective_repos` as the single source of truth for the
     repo set, then tags each: config-watchlist repos are ``config``; the rest are
     promoted and carry their stored promotion source.
     """

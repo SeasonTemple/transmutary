@@ -37,6 +37,7 @@ from .pipeline import (
     run_trend_tick,
 )
 from .store.state import StateStore
+from .watchlist import effective_repos
 
 logger = logging.getLogger("transmutary.service")
 
@@ -54,20 +55,6 @@ RELEASE_ISSUE_INTERVAL_SECONDS = 600
 # that lets a CLI ``promote`` in a SEPARATE process reach the live scheduler
 # without a restart.
 RECONCILE_INTERVAL_SECONDS = 60
-
-
-def effective_repos(settings: Settings, store: StateStore | None) -> list[str]:
-    """The single source of truth for the observed repo set (F4, KTD-D).
-
-    The effective watchlist = config ``watchlist`` repos ∪ promoted repos, with
-    duplicates removed and a deterministic (sorted) order so registration and
-    reconcile never diverge. ``store=None`` (no state store available, e.g. a fake
-    runtime in a unit test) degrades to config-only, preserving backward compat.
-    """
-    repos = set(settings.watchlist.repo_names())
-    if store is not None:
-        repos.update(store.list_promoted())
-    return sorted(repos)
 
 
 def _isolated(job_id: str, func: Callable[[], None]) -> Callable[[], None]:
