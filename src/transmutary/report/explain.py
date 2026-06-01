@@ -393,7 +393,8 @@ def explain_trends(
     data_block = _build_data_block(reps_cleaned)
     # Local import: same reasoning as diagnose — keep litellm out of any
     # module that pulls explain in.
-    from ..llm import LLMError, ModelTier, call as _llm_call
+    from ..llm import LLMError, ModelTier
+    from ..llm import call as _llm_call
 
     if call_fn is None:
         call_fn = _llm_call

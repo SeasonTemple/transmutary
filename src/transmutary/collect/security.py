@@ -27,12 +27,12 @@ Security (R23):
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import feedparser
 import httpx
-import re
 
 from ..report.schema import Report, ReportKind, Severity, Source
 from .github import SSRFError, _require_no_redirects
@@ -311,7 +311,8 @@ def build_alert(
     advice = ""
     # Local import: keep litellm out of the import path of anyone pulling
     # collect.security in (e.g. pipeline -> security).
-    from ..llm import LLMError, ModelTier, call as _llm_call
+    from ..llm import LLMError, ModelTier
+    from ..llm import call as _llm_call
 
     if call_fn is None:
         call_fn = _llm_call

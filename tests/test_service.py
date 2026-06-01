@@ -453,7 +453,7 @@ def test_resolving_llm_error_still_works_after_lazy_refactor():
     # Sanity: the lazy LLMError import in filter must still be reachable
     # through the package surface, even though the module top-level
     # no longer imports it.
-    from transmutary.filter import filter_issue_surge, _parse_verdict, _judge  # noqa: F401
+    from transmutary.filter import _judge, _parse_verdict, filter_issue_surge  # noqa: F401
 
     # The local imports inside _judge / _parse_verdict / filter_issue_surge
     # resolve at call time, not import time. Force one path to make sure

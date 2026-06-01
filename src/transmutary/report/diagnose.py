@@ -370,7 +370,8 @@ def diagnose(
 
     # Local import: keep litellm out of the import path of anyone pulling
     # diagnose (pipeline → diagnose used to drag llm in at import time).
-    from ..llm import LLMError, ModelTier, call as _llm_call
+    from ..llm import LLMError, ModelTier
+    from ..llm import call as _llm_call
 
     if call_fn is None:
         call_fn = _llm_call

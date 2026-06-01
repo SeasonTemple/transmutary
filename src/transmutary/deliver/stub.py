@@ -25,7 +25,6 @@ from . import rss as rss_mod
 from .routes import DeliveryRoute
 
 
-
 @dataclass
 class OutboundDelivery:
     """Configuration for real outbound delivery (U15).

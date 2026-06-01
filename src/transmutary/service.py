@@ -36,7 +36,6 @@ from .pipeline import (
     run_security_tick,
     run_trend_tick,
 )
-from .store.state import StateStore
 from .watchlist import effective_repos
 
 logger = logging.getLogger("transmutary.service")

@@ -264,7 +264,10 @@ def build_overview(
     trends = tuple(c for c in cards if c.kind == "explain")
     effective = {entry.repo for entry in watchlist}
     feeds = (
-        FeedLink(route=DeliveryRoute.IMMEDIATE.value, href=f"/feed/{DeliveryRoute.IMMEDIATE.value}"),
+        FeedLink(
+            route=DeliveryRoute.IMMEDIATE.value,
+            href=f"/feed/{DeliveryRoute.IMMEDIATE.value}",
+        ),
         FeedLink(route=DeliveryRoute.DIGEST.value, href=f"/feed/{DeliveryRoute.DIGEST.value}"),
     )
     return Overview(

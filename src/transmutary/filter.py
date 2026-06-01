@@ -171,7 +171,8 @@ def _judge(
     # -> pipeline -> filter), and we want the litellm bootstrap to stay out
     # of that import path. The judge is only invoked at runtime, so loading
     # llm here is the right place.
-    from .llm import ModelTier, call as _llm_call
+    from .llm import ModelTier
+    from .llm import call as _llm_call
 
     if call_fn is None:
         call_fn = _llm_call
@@ -304,7 +305,8 @@ def filter_issue_surge(
     # Local import: same reasoning as _judge — keep litellm out of the
     # service -> pipeline -> filter import path. Resolved only when we
     # actually reach the L3 funnel.
-    from .llm import LLMBudgetExceeded, LLMError, call as _llm_call
+    from .llm import LLMBudgetExceeded, LLMError
+    from .llm import call as _llm_call
 
     if call_fn is None:
         call_fn = _llm_call

@@ -28,7 +28,6 @@ revised text is adjudicated identically to the original, never exempted.
 
 from __future__ import annotations
 
-
 # Critique stage: trusted instruction (system slot). The model is told to find
 # weaknesses in the draft WITHOUT inventing facts beyond the supplied evidence —
 # critique tightens the draft, it must not smuggle in new unsupported claims.
@@ -127,7 +126,8 @@ def critique_refine(
     notes: list[str] = []
     # Local import: keep litellm out of the import path of anyone pulling
     # refine in (e.g. report.diagnose -> refine).
-    from ..llm import LLMError, ModelTier, call as _llm_call
+    from ..llm import LLMError, ModelTier
+    from ..llm import call as _llm_call
 
     if call_fn is None:
         call_fn = _llm_call

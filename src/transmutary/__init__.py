@@ -4,8 +4,8 @@ Phase 0 shared skeleton: config + schema, state, artifacts, llm, stub deliver,
 service. Collectors / diagnose / trend belong to Phase 1/2 and are not present.
 """
 
-from transmutary.config import ConfigError
 from transmutary.collect.github import SSRFError
+from transmutary.config import ConfigError
 
 __version__ = "0.11.0"
 
