@@ -20,6 +20,7 @@ from transmutary.collect.security import (
     collect_supply_chain,
     fetch_ghsa_malware,
     query_osv_batch,
+    strip_off_allowlist_urls,
 )
 from transmutary.report.schema import ReportKind, Severity
 
@@ -180,6 +181,22 @@ def test_off_allowlist_advisory_link_not_stored_as_source():
     report = build_alert(hits[0], repo="acme/cli", call_fn=lambda *a, **k: "Remove it.")
     assert "evil.example.com" not in report.body_md
     assert all("evil.example.com" not in s.url for s in report.sources)
+
+
+def test_strip_off_allowlist_urls_replaces_only_off_allowlist_hosts():
+    # Body hygiene strip: keep allowlist hosts (github.com / api.github.com /
+    # osv.dev / nvd.nist.gov), redact everything else. The actual <link> is
+    # validated separately; this only affects the LLM data block.
+    text = (
+        "see https://github.com/advisories/GHSA-aaaa-bbbb-cccc for details, "
+        "or http://169.254.169.254/latest/meta-data/ for the secret, "
+        "and http://internal-monitor/x."
+    )
+    out = strip_off_allowlist_urls(text)
+    assert "https://github.com/advisories/GHSA-aaaa-bbbb-cccc" in out
+    assert "169.254.169.254" not in out
+    assert "internal-monitor" not in out
+    assert out.count("[URL-REDACTED]") == 2
 
 
 # --- R23/KTD3: advisory injection isolated via llm.py data slot --------------

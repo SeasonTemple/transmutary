@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 
 import feedparser
 import httpx
+import re
 
 from .. import llm
 from ..llm import LLMError, ModelTier
@@ -95,6 +96,43 @@ def assert_advisory_url_allowed(url: str) -> None:
     _assert_allowed(url)
 
 
+# Match http(s) URLs greedily up to whitespace, angle, paren, or quote. This is
+# a hygiene strip, not a parser: we never action on the captured URL, only
+# decide whether to keep it in the body. Anything that looks like a URL but
+# fails the regex (e.g. punctuation-balanced) is left untouched.
+_URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
+
+
+def strip_off_allowlist_urls(text: str) -> str:
+    """Replace off-allowlist URLs in advisory text with a redaction marker.
+
+    The advisory body text can reference arbitrary hosts (e.g.
+    ``http://169.254.169.254/...`` or ``http://internal-monitor/``). We never
+    fetch them and the link itself is validated separately by
+    :func:`_safe_advisory_link`, but the body text is still passed to the LLM
+    as data — keeping off-allowlist hostnames in that data block widens the
+    prompt-injection surface (an attacker could plant internal infra names
+    that the model paraphrases back). This strip removes them before the
+    LLM sees the body, preserving allowlist URLs (github.com GHSA references
+    are still useful context) and replacing the rest with ``[URL-REDACTED]``.
+
+    Not a security boundary by itself — the LLM never fetches URLs anyway
+    (KTD3 / data-instruction split) — but cheap prompt hygiene.
+    """
+    if not text:
+        return text
+
+    def _redact(match: re.Match) -> str:
+        url = match.group(0).rstrip(".,;:!?")  # common trailing punctuation
+        try:
+            _assert_allowed(url)
+        except SSRFError:
+            return "[URL-REDACTED]"
+        return match.group(0)
+
+    return _URL_RE.sub(_redact, text)
+
+
 # ---------------------------------------------------------------------------
 # OSV querybatch (deterministic)
 # ---------------------------------------------------------------------------
@@ -148,7 +186,9 @@ def query_osv_batch(
                     package=name,
                     ecosystem=eco,
                     ids=ids,
-                    summary="; ".join(str(v.get("summary", "")) for v in vulns if v.get("summary")),
+                    summary=strip_off_allowlist_urls(
+                        "; ".join(str(v.get("summary", "")) for v in vulns if v.get("summary"))
+                    ),
                     is_malware=any("MAL-" in i or "malware" in i.lower() for i in ids),
                     source_url=f"https://osv.dev/vulnerability/{ids[0]}" if ids else "",
                 )
@@ -203,7 +243,7 @@ def fetch_ghsa_malware(
                 package=pkg or title,
                 ecosystem="npm",
                 ids=[ghsa_id] if ghsa_id else [],
-                summary=f"{title}\n{summary}".strip(),
+                summary=strip_off_allowlist_urls(f"{title}\n{summary}".strip()),
                 is_malware=True,
                 source_url=safe_link,
             )
