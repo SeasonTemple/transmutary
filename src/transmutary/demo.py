@@ -51,6 +51,7 @@ from .config import (
     TrendScope,
     Watchlist,
 )
+from .deliver.routes import DeliveryRoute
 from .pipeline import (
     build_runtime,
     run_release_issue_tick,
@@ -510,8 +511,8 @@ def main(argv: list[str] | None = None) -> int:
     paths = _print_tree(artifact_root)
 
     # --- Show one diagnosis + one trend report excerpt so the output is tangible ---
-    immediate_sep = os.sep + "_delivered" + os.sep + "immediate" + os.sep
-    digest_sep = os.sep + "_delivered" + os.sep + "digest" + os.sep
+    immediate_sep = os.sep + "_delivered" + os.sep + DeliveryRoute.IMMEDIATE.value + os.sep
+    digest_sep = os.sep + "_delivered" + os.sep + DeliveryRoute.DIGEST.value + os.sep
     delivered_immediate = sorted(p for p in paths if immediate_sep in p)
     delivered_digest = sorted(p for p in paths if digest_sep in p)
     print("\n" + "-" * 72)

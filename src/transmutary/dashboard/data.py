@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..config import Settings
+from ..deliver.routes import DeliveryRoute
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
 from ..watchlist import effective_repos
@@ -263,8 +264,8 @@ def build_overview(
     trends = tuple(c for c in cards if c.kind == "explain")
     effective = {entry.repo for entry in watchlist}
     feeds = (
-        FeedLink(route="immediate", href="/feed/immediate"),
-        FeedLink(route="digest", href="/feed/digest"),
+        FeedLink(route=DeliveryRoute.IMMEDIATE.value, href=f"/feed/{DeliveryRoute.IMMEDIATE.value}"),
+        FeedLink(route=DeliveryRoute.DIGEST.value, href=f"/feed/{DeliveryRoute.DIGEST.value}"),
     )
     return Overview(
         watchlist=watchlist,
