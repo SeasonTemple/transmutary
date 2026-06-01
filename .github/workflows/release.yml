@@ -67,12 +67,14 @@ jobs:
           gh release edit "$RELEASE_TAG" --notes-file "docs/release-notes/$RELEASE_TAG.md"
 
       - name: Docker | Checkout released tag
+        id: released_ref
         if: steps.release.outputs.released == 'true'
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           git fetch --tags --force
           git checkout "$RELEASE_TAG"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Docker | Set up Buildx
         if: steps.release.outputs.released == 'true'
@@ -92,10 +94,14 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/seasontemple/transmutary
+          flavor: |
+            latest=false
           tags: |
             type=raw,value=${{ steps.release.outputs.tag }}
             type=semver,pattern={{version}},value=${{ steps.release.outputs.tag }}
             type=raw,value=latest
+          labels: |
+            org.opencontainers.image.revision=${{ steps.released_ref.outputs.sha }}
 
       - name: Docker | Build and push GHCR image
         if: steps.release.outputs.released == 'true'
