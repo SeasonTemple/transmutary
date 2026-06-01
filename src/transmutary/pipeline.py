@@ -195,19 +195,25 @@ def _embed_fn(rt: PipelineRuntime):
     return embed_fn
 
 
-def _ts_to_float(iso_ts: str) -> float:
-    """Best-effort ISO-8601 → epoch seconds for issue clustering (deterministic)."""
+def _ts_to_float(iso_ts: str) -> float | None:
+    """Best-effort ISO-8601 → epoch seconds for issue clustering (deterministic).
+
+    Returns ``None`` when the input is empty or unparseable. Callers (filter /
+    baseline) treat ``None`` as "no timing data" rather than silently coercing
+    to epoch zero — that would mis-cluster garbage timestamps at the start of
+    the L1 window and produce false-positive cold-start hits.
+    """
     from datetime import datetime, timezone
 
     if not iso_ts:
-        return 0.0
+        return None
     try:
         dt = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.timestamp()
     except (ValueError, TypeError):
-        return 0.0
+        return None
 
 
 def _deliver_report(rt: PipelineRuntime, report, urgency: Severity | None) -> None:
@@ -401,7 +407,7 @@ def _update_issue_baseline(
     """
     from .filter import COLD_START_WINDOW_SECONDS
 
-    ts_values = [o.ts for o in observations if o.ts]
+    ts_values = [o.ts for o in observations if o.ts is not None]
     if len(ts_values) >= 2:
         span = max(ts_values) - min(ts_values)
         window = span if span > 0 else COLD_START_WINDOW_SECONDS
