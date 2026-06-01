@@ -28,7 +28,7 @@
     <div class="side-foot">
       <button class="lang-btn" type="button" aria-label="toggle language"><svg viewBox="0 0 16 16" class="ic" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13M8 1.5c2 2 2 11 0 13M8 1.5c-2 2-2 11 0 13"/></svg><span class="lang-label" data-i18n="lang.toggle">{{ t['lang.toggle'] }}</span></button>
       <button class="theme-btn" type="button" aria-label="toggle theme"><svg viewBox="0 0 16 16" class="ic" aria-hidden="true"><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M13 3l-1.5 1.5M4.5 11.5L3 13"/><circle cx="8" cy="8" r="3"/></svg><span class="theme-label">{{ t['theme.system'] }}</span></button>
-      <span class="ro" data-i18n="ro">{{ t['ro'] }}</span>
+      <span class="ro">{{ t['rw'] if writes_enabled else t['ro'] }}</span>
     </div>
   </aside>
   <main class="main">

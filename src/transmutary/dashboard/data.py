@@ -54,11 +54,12 @@ def _safe_url(url: str | None) -> str | None:
 class WatchEntry:
     repo: str
     source: str  # "config" | promoted source (e.g. "mode-b" / "manual")
+    demotable: bool
 
     def to_dict(self) -> dict:
         # Explicit allow-list (NOT dataclasses.asdict) so a future field added to
         # this dataclass can never silently leak into the JSON surface (R-S2).
-        return {"repo": self.repo, "source": self.source}
+        return {"repo": self.repo, "source": self.source, "demotable": self.demotable}
 
 
 @dataclass(frozen=True)
@@ -123,6 +124,8 @@ class RepoRuntime:
     latest_stars: int | None
     star_growth: int | None  # latest - earliest snapshot, when ≥2 snapshots
     cursor: str | None
+    promotable: bool
+    demotable: bool
 
     def to_dict(self) -> dict:
         # Explicit allow-list (NOT dataclasses.asdict) so a future field can never
@@ -135,6 +138,8 @@ class RepoRuntime:
             "latest_stars": self.latest_stars,
             "star_growth": self.star_growth,
             "cursor": self.cursor,
+            "promotable": self.promotable,
+            "demotable": self.demotable,
         }
 
 
@@ -155,6 +160,7 @@ class Overview:
     supply_chain_alerts: tuple[ReportCard, ...]
     trend_candidates: tuple[ReportCard, ...]
     feeds: tuple[FeedLink, ...]
+    promotable_repos: frozenset[str]
 
     def to_dict(self) -> dict:
         return {
@@ -163,6 +169,7 @@ class Overview:
             "supply_chain_alerts": [c.to_dict() for c in self.supply_chain_alerts],
             "trend_candidates": [c.to_dict() for c in self.trend_candidates],
             "feeds": [f.to_dict() for f in self.feeds],
+            "promotable_repos": sorted(self.promotable_repos),
         }
 
 
@@ -230,9 +237,15 @@ def build_watchlist(settings: Settings, store: StateStore) -> tuple[WatchEntry, 
     entries = []
     for repo in effective_repos(settings, store):
         if repo in config_repos:
-            entries.append(WatchEntry(repo=repo, source="config"))
+            entries.append(WatchEntry(repo=repo, source="config", demotable=False))
         else:
-            entries.append(WatchEntry(repo=repo, source=promoted_source.get(repo, "promoted")))
+            entries.append(
+                WatchEntry(
+                    repo=repo,
+                    source=promoted_source.get(repo, "promoted"),
+                    demotable=True,
+                )
+            )
     return tuple(entries)
 
 
@@ -248,6 +261,7 @@ def build_overview(
     cards = _all_cards(artifacts)
     alerts = tuple(c for c in cards if c.severity in _ALERT_SEVERITIES)
     trends = tuple(c for c in cards if c.kind == "explain")
+    effective = {entry.repo for entry in watchlist}
     feeds = (
         FeedLink(route="immediate", href="/feed/immediate"),
         FeedLink(route="digest", href="/feed/digest"),
@@ -258,6 +272,7 @@ def build_overview(
         supply_chain_alerts=alerts[:limit],
         trend_candidates=trends[:limit],
         feeds=feeds,
+        promotable_repos=frozenset(c.repo for c in trends[:limit] if c.repo not in effective),
     )
 
 
@@ -294,6 +309,8 @@ def build_repo_runtime(
         latest_stars=latest_stars,
         star_growth=star_growth,
         cursor=store.get_cursor(repo),
+        promotable=repo not in watchlist,
+        demotable=watchlist.get(repo) not in (None, "config", "archived"),
     )
     cards = tuple(
         _card_from_meta(repo, ref, meta)

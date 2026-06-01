@@ -7,7 +7,10 @@
   <span class="pill">{{ runtime.source }}</span>
   {% if runtime.in_watchlist %}<span class="pill" data-i18n="tag.observed">{{ t['tag.observed'] }}</span>
   {% else %}<span class="pill dim" data-i18n="tag.archived">{{ t['tag.archived'] }}</span>{% endif %}
-</h1></header>
+</h1>
+{% if runtime.promotable %}<a class="action-link" href="/promote?repo={{ runtime.repo }}">{{ t['promote'] }}</a>{% endif %}
+{% if runtime.demotable %}<a class="action-link" href="/demote?repo={{ runtime.repo }}">{{ t['demote'] }}</a>{% endif %}
+</header>
 
 <h2 class="sec" data-i18n="sec.runtime">{{ t['sec.runtime'] }}</h2>
 <div class="card"><table class="tbl kv">

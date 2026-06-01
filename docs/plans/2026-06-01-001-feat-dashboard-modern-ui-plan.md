@@ -1,13 +1,20 @@
 ---
 title: "feat: Dashboard 现代化重做（v2 UI + i18n + agent-native + a11y）"
 type: feat
-status: active
+status: completed
 date: 2026-06-01
 origin: docs/brainstorms/2026-05-29-repo-observation-system-requirements.md
 predecessor: docs/plans/2026-05-31-003-feat-readonly-web-dashboard-plan.md
+superseded_by: docs/plans/2026-06-01-002-feat-dashboard-promote-ui-plan.md
 ---
 
 # feat: Dashboard 现代化重做（v2 UI + i18n + agent-native + a11y）
+
+> Status note: this plan records the dashboard v2 UI phase before write
+> endpoints. Its read-only/GET-only assumptions were intentionally superseded by
+> `docs/plans/2026-06-01-002-feat-dashboard-promote-ui-plan.md`, which adds
+> CSRF-protected promote/demote writes while keeping JSON/data endpoints
+> read-only.
 
 ## Summary
 

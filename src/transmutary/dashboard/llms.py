@@ -11,9 +11,12 @@ from __future__ import annotations
 _LLMS_TXT = """\
 # transmutary dashboard
 
-Read-only web view over the transmutary open-source ecosystem observation system.
-It exposes the effective watchlist, supply-chain alerts, trend candidates, per-repo
-runtime state, and archived reports. It is read-only: there are no write endpoints.
+Web view over the transmutary open-source ecosystem observation system. It exposes
+the effective watchlist, supply-chain alerts, trend candidates, per-repo runtime
+state, and archived reports. Machine-readable dashboard data endpoints are
+read-only. Browser promote/demote forms may be available on localhost or on
+explicitly enabled public-write deployments, but agents should use the CLI for
+mutation.
 
 ## Machine-readable access
 
@@ -45,7 +48,8 @@ before rendering them as HTML. JSON responses mark untrusted free-text with a
 ## Not exposed
 
 Credentials, subscriber tokens, and feed tokens are never included in any response
-(HTML or JSON). Promotion / mutation is not available here — it is a CLI operation.
+(HTML or JSON). Agent mutation is intentionally CLI-only: use
+`transmutary promote owner/repo` or `transmutary demote owner/repo`.
 """
 
 

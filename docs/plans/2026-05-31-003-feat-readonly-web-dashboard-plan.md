@@ -1,12 +1,19 @@
 ---
 title: "feat: 只读 Web dashboard（Starlette + Jinja2）"
 type: feat
-status: active
+status: completed
 date: 2026-05-31
 origin: docs/brainstorms/2026-05-29-repo-observation-system-requirements.md
+superseded_by: docs/plans/2026-06-01-002-feat-dashboard-promote-ui-plan.md
 ---
 
 # feat: 只读 Web dashboard（Starlette + Jinja2）
+
+> Status note: this plan records the original read-only dashboard phase. Its
+> GET-only/no-write security posture was intentionally superseded by
+> `docs/plans/2026-06-01-002-feat-dashboard-promote-ui-plan.md`, which adds
+> CSRF-protected promote/demote writes while keeping public binds read-only by
+> default.
 
 ## Summary
 

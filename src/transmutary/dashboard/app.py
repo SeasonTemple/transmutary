@@ -1,9 +1,12 @@
-"""Read-only dashboard ASGI app + entrypoint (U3/U4).
+"""Dashboard ASGI app + entrypoint (U3/U4).
 
 A Starlette app (same stack as ``deliver/server.py``) that renders the view
 models from :mod:`.data`. Security posture (KTD-Dash-5):
 
-  * **GET-only** — no mutation endpoint exists (R-D7).
+  * **Read-mostly by default** — public binds stay read-only unless explicitly
+    opted into writes; localhost can promote/demote via protected POST forms.
+  * **CSRF-protected writes** — promote/demote require double-submit CSRF,
+    Origin/Referer checks, SameSite cookies, and server confirmation.
   * **Host-header allow-list** (R-D14) — rejects requests whose ``Host`` is not a
     localhost name, defeating DNS-rebinding of the localhost bind.
   * **Security response headers** (R-D18) — CSP / nosniff / frame-deny on every
@@ -19,8 +22,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import secrets
+import sqlite3
 import sys
+from urllib.parse import parse_qs
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -30,6 +36,7 @@ from starlette.responses import (
     FileResponse,
     JSONResponse,
     PlainTextResponse,
+    RedirectResponse,
     Response,
 )
 from starlette.routing import Route
@@ -38,6 +45,7 @@ from ..config import Settings
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
 from . import data, i18n
+from .csrf import CSRF_COOKIE, CSRFMiddleware, _host_only, check_origin, verify_token
 from .llms import render_llms_txt
 
 try:  # jinja2 ships in the optional `dashboard` extra (KTD-Dash-2).
@@ -53,16 +61,19 @@ _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 _DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]", "::1"})
 _DEFAULT_PORT = 8787
+_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
+    "Referrer-Policy": "same-origin",
 }
 
 # CSP without a nonce — used on error responses (no inline script) and as the
 # fail-closed fallback. script-src 'self' alone blocks inline scripts entirely.
-_CSP_NO_NONCE = "default-src 'self'; script-src 'self'; style-src 'self'"
+_CSP_NO_NONCE = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; form-action 'self'"
+)
 
 
 def _csp_with_nonce(nonce: str) -> str:
@@ -75,7 +86,11 @@ def _csp_with_nonce(nonce: str) -> str:
     """
     if not nonce:
         return _CSP_NO_NONCE
-    return f"default-src 'self'; script-src 'self' 'nonce-{nonce}'; style-src 'self'"
+    return (
+        "default-src 'self'; "
+        f"script-src 'self' 'nonce-{nonce}'; "
+        "style-src 'self'; form-action 'self'"
+    )
 
 
 class _MissingJinja(RuntimeError):
@@ -90,25 +105,10 @@ def _require_jinja() -> None:
         )
 
 
-def _host_only(host: str) -> str:
-    """Extract the hostname from a Host header, robust to IPv6 literals (R-D14).
-
-    ``[::1]:8787`` and ``[::1]`` → ``[::1]``; ``127.0.0.1:8787`` → ``127.0.0.1``;
-    bare ``::1`` (no brackets) is returned as-is. Only a trailing ``:port`` after a
-    bracketed IPv6 or on a plain host is stripped — never an interior IPv6 colon.
-    """
-    if not host:
-        return ""
-    if host.startswith("["):
-        end = host.find("]")
-        if end != -1:
-            return host[: end + 1]  # keep the brackets to match the allowlist
-        return host
-    # Plain host or IPv4: strip a single trailing :port if present. A bare IPv6
-    # like '::1' has multiple colons and no port → leave it untouched.
-    if host.count(":") == 1:
-        return host.rsplit(":", 1)[0]
-    return host
+def _valid_repo(repo: str) -> bool:
+    if "://" in repo:
+        return False
+    return bool(_REPO_RE.match(repo))
 
 
 class HostAllowlistMiddleware(BaseHTTPMiddleware):
@@ -160,8 +160,10 @@ def make_dashboard_app(
     artifacts: ArtifactStore,
     *,
     allowed_hosts: frozenset[str] | None = None,
+    write_store: StateStore | None = None,
+    csrf_secure: bool = False,
 ) -> Starlette:
-    """Build the read-only dashboard ASGI app (no server bound)."""
+    """Build the dashboard ASGI app (no server bound)."""
     _require_jinja()
     templates = Jinja2Templates(directory=_TEMPLATES_DIR)  # autoescape on (R-D10)
     allowed = allowed_hosts if allowed_hosts is not None else _DEFAULT_ALLOWED_HOSTS
@@ -185,6 +187,8 @@ def make_dashboard_app(
             "html_lang": i18n.HTML_LANG[lang],
             "t": i18n.messages_for(lang),
             "nonce": request.scope.get("csp_nonce", ""),
+            "csrf_token": request.scope.get("csrf_token", ""),
+            "writes_enabled": write_store is not None,
             **extra,
         }
 
@@ -225,6 +229,88 @@ def make_dashboard_app(
             context=_ctx(request, {"view": view}),
         )
 
+    def _write_disabled() -> Response:
+        return PlainTextResponse("Not Found", status_code=404)
+
+    def _error(request: Request, key: str, status_code: int) -> Response:
+        message = i18n.messages_for(_lang(request))[key]
+        return templates.TemplateResponse(
+            request=request,
+            name="error.html",
+            context=_ctx(request, {"message": message, "error_key": key}),
+            status_code=status_code,
+        )
+
+    async def promote_confirm(request: Request) -> Response:
+        if write_store is None:
+            return _write_disabled()
+        repo = request.query_params.get("repo", "")
+        if not _valid_repo(repo):
+            return _error(request, "error_invalid_repo", 400)
+        return templates.TemplateResponse(
+            request=request,
+            name="confirm.html",
+            context=_ctx(
+                request,
+                {
+                    "action": "/promote",
+                    "repo": repo,
+                    "question": i18n.messages_for(_lang(request))["confirm_promote_q"],
+                },
+            ),
+        )
+
+    async def demote_confirm(request: Request) -> Response:
+        if write_store is None:
+            return _write_disabled()
+        repo = request.query_params.get("repo", "")
+        if not _valid_repo(repo):
+            return _error(request, "error_invalid_repo", 400)
+        return templates.TemplateResponse(
+            request=request,
+            name="confirm.html",
+            context=_ctx(
+                request,
+                {
+                    "action": "/demote",
+                    "repo": repo,
+                    "question": i18n.messages_for(_lang(request))["confirm_demote_q"],
+                },
+            ),
+        )
+
+    async def _write_action(request: Request, action: str) -> Response:
+        if write_store is None:
+            return _write_disabled()
+        if not check_origin(request, allowed):
+            return _error(request, "error_csrf", 403)
+        body = (await request.body()).decode("utf-8", errors="replace")
+        form = parse_qs(body, keep_blank_values=True)
+        repo = form.get("repo", [""])[0]
+        csrf_token = form.get("csrf_token", [""])[0]
+        if not verify_token(csrf_token, request.cookies.get(CSRF_COOKIE)):
+            return _error(request, "error_csrf", 403)
+        if not _valid_repo(repo):
+            return _error(request, "error_invalid_repo", 400)
+        if action == "demote" and not write_store.is_promoted(repo):
+            return _error(request, "error_not_promoted", 400)
+        try:
+            if action == "promote":
+                write_store.promote_repo(repo)
+            else:
+                write_store.demote_repo(repo)
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc).lower():
+                return _error(request, "write_busy", 503)
+            raise
+        return RedirectResponse("/", status_code=303)
+
+    async def promote_action(request: Request) -> Response:
+        return await _write_action(request, "promote")
+
+    async def demote_action(request: Request) -> Response:
+        return await _write_action(request, "demote")
+
     async def healthz(request: Request) -> Response:
         return PlainTextResponse("ok")
 
@@ -259,6 +345,10 @@ def make_dashboard_app(
         Route("/", index, methods=["GET"]),
         Route("/repo/{owner}/{repo}", repo_page, methods=["GET"]),
         Route("/report/{owner}/{repo}/{filename}", report_page, methods=["GET"]),
+        Route("/promote", promote_confirm, methods=["GET"]),
+        Route("/promote", promote_action, methods=["POST"]),
+        Route("/demote", demote_confirm, methods=["GET"]),
+        Route("/demote", demote_action, methods=["POST"]),
         Route("/healthz", healthz, methods=["GET"]),
         Route("/llms.txt", llms_txt, methods=["GET"]),
         Route("/static/dashboard.css", stylesheet, methods=["GET"]),
@@ -266,6 +356,7 @@ def make_dashboard_app(
     ]
     middleware = [
         Middleware(HostAllowlistMiddleware, allowed_hosts=allowed),
+        Middleware(CSRFMiddleware, enabled=write_store is not None, secure=csrf_secure),
         Middleware(CSPNonceMiddleware),
     ]
     return Starlette(
@@ -287,7 +378,7 @@ def resolve_bind(host: str, port: int, *, allow_public: bool) -> tuple[str, int]
     line, since it would expose private intelligence with no auth. When public is
     explicitly allowed, a warning is still emitted.
     """
-    is_local = host in {"127.0.0.1", "localhost", "::1", "[::1]"}
+    is_local = is_local_bind(host)
     if not is_local and not allow_public:
         raise SystemExit(
             f"refusing to bind dashboard to non-localhost host {host!r} without "
@@ -301,6 +392,30 @@ def resolve_bind(host: str, port: int, *, allow_public: bool) -> tuple[str, int]
             host,
         )
     return host, port
+
+
+def is_local_bind(host: str) -> bool:
+    return host in {"127.0.0.1", "localhost", "::1", "[::1]"}
+
+
+def resolve_write_store(
+    settings: Settings,
+    *,
+    is_local: bool,
+    allow_public_writes: bool,
+) -> StateStore | None:
+    if not is_local and not allow_public_writes:
+        return None
+    if not is_local:
+        logger.warning(
+            "dashboard PUBLIC write endpoints enabled — no built-in identity auth; "
+            "front with an HTTPS authenticating proxy plus rate limits/allowlists"
+        )
+    return StateStore(
+        settings.delivery.state_db_path,
+        read_only=False,
+        busy_timeout_ms=3000,
+    )
 
 
 def _allowed_hosts_for(host: str) -> frozenset[str]:
@@ -324,6 +439,14 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real serv
         action="store_true",
         help="permit binding to a non-localhost host (no built-in auth — use a proxy)",
     )
+    parser.add_argument(
+        "--allow-public-writes",
+        action="store_true",
+        help=(
+            "enable promote/demote endpoints on public binds; requires an HTTPS "
+            "authenticating proxy with rate limits"
+        ),
+    )
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
     host, port = resolve_bind(args.host, args.port, allow_public=args.allow_public)
@@ -333,12 +456,22 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real serv
     # A read-only viewer needs no credentials — do not load them (avoids forcing
     # all TRANSMUTARY_* secrets into the process just to view the dashboard).
     settings = load_settings(config_dir, require_credentials=False)
-    # Open the state DB strictly read-only: the dashboard never writes and must not
-    # contend with a live service's writes.
+    # Open the render store strictly read-only. Any enabled promote/demote writes
+    # use the separate RW write_store handle below.
     store = StateStore(settings.delivery.state_db_path, read_only=True)
+    write_store = resolve_write_store(
+        settings,
+        is_local=is_local_bind(host),
+        allow_public_writes=args.allow_public_writes,
+    )
     artifacts = ArtifactStore(settings.delivery.artifact_root)
     app = make_dashboard_app(
-        settings, store, artifacts, allowed_hosts=_allowed_hosts_for(host)
+        settings,
+        store,
+        artifacts,
+        allowed_hosts=_allowed_hosts_for(host),
+        write_store=write_store,
+        csrf_secure=not is_local_bind(host) and args.allow_public_writes,
     )
 
     import uvicorn

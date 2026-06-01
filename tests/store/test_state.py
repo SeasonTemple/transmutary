@@ -36,6 +36,33 @@ def test_tables_created(store):
     assert expected <= names
 
 
+def test_busy_timeout_ms_sets_sqlite_pragma(tmp_path):
+    db = tmp_path / "state.sqlite"
+    store = StateStore(str(db), busy_timeout_ms=3000)
+    try:
+        cur = store._conn.execute("PRAGMA busy_timeout")
+        assert cur.fetchone()[0] == 3000
+    finally:
+        store.close()
+
+
+def test_rw_store_reopens_existing_wal_database(tmp_path):
+    db = tmp_path / "state.sqlite"
+    first = StateStore(str(db))
+    try:
+        first.promote_repo("seed/repo")
+    finally:
+        first.close()
+
+    second = StateStore(str(db), busy_timeout_ms=3000)
+    try:
+        assert second.is_promoted("seed/repo") is True
+        second.promote_repo("hot/repo")
+        assert second.is_promoted("hot/repo") is True
+    finally:
+        second.close()
+
+
 def test_fingerprint_crud_and_upsert(store):
     assert store.upsert_fingerprint("tag-v1.2.3", "a/b", "release") == 1
     # Duplicate fingerprint → evidence_count++, no new row.
