@@ -43,6 +43,7 @@ from .collect.trend import TrendCandidate, collect_trends
 from .config import Credentials, Settings
 from .dedup import SourceItem, dedup_advisory, dedup_release
 from .deliver.stub import OutboundDelivery, deliver
+from .effective_config import effective_delivery, effective_trend_scope
 from .filter import ConservativeReview, IssueObservation, filter_issue_surge
 from .report.diagnose import EventContext, diagnose
 from .report.explain import explain_trends
@@ -141,8 +142,17 @@ def build_runtime(
     recipients AND smtp_host are present (KTD-D); with neither, the deployment is
     RSS-only.
     """
-    delivery = settings.delivery
-    store = store if store is not None else StateStore(delivery.state_db_path)
+    base_delivery = settings.delivery
+    store = store if store is not None else StateStore(base_delivery.state_db_path)
+    delivery = effective_delivery(settings, store)
+    if delivery != base_delivery:
+        settings = Settings(
+            watchlist=settings.watchlist,
+            trend_scope=settings.trend_scope,
+            delivery=delivery,
+            llm_base_url=settings.llm_base_url,
+            credentials=settings.credentials,
+        )
     client = client if client is not None else make_client()
     artifacts = artifacts if artifacts is not None else ArtifactStore(delivery.artifact_root)
 
@@ -553,7 +563,7 @@ def run_trend_tick(
     base_url = _llm_base_url(rt)
     result = TrendTickResult()
 
-    scope = rt.settings.trend_scope
+    scope = effective_trend_scope(rt.settings, rt.store)
     collected = collect_trends(
         rt.client,
         rt.store,

@@ -69,6 +69,14 @@ transmutary-demo
 
 运行还会打印产物树 + 几段渲染报告摘录，让你直接读到它会投递的输出。照抄上面两条命令即可复现——零配置。
 
+CLI/demo 文案变化后，用下面命令刷新 README 终端 GIF：
+
+```bash
+vhs assets/demo.tape
+```
+
+`assets/demo.tape` 只录离线 `transmutary-demo` 命令。Web 看板图（`assets/dashboard.png`）应从浏览器截图刷新，这样 admin UI 才是用户真实看到的样子。
+
 ## 工作原理
 
 ```
@@ -175,9 +183,11 @@ cp .env.example .env            # 填凭据（gitignored，不入镜像）
 # 备好 ./config/{watchlist,trend_scope,delivery}.yaml
 #   delivery.yaml：state_db_path 与 artifact_root 指向 /var/lib/transmutary 下
 docker compose up -d
+# 可选：本机 dashboard/admin UI
+docker compose --profile dashboard up -d dashboard
 ```
 
-镜像以非 root 用户运行；凭据运行时从 `.env` 注入；状态 DB 与私有产物持久化在 `transmutary-state` 卷。无 Docker 时直接跑入口：`transmutary-serve`（读 `TRANSMUTARY_CONFIG_DIR`，默认 `config`）。
+镜像以非 root 用户运行；凭据运行时从 `.env` 注入；状态 DB 与私有产物持久化在 `transmutary-state` 卷。dashboard profile 共享同一份 config 挂载与 state 卷，默认只绑定宿主机 `127.0.0.1:8787`，Settings UI 需要 `TRANSMUTARY_ADMIN_TOKEN`。若要公网访问，应放在 HTTPS / 鉴权 / 限流反代后。无 Docker 时直接跑入口：`transmutary-serve` 与 `transmutary-dashboard`（均读 `TRANSMUTARY_CONFIG_DIR`，默认 `config`）。
 
 ## 看板
 
@@ -188,9 +198,13 @@ pip install -e ".[dashboard]"     # 加 jinja2（Starlette/uvicorn 已是核心�
 transmutary-dashboard             # 默认 http://127.0.0.1:8787
 ```
 
-复用现有 Starlette 栈与 store 接口。localhost 下可在看板通过服务端确认流 promote/demote 模式 B 候选仓；POST 只写共享的 `promoted_repo` 表，常驻 service 下一轮 reconcile 自动拾取，无需重启。安全姿态：默认绑 `127.0.0.1`；非 localhost 绑定**硬拒**除非显式传 `--allow-public`；公网绑定默认仍**只读**，必须再传 `--allow-public-writes` 才暴露写端点。写请求要求 double-submit CSRF token、`SameSite=Strict` cookie、Origin/Referer host 校验、同源 form action 与确认页。公网写没有内建身份鉴权——启用前必须放在 HTTPS 鉴权代理后，并在代理层加速率限制 / 仓名白名单。
+复用现有 Starlette 栈与 store 接口。localhost 下可在看板通过服务端确认流 promote/demote 模式 B 候选仓；POST 只写共享的 `promoted_repo` 表，常驻 service 下一轮 reconcile 自动拾取，无需重启。
 
-外部仓库内容 HTML 转义防 XSS，危险 source URL 会被清空，凭据/token 绝不上页。看板写路径不编辑 `watchlist.yaml` / `trend_scope.yaml`；这些高风险配置写入与完整 token 身份鉴权仍延后。
+Settings 区是带身份认证的 admin control plane，用于非 secret 配置：添加/移除跟踪仓、添加手工依赖边、编辑趋势 topics/keywords、调整邮件收件人与 digest hour。它**不直接改 YAML 文件**。有效运行时配置 = `YAML base ∪ SQLite admin overrides ∪ promoted_repo`；service reconcile job 会免重启拾取仓库范围变化。Provider secrets 仍只走 env：GitHub/SMTP/RSS/LLM 凭据不会通过 UI 输入、不会渲染、不会持久化；UI 只显示 configured/missing 状态。
+
+安全姿态：默认绑 `127.0.0.1`；非 localhost 绑定**硬拒**除非显式传 `--allow-public`；公网绑定默认仍**只读**，必须再传 `--allow-public-writes` 才暴露写端点。Settings 写入要求 `TRANSMUTARY_ADMIN_TOKEN` 登录、签名 HttpOnly session cookie、double-submit CSRF、`SameSite=Strict`、Origin/Referer host 校验、同源 form action 与服务端校验。公网 admin 仍应放在 HTTPS、限流、仓名白名单之后。
+
+外部仓库内容 HTML 转义防 XSS，危险 source URL 会被清空，凭据/token 绝不上页。文件系统路径（`state_db_path`、`artifact_root`、`feed_dir`）与 provider 凭据仍归 YAML/env 管理。
 
 界面为现代侧边栏看板（stat tiles、Sentry 式 issue-stream 告警、severity 用色+图标+文字三通道编码便于无障碍），带亮/暗主题切换与中/英语言切换（均记忆，且服务端首屏即渲染对应语言，无闪屏）。per-request CSP nonce 让内联主题首屏脚本精确放行而不弱化策略。
 
@@ -235,7 +249,7 @@ git config commit.template .gitmessage
 
 ### 路线图
 
-按设计延后：channel 接口抽象、看板 token 身份鉴权、Web 编辑 `watchlist.yaml` / `trend_scope.yaml`、订阅配置、真实常驻跑。（Web 看板、一键 promote/demote UI、L2 语义分组、可选的 critique→refine 报告增强均已实现——见[看板](#看板)与[工作原理：可选的批判→修订](#工作原理可选的批判修订r11)。）
+按设计延后：channel 接口抽象、Web secret 存储/轮换、多用户 RBAC/OAuth、订阅配置、真实常驻控制。（Web 看板、admin 非 secret 设置 UI、一键 promote/demote UI、L2 语义分组、可选的 critique→refine 报告增强均已实现——见[看板](#看板)与[工作原理：可选的批判→修订](#工作原理可选的批判修订r11)。）
 
 ### 测试
 

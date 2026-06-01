@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}transmutary — {{ t['page.settings'] }}{% endblock %}
+{% block title_key %}page.settings{% endblock %}
+{% block content %}
+
+{% set missing_secrets = settings_view.secrets | rejectattr('configured') | list | length %}
+{% set admin_repos = settings_view.repos | selectattr('source', 'equalto', 'admin') | list | length %}
+{% set admin_rows = admin_repos + (settings_view.admin_dependency_edges | length) %}
+
+<header class="topbar settings-head">
+  <div>
+    <p class="eyebrow">transmutary admin</p>
+    <h1 data-i18n="settings_overview">{{ t['settings_overview'] }}</h1>
+    <p class="lead" data-i18n="admin_access_note">{{ t['admin_access_note'] }}</p>
+  </div>
+</header>
+
+{% if error_key %}<p class="empty">{{ t[error_key] }}</p>{% endif %}
+
+<section class="status-strip" aria-label="settings summary">
+  <div class="status-item">
+    <span data-i18n="status_repos">{{ t['status_repos'] }}</span>
+    <strong>{{ settings_view.repos | length }}</strong>
+  </div>
+  <div class="status-item">
+    <span data-i18n="status_overrides">{{ t['status_overrides'] }}</span>
+    <strong>{{ admin_rows }}</strong>
+  </div>
+  <div class="status-item">
+    <span data-i18n="status_digest">{{ t['status_digest'] }}</span>
+    <strong>{{ settings_view.digest_hour }}</strong>
+  </div>
+  <div class="status-item{% if missing_secrets %} warn{% endif %}">
+    <span data-i18n="status_missing_secrets">{{ t['status_missing_secrets'] }}</span>
+    <strong>{{ missing_secrets }}</strong>
+  </div>
+</section>
+
+<nav class="settings-nav" aria-label="settings sections">
+  <a href="#repos" data-i18n="settings_nav_repos">{{ t['settings_nav_repos'] }}</a>
+  <a href="#edges" data-i18n="settings_nav_edges">{{ t['settings_nav_edges'] }}</a>
+  <a href="#trends" data-i18n="settings_nav_trends">{{ t['settings_nav_trends'] }}</a>
+  <a href="#delivery" data-i18n="settings_nav_delivery">{{ t['settings_nav_delivery'] }}</a>
+  <a href="#runtime" data-i18n="settings_nav_runtime">{{ t['settings_nav_runtime'] }}</a>
+</nav>
+
+<div class="settings-grid">
+  <section class="settings-panel" id="repos" aria-labelledby="repos-title">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow" data-i18n="settings_nav_repos">{{ t['settings_nav_repos'] }}</p>
+        <h2 id="repos-title" data-i18n="settings_repos">{{ t['settings_repos'] }}</h2>
+        <p class="panel-note" data-i18n="settings_repo_add_note">{{ t['settings_repo_add_note'] }}</p>
+      </div>
+    </div>
+    <form method="post" action="/settings/repos" class="settings-form compact-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="field"><span data-i18n="th.repo">{{ t['th.repo'] }}</span><input name="repo" value="{{ form_repo or '' }}" placeholder="owner/repo"></label>
+      <button class="action primary" type="submit" data-i18n="add">{{ t['add'] }}</button>
+    </form>
+    <div class="table-shell"><table class="tbl">
+      <thead><tr><th scope="col" data-i18n="th.repo">{{ t['th.repo'] }}</th><th scope="col" data-i18n="th.source">{{ t['th.source'] }}</th><th scope="col"></th></tr></thead>
+      <tbody>
+      {% for entry in settings_view.repos %}
+      <tr>
+        <td><a class="repo" href="/repo/{{ entry.repo }}">{{ entry.repo }}</a></td>
+        <td><span class="pill{% if entry.source != 'config' %} promo{% endif %}">{{ entry.source }}</span></td>
+        <td class="act">
+          {% if entry.source == 'admin' %}
+          <form method="post" action="/settings/repos/remove" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="repo" value="{{ entry.repo }}">
+            <button class="action" type="submit" data-i18n="remove">{{ t['remove'] }}</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="settings-panel" id="edges" aria-labelledby="edges-title">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow" data-i18n="settings_nav_edges">{{ t['settings_nav_edges'] }}</p>
+        <h2 id="edges-title" data-i18n="settings_edges">{{ t['settings_edges'] }}</h2>
+        <p class="panel-note" data-i18n="settings_edge_note">{{ t['settings_edge_note'] }}</p>
+      </div>
+    </div>
+    <form method="post" action="/settings/edges" class="settings-form compact-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="field"><span data-i18n="th.from">{{ t['th.from'] }}</span><input name="from_repo" placeholder="owner/repo"></label>
+      <label class="field"><span data-i18n="th.to">{{ t['th.to'] }}</span><input name="to_repo" placeholder="owner/repo"></label>
+      <button class="action primary" type="submit" data-i18n="add">{{ t['add'] }}</button>
+    </form>
+    {% if settings_view.admin_dependency_edges %}
+    <div class="table-shell"><table class="tbl">
+      <thead><tr><th scope="col" data-i18n="th.from">{{ t['th.from'] }}</th><th scope="col" data-i18n="th.to">{{ t['th.to'] }}</th><th scope="col"></th></tr></thead>
+      <tbody>
+      {% for from_repo, to_repo in settings_view.admin_dependency_edges %}
+      <tr>
+        <td class="repo">{{ from_repo }}</td><td class="repo">{{ to_repo }}</td>
+        <td class="act"><form method="post" action="/settings/edges/remove" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="from_repo" value="{{ from_repo }}">
+          <input type="hidden" name="to_repo" value="{{ to_repo }}">
+          <button class="action" type="submit" data-i18n="remove">{{ t['remove'] }}</button>
+        </form></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p class="empty" data-i18n="empty_edges">{{ t['empty_edges'] }}</p>{% endif %}
+  </section>
+
+  <section class="settings-panel" id="trends" aria-labelledby="trends-title">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow" data-i18n="settings_nav_trends">{{ t['settings_nav_trends'] }}</p>
+        <h2 id="trends-title" data-i18n="settings_trends">{{ t['settings_trends'] }}</h2>
+        <p class="panel-note" data-i18n="settings_trend_note">{{ t['settings_trend_note'] }}</p>
+      </div>
+    </div>
+    <form method="post" action="/settings/trends" class="settings-form area-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="field"><span data-i18n="topics">{{ t['topics'] }}</span><textarea name="topics">{{ settings_view.trend_topics | join('\n') }}</textarea></label>
+      <label class="field"><span data-i18n="keywords">{{ t['keywords'] }}</span><textarea name="keywords">{{ settings_view.trend_keywords | join('\n') }}</textarea></label>
+      <button class="action primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
+    </form>
+  </section>
+
+  <section class="settings-panel" id="delivery" aria-labelledby="delivery-title">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow" data-i18n="settings_nav_delivery">{{ t['settings_nav_delivery'] }}</p>
+        <h2 id="delivery-title" data-i18n="settings_delivery">{{ t['settings_delivery'] }}</h2>
+        <p class="panel-note" data-i18n="settings_delivery_note">{{ t['settings_delivery_note'] }}</p>
+      </div>
+    </div>
+    <form method="post" action="/settings/delivery" class="settings-form delivery-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="field recipients-field"><span data-i18n="email_recipients">{{ t['email_recipients'] }}</span><textarea name="email_recipients">{{ settings_view.email_recipients | join('\n') }}</textarea></label>
+      <label class="field hour-field"><span data-i18n="digest_hour">{{ t['digest_hour'] }}</span><input name="digest_hour" inputmode="numeric" value="{{ settings_view.digest_hour }}"></label>
+      <button class="action primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
+    </form>
+  </section>
+
+  <section class="settings-panel" id="runtime" aria-labelledby="runtime-title">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow" data-i18n="settings_nav_runtime">{{ t['settings_nav_runtime'] }}</p>
+        <h2 id="runtime-title" data-i18n="settings_runtime_title">{{ t['settings_runtime_title'] }}</h2>
+        <p class="panel-note"><span data-i18n="settings_secret_note">{{ t['settings_secret_note'] }}</span> <span data-i18n="settings_runtime_note">{{ t['settings_runtime_note'] }}</span></p>
+      </div>
+    </div>
+    <div class="runtime-grid">
+      <div class="table-shell"><table class="tbl">
+        <thead><tr><th scope="col" data-i18n="th.value">{{ t['th.value'] }}</th><th scope="col" data-i18n="th.status">{{ t['th.status'] }}</th></tr></thead>
+        <tbody>
+        {% for secret in settings_view.secrets %}
+        <tr><td><code>{{ secret.name }}</code></td><td><span class="pill{% if secret.configured %} promo{% else %} missing{% endif %}" data-i18n="{{ 'configured' if secret.configured else 'missing' }}">{{ t['configured'] if secret.configured else t['missing'] }}</span></td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      <div class="table-shell"><table class="tbl kv">
+        <tbody>
+          <tr><th scope="row">state_db_path</th><td><code>{{ settings_view.state_db_path }}</code></td></tr>
+          <tr><th scope="row">artifact_root</th><td><code>{{ settings_view.artifact_root }}</code></td></tr>
+          <tr><th scope="row">smtp_host</th><td><code>{{ settings_view.smtp_host or '—' }}</code></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+</div>
+
+{% endblock %}

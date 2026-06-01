@@ -71,6 +71,18 @@ class SubscriberToken:
     expires_at: float | None
 
 
+@dataclass(frozen=True)
+class AdminDependencyEdge:
+    from_repo: str
+    to_repo: str
+
+
+@dataclass(frozen=True)
+class AdminDeliveryPreferences:
+    email_recipients: list[str] | None = None
+    digest_hour: int | None = None
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS event_fingerprint (
     fingerprint    TEXT PRIMARY KEY,
@@ -119,6 +131,34 @@ CREATE TABLE IF NOT EXISTS promoted_repo (
     repo         TEXT PRIMARY KEY,
     source       TEXT,
     promoted_at  REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_tracked_repo (
+    repo       TEXT PRIMARY KEY,
+    updated_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_dependency_edge (
+    from_repo  TEXT NOT NULL,
+    to_repo    TEXT NOT NULL,
+    updated_at REAL NOT NULL,
+    PRIMARY KEY (from_repo, to_repo)
+);
+
+CREATE TABLE IF NOT EXISTS admin_trend_topic (
+    topic      TEXT PRIMARY KEY,
+    updated_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_trend_keyword (
+    keyword    TEXT PRIMARY KEY,
+    updated_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_delivery_preference (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at REAL NOT NULL
 );
 """
 
@@ -424,6 +464,139 @@ class StateStore:
             return cur.fetchone() is not None
 
     # ------------------------------------------------------------------
+    # admin config overrides (dashboard-admin — non-secret config only)
+    # ------------------------------------------------------------------
+    def add_admin_repo(self, repo: str) -> None:
+        repo = scrub_credentials(repo)
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO admin_tracked_repo (repo, updated_at) "
+                "VALUES (?, ?)",
+                (repo, time.time()),
+            )
+            self._conn.commit()
+
+    def remove_admin_repo(self, repo: str) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM admin_tracked_repo WHERE repo=?", (repo,))
+            self._conn.commit()
+
+    def list_admin_repos(self) -> list[str]:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT repo FROM admin_tracked_repo ORDER BY repo ASC"
+            )
+            return [r["repo"] for r in cur.fetchall()]
+
+    def add_admin_dependency_edge(self, from_repo: str, to_repo: str) -> None:
+        from_repo = scrub_credentials(from_repo)
+        to_repo = scrub_credentials(to_repo)
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO admin_dependency_edge "
+                "(from_repo, to_repo, updated_at) VALUES (?, ?, ?)",
+                (from_repo, to_repo, time.time()),
+            )
+            self._conn.commit()
+
+    def remove_admin_dependency_edge(self, from_repo: str, to_repo: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM admin_dependency_edge WHERE from_repo=? AND to_repo=?",
+                (from_repo, to_repo),
+            )
+            self._conn.commit()
+
+    def list_admin_dependency_edges(self) -> list[AdminDependencyEdge]:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT from_repo, to_repo FROM admin_dependency_edge "
+                "ORDER BY from_repo ASC, to_repo ASC"
+            )
+            return [
+                AdminDependencyEdge(from_repo=r["from_repo"], to_repo=r["to_repo"])
+                for r in cur.fetchall()
+            ]
+
+    def set_admin_trend_scope(self, *, topics: list[str], keywords: list[str]) -> None:
+        now = time.time()
+        clean_topics = sorted({scrub_credentials(str(t)) for t in topics})
+        clean_keywords = sorted({scrub_credentials(str(k)) for k in keywords})
+        with self._lock:
+            self._conn.execute("DELETE FROM admin_trend_topic")
+            self._conn.execute("DELETE FROM admin_trend_keyword")
+            self._conn.executemany(
+                "INSERT INTO admin_trend_topic (topic, updated_at) VALUES (?, ?)",
+                [(topic, now) for topic in clean_topics],
+            )
+            self._conn.executemany(
+                "INSERT INTO admin_trend_keyword (keyword, updated_at) VALUES (?, ?)",
+                [(keyword, now) for keyword in clean_keywords],
+            )
+            self._conn.commit()
+
+    def list_admin_trend_topics(self) -> list[str]:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT topic FROM admin_trend_topic ORDER BY topic ASC"
+            )
+            return [r["topic"] for r in cur.fetchall()]
+
+    def list_admin_trend_keywords(self) -> list[str]:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT keyword FROM admin_trend_keyword ORDER BY keyword ASC"
+            )
+            return [r["keyword"] for r in cur.fetchall()]
+
+    def set_admin_delivery_preferences(
+        self,
+        *,
+        email_recipients: list[str] | None = None,
+        digest_hour: int | None = None,
+    ) -> None:
+        now = time.time()
+        rows: list[tuple[str, str, float]] = []
+        if email_recipients is not None:
+            clean_recipients = [
+                scrub_credentials(str(recipient)) for recipient in email_recipients
+            ]
+            rows.append(("email_recipients", "\n".join(clean_recipients), now))
+        if digest_hour is not None:
+            rows.append(("digest_hour", str(int(digest_hour)), now))
+        with self._lock:
+            for key in ("email_recipients", "digest_hour"):
+                self._conn.execute(
+                    "DELETE FROM admin_delivery_preference WHERE key=?", (key,)
+                )
+            self._conn.executemany(
+                "INSERT INTO admin_delivery_preference (key, value, updated_at) "
+                "VALUES (?, ?, ?)",
+                rows,
+            )
+            self._conn.commit()
+
+    def get_admin_delivery_preferences(self) -> AdminDeliveryPreferences:
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT key, value FROM admin_delivery_preference "
+                "WHERE key IN ('email_recipients', 'digest_hour')"
+            )
+            values = {r["key"]: r["value"] for r in cur.fetchall()}
+        recipients = None
+        if "email_recipients" in values:
+            recipients = [
+                line for line in values["email_recipients"].split("\n") if line
+            ]
+        digest_hour = None
+        if "digest_hour" in values:
+            digest_hour = int(values["digest_hour"])
+        return AdminDeliveryPreferences(
+            email_recipients=recipients,
+            digest_hour=digest_hour,
+        )
+
+    # ------------------------------------------------------------------
     # diagnostics
     # ------------------------------------------------------------------
     def dump_all_text(self) -> list[str]:
@@ -438,6 +611,11 @@ class StateStore:
                 "subscriber_token",
                 "collect_cursor",
                 "promoted_repo",
+                "admin_tracked_repo",
+                "admin_dependency_edge",
+                "admin_trend_topic",
+                "admin_trend_keyword",
+                "admin_delivery_preference",
             ):
                 cur = self._conn.execute(f"SELECT * FROM {table}")  # noqa: S608 - fixed names
                 for row in cur.fetchall():

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}transmutary — {{ t['page.login'] }}{% endblock %}
+{% block title_key %}page.login{% endblock %}
+{% block content %}
+
+<section class="login-shell" aria-labelledby="login-title">
+  <div class="login-hero">
+    <div class="login-mark" aria-hidden="true">
+      <span class="logo">&#x2B21;</span>
+      <span>transmutary</span>
+    </div>
+    <p class="eyebrow" data-i18n="admin_access">{{ t['admin_access'] }}</p>
+    <h1 id="login-title" data-i18n="admin_console_title">{{ t['admin_console_title'] }}</h1>
+    <p class="lead" data-i18n="admin_console_note">{{ t['admin_console_note'] }}</p>
+    <div class="login-status" aria-label="admin security posture">
+      <div>
+        <span data-i18n="admin_session">{{ t['admin_session'] }}</span>
+        <strong data-i18n="admin_session_short">{{ t['admin_session_short'] }}</strong>
+      </div>
+      <div>
+        <span data-i18n="admin_secret_boundary">{{ t['admin_secret_boundary'] }}</span>
+        <strong data-i18n="admin_secret_boundary_short">{{ t['admin_secret_boundary_short'] }}</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="login-card" role="region" aria-labelledby="login-form-title">
+    <div class="login-card-head">
+      <span class="access-dot" aria-hidden="true"></span>
+      <div>
+        <p class="eyebrow" data-i18n="status_auth">{{ t['status_auth'] }}</p>
+        <h2 id="login-form-title" data-i18n="page.login">{{ t['page.login'] }}</h2>
+      </div>
+      <span class="pill promo" data-i18n="status_secret_boundary">{{ t['status_secret_boundary'] }}</span>
+    </div>
+
+    {% if unavailable %}
+    <p class="empty" data-i18n="auth_unavailable">{{ t['auth_unavailable'] }}</p>
+    {% else %}
+    {% if error_key %}<p class="empty" data-i18n="{{ error_key }}">{{ t[error_key] }}</p>{% endif %}
+    <form method="post" action="/login" class="login-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="field login-token-field">
+        <span data-i18n="admin_token">{{ t['admin_token'] }}</span>
+        <input name="admin_token" type="password" autocomplete="current-password" autofocus>
+      </label>
+      <button class="action primary" type="submit" data-i18n="sign_in">{{ t['sign_in'] }}</button>
+    </form>
+    <p class="login-footnote" data-i18n="admin_login_footnote">{{ t['admin_login_footnote'] }}</p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

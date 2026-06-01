@@ -173,6 +173,24 @@ def test_build_runtime_happy_email_leg_active():
     assert rt.outbound.smtp_user == "mailer@example.com"
 
 
+def test_build_runtime_uses_effective_admin_delivery_preferences():
+    store = StateStore(":memory:")
+    store.set_admin_delivery_preferences(
+        email_recipients=["admin@example.com"],
+        digest_hour=17,
+    )
+    rt = build_runtime(
+        _settings(email_recipients=["base@example.com"], smtp_host="smtp.example.com"),
+        _creds(),
+        store=store,
+        client=_ok_client(),
+    )
+    assert rt.outbound.email_recipients == ["admin@example.com"]
+    assert rt.settings.delivery.email_recipients == ["admin@example.com"]
+    assert rt.settings.delivery.digest_hour == 17
+    assert rt.settings.delivery.smtp_host == "smtp.example.com"
+
+
 def test_build_runtime_rss_only_when_no_email_config():
     rt = _build(_settings())  # no recipients / host
     assert rt.has_email_leg is False
@@ -576,6 +594,23 @@ def test_ae2_new_trend_enters_digest(tmp_path):
     # urgency), never the immediate high-risk leg.
     assert list((tmp_path / "_delivered" / "digest").glob("*acme__ai-tool*"))
     assert not list((tmp_path / "_delivered" / "immediate").glob("*"))
+
+
+def test_trend_tick_uses_effective_admin_trend_scope():
+    # YAML scope would not match this candidate ("database"), but the admin
+    # keyword should be picked up by run_trend_tick through the effective config.
+    store = StateStore(":memory:")
+    store.set_admin_trend_scope(topics=[], keywords=["database"])
+    rows = [_row("acme/db-tool", 1000, desc="a database migration helper")]
+    llm = RecordingLLM(reply='[{"index": 0, "summary": "A database helper."}]')
+    rt = _runtime(
+        _settings(topics=["ai"], keywords=["llm"]),
+        _creds(),
+        _trend_handler(rows),
+        store=store,
+    )
+    res = run_trend_tick(rt, ts=1000.0, call_fn=llm)
+    assert res.delivered == 1
 
 
 def test_ae2_unchanged_trend_not_redelivered_then_reaccel_reenters():

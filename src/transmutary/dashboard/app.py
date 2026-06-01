@@ -20,6 +20,7 @@ so a core install fails with a clear install hint instead of an ImportError.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -44,6 +45,7 @@ from starlette.routing import Route
 from ..config import Settings
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
+from . import auth as admin_auth
 from . import data, i18n
 from .csrf import CSRF_COOKIE, CSRFMiddleware, _host_only, check_origin, verify_token
 from .llms import render_llms_txt
@@ -59,6 +61,7 @@ logger = logging.getLogger("transmutary.dashboard")
 
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+_STATIC_VERSION = "20260601-admin-ui-v2"
 _DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]", "::1"})
 _DEFAULT_PORT = 8787
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -162,6 +165,7 @@ def make_dashboard_app(
     allowed_hosts: frozenset[str] | None = None,
     write_store: StateStore | None = None,
     csrf_secure: bool = False,
+    admin_token: str | None = None,
 ) -> Starlette:
     """Build the dashboard ASGI app (no server bound)."""
     _require_jinja()
@@ -186,11 +190,92 @@ def make_dashboard_app(
             "lang": lang,
             "html_lang": i18n.HTML_LANG[lang],
             "t": i18n.messages_for(lang),
+            "i18n_json": json.dumps(i18n.MESSAGES, ensure_ascii=False),
+            "static_version": _STATIC_VERSION,
             "nonce": request.scope.get("csp_nonce", ""),
             "csrf_token": request.scope.get("csrf_token", ""),
             "writes_enabled": write_store is not None,
+            "active_nav": "overview",
             **extra,
         }
+
+    def _secret_env() -> dict[str, str | None]:
+        return {
+            "TRANSMUTARY_ADMIN_TOKEN": admin_token,
+            "TRANSMUTARY_GITHUB_TOKEN": os.environ.get("TRANSMUTARY_GITHUB_TOKEN"),
+            "TRANSMUTARY_SMTP_USER": os.environ.get("TRANSMUTARY_SMTP_USER"),
+            "TRANSMUTARY_SMTP_PASSWORD": os.environ.get("TRANSMUTARY_SMTP_PASSWORD"),
+            "TRANSMUTARY_RSS_TOKEN": os.environ.get("TRANSMUTARY_RSS_TOKEN"),
+            "TRANSMUTARY_LLM_API_KEY": os.environ.get("TRANSMUTARY_LLM_API_KEY"),
+        }
+
+    def _admin_ok(request: Request) -> bool:
+        return admin_auth.is_admin(request, admin_token)
+
+    def _admin_disabled(request: Request) -> Response:
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context=_ctx(
+                request,
+                {
+                    "active_nav": "settings",
+                    "unavailable": True,
+                    "error_key": None,
+                },
+            ),
+            status_code=503,
+        )
+
+    def _settings_redirect() -> Response:
+        return RedirectResponse("/settings", status_code=303)
+
+    async def _form(request: Request) -> dict[str, str]:
+        body = (await request.body()).decode("utf-8", errors="replace")
+        parsed = parse_qs(body, keep_blank_values=True)
+        return {key: values[0] if values else "" for key, values in parsed.items()}
+
+    def _require_post_auth(request: Request, form: dict[str, str]) -> Response | None:
+        if write_store is None or not admin_token:
+            return _write_disabled()
+        if not _admin_ok(request):
+            return _error(request, "error_auth", 403)
+        if not check_origin(request, allowed):
+            return _error(request, "error_csrf", 403)
+        if not verify_token(form.get("csrf_token"), request.cookies.get(CSRF_COOKIE)):
+            return _error(request, "error_csrf", 403)
+        return None
+
+    def _split_lines(raw: str) -> list[str]:
+        return sorted({line.strip() for line in raw.splitlines() if line.strip()})
+
+    def _valid_email(value: str) -> bool:
+        return bool(value) and "@" in value and not any(ch.isspace() for ch in value)
+
+    def _render_settings(
+        request: Request,
+        *,
+        error_key: str | None = None,
+        status_code: int = 200,
+        form_repo: str = "",
+    ) -> Response:
+        if write_store is None:
+            return _write_disabled()
+        view = data.build_admin_settings(settings, write_store, secret_env=_secret_env())
+        return templates.TemplateResponse(
+            request=request,
+            name="settings.html",
+            context=_ctx(
+                request,
+                {
+                    "active_nav": "settings",
+                    "settings_view": view,
+                    "error_key": error_key,
+                    "form_repo": form_repo,
+                },
+            ),
+            status_code=status_code,
+        )
 
     async def index(request: Request) -> Response:
         overview = data.build_overview(settings, store, artifacts)
@@ -198,7 +283,7 @@ def make_dashboard_app(
             return JSONResponse(overview.to_dict())
         return templates.TemplateResponse(
             request=request, name="index.html",
-            context=_ctx(request, {"overview": overview}),
+            context=_ctx(request, {"active_nav": "overview", "overview": overview}),
         )
 
     async def repo_page(request: Request) -> Response:
@@ -213,7 +298,10 @@ def make_dashboard_app(
             )
         return templates.TemplateResponse(
             request=request, name="repo.html",
-            context=_ctx(request, {"runtime": runtime, "cards": cards}),
+            context=_ctx(
+                request,
+                {"active_nav": "overview", "runtime": runtime, "cards": cards},
+            ),
         )
 
     async def report_page(request: Request) -> Response:
@@ -226,7 +314,7 @@ def make_dashboard_app(
             return JSONResponse(view.to_dict())
         return templates.TemplateResponse(
             request=request, name="report.html",
-            context=_ctx(request, {"view": view}),
+            context=_ctx(request, {"active_nav": "overview", "view": view}),
         )
 
     def _write_disabled() -> Response:
@@ -314,6 +402,142 @@ def make_dashboard_app(
     async def healthz(request: Request) -> Response:
         return PlainTextResponse("ok")
 
+    async def login_page(request: Request) -> Response:
+        if not admin_token:
+            return _admin_disabled(request)
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context=_ctx(
+                request,
+                {
+                    "active_nav": "settings",
+                    "unavailable": False,
+                    "error_key": None,
+                },
+            ),
+        )
+
+    async def login_action(request: Request) -> Response:
+        if not admin_token:
+            return _admin_disabled(request)
+        form = await _form(request)
+        if not check_origin(request, allowed):
+            return _error(request, "error_csrf", 403)
+        if not verify_token(form.get("csrf_token"), request.cookies.get(CSRF_COOKIE)):
+            return _error(request, "error_csrf", 403)
+        if not admin_auth.verify_admin_token(form.get("admin_token"), admin_token):
+            return templates.TemplateResponse(
+                request=request,
+                name="login.html",
+                context=_ctx(
+                    request,
+                    {
+                        "active_nav": "settings",
+                        "unavailable": False,
+                        "error_key": "auth_invalid",
+                    },
+                ),
+                status_code=403,
+            )
+        resp = _settings_redirect()
+        admin_auth.set_admin_cookie(
+            resp, admin_auth.issue_session(admin_token), secure=csrf_secure
+        )
+        return resp
+
+    async def settings_page(request: Request) -> Response:
+        if not admin_token:
+            return _admin_disabled(request)
+        if not _admin_ok(request):
+            return RedirectResponse("/login", status_code=303)
+        return _render_settings(request)
+
+    async def settings_add_repo(request: Request) -> Response:
+        form = await _form(request)
+        denied = _require_post_auth(request, form)
+        if denied is not None:
+            return denied
+        repo = form.get("repo", "").strip()
+        if not _valid_repo(repo):
+            return _render_settings(
+                request, error_key="error_invalid_repo", status_code=400, form_repo=repo
+            )
+        write_store.add_admin_repo(repo)
+        return _settings_redirect()
+
+    async def settings_remove_repo(request: Request) -> Response:
+        form = await _form(request)
+        denied = _require_post_auth(request, form)
+        if denied is not None:
+            return denied
+        repo = form.get("repo", "").strip()
+        write_store.remove_admin_repo(repo)
+        return _settings_redirect()
+
+    async def settings_add_edge(request: Request) -> Response:
+        form = await _form(request)
+        denied = _require_post_auth(request, form)
+        if denied is not None:
+            return denied
+        from_repo = form.get("from_repo", "").strip()
+        to_repo = form.get("to_repo", "").strip()
+        effective = {entry.repo for entry in data.build_watchlist(settings, write_store)}
+        if not _valid_repo(from_repo) or not _valid_repo(to_repo) or (
+            from_repo not in effective or to_repo not in effective
+        ):
+            return _render_settings(request, error_key="error_invalid_edge", status_code=400)
+        write_store.add_admin_dependency_edge(from_repo, to_repo)
+        return _settings_redirect()
+
+    async def settings_remove_edge(request: Request) -> Response:
+        form = await _form(request)
+        denied = _require_post_auth(request, form)
+        if denied is not None:
+            return denied
+        write_store.remove_admin_dependency_edge(
+            form.get("from_repo", "").strip(),
+            form.get("to_repo", "").strip(),
+        )
+        return _settings_redirect()
+
+    async def settings_trends(request: Request) -> Response:
+        form = await _form(request)
+        denied = _require_post_auth(request, form)
+        if denied is not None:
+            return denied
+        write_store.set_admin_trend_scope(
+            topics=_split_lines(form.get("topics", "")),
+            keywords=_split_lines(form.get("keywords", "")),
+        )
+        return _settings_redirect()
+
+    async def settings_delivery(request: Request) -> Response:
+        form = await _form(request)
+        denied = _require_post_auth(request, form)
+        if denied is not None:
+            return denied
+        try:
+            digest_hour = int(form.get("digest_hour", ""))
+        except ValueError:
+            return _render_settings(
+                request, error_key="error_invalid_digest_hour", status_code=400
+            )
+        if digest_hour < 0 or digest_hour > 23:
+            return _render_settings(
+                request, error_key="error_invalid_digest_hour", status_code=400
+            )
+        recipients = _split_lines(form.get("email_recipients", ""))
+        if any(not _valid_email(r) for r in recipients):
+            return _render_settings(
+                request, error_key="error_invalid_email", status_code=400
+            )
+        write_store.set_admin_delivery_preferences(
+            email_recipients=recipients,
+            digest_hour=digest_hour,
+        )
+        return _settings_redirect()
+
     async def llms_txt(request: Request) -> Response:
         # Endpoint self-description for agents — NO private data (R-G1/KTD-G2).
         return PlainTextResponse(
@@ -349,6 +573,15 @@ def make_dashboard_app(
         Route("/promote", promote_action, methods=["POST"]),
         Route("/demote", demote_confirm, methods=["GET"]),
         Route("/demote", demote_action, methods=["POST"]),
+        Route("/login", login_page, methods=["GET"]),
+        Route("/login", login_action, methods=["POST"]),
+        Route("/settings", settings_page, methods=["GET"]),
+        Route("/settings/repos", settings_add_repo, methods=["POST"]),
+        Route("/settings/repos/remove", settings_remove_repo, methods=["POST"]),
+        Route("/settings/edges", settings_add_edge, methods=["POST"]),
+        Route("/settings/edges/remove", settings_remove_edge, methods=["POST"]),
+        Route("/settings/trends", settings_trends, methods=["POST"]),
+        Route("/settings/delivery", settings_delivery, methods=["POST"]),
         Route("/healthz", healthz, methods=["GET"]),
         Route("/llms.txt", llms_txt, methods=["GET"]),
         Route("/static/dashboard.css", stylesheet, methods=["GET"]),
@@ -408,8 +641,8 @@ def resolve_write_store(
         return None
     if not is_local:
         logger.warning(
-            "dashboard PUBLIC write endpoints enabled — no built-in identity auth; "
-            "front with an HTTPS authenticating proxy plus rate limits/allowlists"
+            "dashboard PUBLIC write endpoints enabled — admin token auth is required; "
+            "front with HTTPS plus rate limits/allowlists"
         )
     return StateStore(
         settings.delivery.state_db_path,
@@ -472,6 +705,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real serv
         allowed_hosts=_allowed_hosts_for(host),
         write_store=write_store,
         csrf_secure=not is_local_bind(host) and args.allow_public_writes,
+        admin_token=os.environ.get(admin_auth.ADMIN_TOKEN_ENV),
     )
 
     import uvicorn

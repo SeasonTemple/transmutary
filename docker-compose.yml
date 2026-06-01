@@ -14,7 +14,32 @@ services:
     volumes:
       - ./config:/config:ro       # 配置只读
       - transmutary-state:/var/lib/transmutary   # 状态 DB + 私有产物（持久卷）
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; p='/var/lib/transmutary/state.sqlite3'; raise SystemExit(0 if os.path.exists('/var/lib/transmutary') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     # 服务无对外端口；私有 RSS feed 由 deliver 写卷内文件，按需另起 server 暴露。
+
+  dashboard:
+    build: .
+    image: transmutary:latest
+    restart: unless-stopped
+    profiles: ["dashboard"]
+    env_file:
+      - .env                      # 含 TRANSMUTARY_ADMIN_TOKEN；provider secrets 仍只走 env
+    entrypoint: []
+    command: ["transmutary-dashboard", "--host", "0.0.0.0", "--allow-public", "--allow-public-writes"]
+    ports:
+      - "127.0.0.1:8787:8787"     # 默认只暴露到宿主本机；公网请放 HTTPS 鉴权反代后
+    volumes:
+      - ./config:/config:ro
+      - transmutary-state:/var/lib/transmutary
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/healthz', timeout=2).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   transmutary-state:

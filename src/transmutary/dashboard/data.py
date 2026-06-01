@@ -19,9 +19,13 @@ from dataclasses import dataclass
 
 from ..config import Settings
 from ..deliver.routes import DeliveryRoute
+from ..effective_config import (
+    effective_delivery,
+    effective_repo_sources,
+    effective_trend_scope,
+)
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
-from ..watchlist import effective_repos
 
 # Severities that route to the urgent / supply-chain bucket on the overview.
 # Mirrors Severity.is_urgent (critical + high → immediate route).
@@ -174,6 +178,45 @@ class Overview:
         }
 
 
+@dataclass(frozen=True)
+class SecretStatus:
+    name: str
+    configured: bool
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "configured": self.configured}
+
+
+@dataclass(frozen=True)
+class AdminSettingsView:
+    repos: tuple[WatchEntry, ...]
+    admin_dependency_edges: tuple[tuple[str, str], ...]
+    trend_topics: tuple[str, ...]
+    trend_keywords: tuple[str, ...]
+    email_recipients: tuple[str, ...]
+    digest_hour: int
+    smtp_host: str | None
+    state_db_path: str
+    artifact_root: str
+    secrets: tuple[SecretStatus, ...]
+
+    def to_dict(self) -> dict:
+        return {
+            "repos": [r.to_dict() for r in self.repos],
+            "admin_dependency_edges": [
+                {"from_repo": a, "to_repo": b} for a, b in self.admin_dependency_edges
+            ],
+            "trend_topics": list(self.trend_topics),
+            "trend_keywords": list(self.trend_keywords),
+            "email_recipients": list(self.email_recipients),
+            "digest_hour": self.digest_hour,
+            "smtp_host": self.smtp_host,
+            "state_db_path": self.state_db_path,
+            "artifact_root": self.artifact_root,
+            "secrets": [s.to_dict() for s in self.secrets],
+        }
+
+
 # --- trusted-metadata helpers (read the sidecar JSON, never parse the body) --
 
 
@@ -231,14 +274,15 @@ def build_watchlist(settings: Settings, store: StateStore) -> tuple[WatchEntry, 
     repo set, then tags each: config-watchlist repos are ``config``; the rest are
     promoted and carry their stored promotion source.
     """
-    config_repos = set(settings.watchlist.repo_names())
-    promoted_source = {
-        row["repo"]: row["source"] for row in store.list_promoted_meta()
-    }
+    sources = effective_repo_sources(settings, store)
+    promoted_source = {row["repo"]: row["source"] for row in store.list_promoted_meta()}
     entries = []
-    for repo in effective_repos(settings, store):
-        if repo in config_repos:
+    for repo in sources:
+        source = sources[repo]
+        if source == "config":
             entries.append(WatchEntry(repo=repo, source="config", demotable=False))
+        elif source == "admin":
+            entries.append(WatchEntry(repo=repo, source="admin", demotable=True))
         else:
             entries.append(
                 WatchEntry(
@@ -277,6 +321,35 @@ def build_overview(
         trend_candidates=trends[:limit],
         feeds=feeds,
         promotable_repos=frozenset(c.repo for c in trends[:limit] if c.repo not in effective),
+    )
+
+
+def build_admin_settings(
+    settings: Settings,
+    store: StateStore,
+    *,
+    secret_env: dict[str, str | None],
+) -> AdminSettingsView:
+    delivery = effective_delivery(settings, store)
+    trend_scope = effective_trend_scope(settings, store)
+    edges = tuple(
+        (edge.from_repo, edge.to_repo) for edge in store.list_admin_dependency_edges()
+    )
+    secrets = tuple(
+        SecretStatus(name=name, configured=bool(value))
+        for name, value in sorted(secret_env.items())
+    )
+    return AdminSettingsView(
+        repos=build_watchlist(settings, store),
+        admin_dependency_edges=edges,
+        trend_topics=tuple(trend_scope.topics),
+        trend_keywords=tuple(trend_scope.keywords),
+        email_recipients=tuple(delivery.email_recipients),
+        digest_hour=delivery.digest_hour,
+        smtp_host=delivery.smtp_host,
+        state_db_path=delivery.state_db_path,
+        artifact_root=delivery.artifact_root,
+        secrets=secrets,
     )
 
 
