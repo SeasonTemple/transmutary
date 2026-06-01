@@ -4,16 +4,16 @@
 
 **主动的开源生态情报 —— 持续观测仓库与依赖，把变化转成诊断报告，在出事前把要紧的推送给订阅者。**
 
-<img src="assets/demo.gif" alt="transmutary-demo：一条离线命令跑完整管线" width="720" />
+<img src="assets/dashboard.png" alt="Transmutary 看板：关注清单、供应链告警、趋势候选与最近报告" width="920" />
 
-<sub>`transmutary-demo` —— 一条命令，零凭据、零网络。<a href="#看-demo">看 demo →</a></sub>
+<sub>看板 + 离线 demo：观测仓库、分诊供应链告警、晋升趋势候选，并用零凭据 demo 预览完整管线。<a href="#看板">打开看板 →</a></sub>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 428 passing](https://img.shields.io/badge/tests-428_passing-brightgreen.svg)](#测试)
+[![Tests: 440 passing](https://img.shields.io/badge/tests-440_passing-brightgreen.svg)](#测试)
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [看 demo](#看-demo) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
+[English](README.md) · [简体中文](README.zh-CN.md) · [为何](#为何做嬗变) · [看板](#看板) · [看 demo](#看-demo) · [快速开始](#快速开始) · [工作原理](#工作原理) · [发布](#发布与版本)
 
 </div>
 
@@ -43,6 +43,8 @@
 ## 看 demo
 
 一条命令看整条管线跑起来——**零凭据、零网络、零 LLM**：
+
+<img src="assets/demo.gif" alt="transmutary-demo：一条离线命令跑完整管线" width="720" />
 
 ```bash
 pip install -e .
@@ -229,7 +231,7 @@ git config commit.template .gitmessage
 | Phase B — F4 晋升 · 部署 · L2 语义分组 · critique→refine | ✅ 完成 |
 | 离线 demo（`transmutary-demo`） | ✅ 完成 |
 | Web 看板（`transmutary-dashboard`） | ✅ 完成 |
-| 测试 | ✅ 428 passing · ruff clean |
+| 测试 | ✅ 440 passing · ruff clean |
 
 ### 路线图
 
@@ -238,7 +240,7 @@ git config commit.template .gitmessage
 ### 测试
 
 ```bash
-.venv/bin/python -m pytest -q      # 428 passing
+.venv/bin/python -m pytest -q      # 440 passing
 .venv/bin/ruff check src tests     # clean
 ```
 

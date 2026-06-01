@@ -4,16 +4,16 @@
 
 **Proactive open-source ecosystem intelligence — continuously watch repositories and their dependencies, turn changes into diagnostic reports, and get pushed what matters before it becomes an incident.**
 
-<img src="assets/demo.gif" alt="transmutary-demo: one offline command runs the full pipeline" width="720" />
+<img src="assets/dashboard.png" alt="Transmutary dashboard: watchlist, supply-chain alerts, trend candidates, and recent reports" width="920" />
 
-<sub>`transmutary-demo` — one command, zero credentials, zero network. <a href="#try-the-demo">Try it →</a></sub>
+<sub>Dashboard + offline demo: observe repos, triage supply-chain alerts, promote trend candidates, and preview the full pipeline with zero credentials. <a href="#dashboard">Open the dashboard →</a></sub>
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![CI](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml/badge.svg)](https://github.com/SeasonTemple/transmutary/actions/workflows/ci.yml)
-[![Tests: 428 passing](https://img.shields.io/badge/tests-428_passing-brightgreen.svg)](#tests)
+[![Tests: 440 passing](https://img.shields.io/badge/tests-440_passing-brightgreen.svg)](#tests)
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Try the demo](#try-the-demo) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
+[English](README.md) · [简体中文](README.zh-CN.md) · [Why](#why-transmutary) · [Dashboard](#dashboard) · [Try the demo](#try-the-demo) · [Getting started](#getting-started) · [How it works](#how-it-works) · [Releases](#releases--versioning)
 
 </div>
 
@@ -43,6 +43,8 @@ The two modes diverge only at the collection stage, then share `LLM report → c
 ## Try the demo
 
 See the whole pipeline run in one command — **zero credentials, zero network, zero LLM**:
+
+<img src="assets/demo.gif" alt="transmutary-demo: one offline command runs the full pipeline" width="720" />
 
 ```bash
 pip install -e .
@@ -230,7 +232,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 | Phase B — F4 promotion · deployment · L2 semantic grouping · critique→refine | ✅ done |
 | Offline demo (`transmutary-demo`) | ✅ done |
 | Web dashboard (`transmutary-dashboard`) | ✅ done |
-| Tests | ✅ 428 passing · ruff clean |
+| Tests | ✅ 440 passing · ruff clean |
 
 ### Roadmap
 
@@ -239,7 +241,7 @@ Deferred by design: channel interface abstraction, dashboard token identity auth
 ### Tests
 
 ```bash
-.venv/bin/python -m pytest -q      # 428 passing
+.venv/bin/python -m pytest -q      # 440 passing
 .venv/bin/ruff check src tests     # clean
 ```
 
