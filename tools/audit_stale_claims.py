@@ -116,6 +116,80 @@ def _check_merge_intersecting_chain(text: str) -> bool:
     return True
 
 
+def _check_settings_repr_redaction(_text: str) -> bool:
+    """Stale when ``Settings.__repr__`` carries the endpoint but not secrets.
+
+    The report flagged that ``Settings.__repr__`` includes
+    ``llm_base_url`` and called this "may leak endpoint identity".
+    Stale because:
+
+      1. The endpoint is provider config, not a secret — LiteLLM uses it
+         as the OpenAI-compatible base URL for whichever model provider
+         the deployment points at; the value is not a credential.
+      2. The :class:`Settings` dataclass declares
+         ``credentials: Credentials | None = field(default=None, repr=False, compare=False)``
+         — secrets are EXPLICITLY excluded from repr.
+      3. Credentials are read from env at load time and held in a
+         ``_Secret`` container whose ``__repr__`` / ``__str__`` also
+         refuse to print the value.
+
+    Stale when: building a Settings, repr(settings) does not contain any
+    substring of the known credential env vars, and the credentials field
+    is declared with repr=False. The endpoint MAY be in repr — that is
+    intentional, not a leak.
+    """
+    from transmutary.config import Credentials, Settings, Watchlist, TrendScope, Delivery  # noqa: F401
+    import os
+    import re as _re
+
+    src = (SRC / "config.py").read_text(encoding="utf-8")
+    if not _re.search(
+        r"credentials\s*:\s*Credentials[^=]*=\s*field\([^)]*repr\s*=\s*False",
+        src,
+    ):
+        return False
+
+    # Build a minimal Settings and assert repr excludes every known secret.
+    s = Settings(
+        watchlist=Watchlist(repos=("acme/cli",), dependency_edges=()),
+        trend_scope=TrendScope(topics=(), keywords=()),
+        delivery=Delivery(
+            state_db_path="/tmp/state.db",
+            artifact_root="/tmp/artifacts",
+            token_max_age_days=30,
+            digest_hour=8,
+        ),
+        llm_base_url="https://api.example.invalid/v1",
+    )
+    rendered = repr(s)
+    secret_markers = (
+        "ghs_",  # GitHub PAT prefix
+        "xoxb-",  # Slack token
+        "smtp-password-marker",
+    )
+    for marker in secret_markers:
+        if marker in rendered:
+            return False
+
+    # And confirm the explicit endpoint IS present (the design intent).
+    if "api.example.invalid" not in rendered:
+        return False
+
+    # Also: a Credentials instance repr must not echo a known secret value.
+    creds = Credentials(
+        github_token="ghs_DEADBEEFdeadbeef",
+        smtp_user="user",
+        smtp_password="smtp-password-marker",
+        rss_token="rss-token-marker",
+        llm_api_key="sk-llm-key-marker",
+    )
+    creds_repr = repr(creds)
+    for marker in ("ghs_DEADBEEF", "smtp-password-marker", "rss-token-marker", "sk-llm-key-marker"):
+        if marker in creds_repr:
+            return False
+    return True
+
+
 # Each claim: id, title, file, predicate (str) -> bool, why.
 # A predicate returns True when the report's claim is STALE (i.e. the
 # code shape the report said was missing IS in fact present).
@@ -149,6 +223,18 @@ CLAIMS = [
         "why": "Report claims the iterative merge appends `current` multiple times; "
         "the on-disk version rebuilds `merged` from `rest` each outer iteration "
         "and appends `current` exactly once. tests/test_dedup.py pins this.",
+    },
+    {
+        "id": "finding-18",
+        "title": "Settings.__repr__ includes llm_base_url — endpoint identity leak",
+        "file": "config.py",
+        "check": _check_settings_repr_redaction,
+        "why": "Report flagged llm_base_url in Settings.__repr__ as 'may leak endpoint identity'. "
+        "Stale: endpoint is provider config (LiteLLM OpenAI-compat base URL), not a credential. "
+        "The Settings dataclass explicitly sets credentials field with repr=False, and "
+        "Credentials holds every secret in a _Secret container whose repr refuses to print. "
+        "The endpoint is in repr by design — useful for debugging which provider a deployment "
+        "is configured against.",
     },
 ]
 
