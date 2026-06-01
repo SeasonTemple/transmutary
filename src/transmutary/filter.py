@@ -72,7 +72,7 @@ class IssueObservation:
 
     repo: str
     text: str
-    ts: float
+    ts: float | None
     url: str = ""
 
 
@@ -114,7 +114,10 @@ def _cold_start_window_count(matched: list[IssueObservation]) -> int:
     """
     ts_values = [o.ts for o in matched if o.ts is not None]
     if not ts_values:
-        return len(matched)
+        # No valid timing data — fail safe. Returning ``len(matched)`` would
+        # treat "all timestamps missing" as "all timestamps fresh", falsely
+        # satisfying the cold-start N/W threshold.
+        return 0
     now = max(ts_values)
     return sum(1 for o in matched if o.ts is not None and now - o.ts <= COLD_START_WINDOW_SECONDS)
 
