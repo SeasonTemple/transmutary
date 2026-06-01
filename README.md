@@ -219,9 +219,13 @@ The UI is a modern sidebar dashboard (stat tiles, Sentry-style issue stream, sev
 
 ## Releases & versioning
 
-Releases are automated with [python-semantic-release](https://python-semantic-release.readthedocs.io/). Version numbers, the changelog, tags, and GitHub Releases are derived from [Conventional Commits](https://www.conventionalcommits.org/) on `main`:
+Releases are version-automated with [python-semantic-release](https://python-semantic-release.readthedocs.io/). Version numbers, the changelog, tags, and GitHub Releases are derived from [Conventional Commits](https://www.conventionalcommits.org/) on `main`:
 
 - `feat:` → minor · `fix:` / `perf:` → patch · `BREAKING CHANGE:` → major.
+
+GitHub Release body is curated, not left to generated notes. Each published tag
+must have a bilingual note at `docs/release-notes/vX.Y.Z.md` with both `## 中文`
+and `## English`; the release workflow applies that file after publishing.
 
 Enable the local commit-message hook once after cloning:
 
@@ -230,7 +234,9 @@ git config core.hooksPath .githooks
 git config commit.template .gitmessage
 ```
 
-See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+See [`CHANGELOG.md`](CHANGELOG.md) for machine-derived history and
+[`docs/release-workflow.md`](docs/release-workflow.md) for the release-note
+policy.
 
 ## Project
 

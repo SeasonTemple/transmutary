@@ -218,9 +218,13 @@ Settings 区是带身份认证的 admin control plane，用于非 secret 配置�
 
 ## 发布与版本
 
-发布由 [python-semantic-release](https://python-semantic-release.readthedocs.io/) 自动化。版本号、changelog、tag、GitHub Release 均由 `main` 上的 [Conventional Commits](https://www.conventionalcommits.org/) 推导：
+发布版本由 [python-semantic-release](https://python-semantic-release.readthedocs.io/) 自动化。版本号、changelog、tag、GitHub Release 均由 `main` 上的 [Conventional Commits](https://www.conventionalcommits.org/) 推导：
 
 - `feat:` → minor · `fix:` / `perf:` → patch · `BREAKING CHANGE:` → major。
+
+GitHub Release 正文不再依赖自动生成说明。每个发布 tag 必须有
+`docs/release-notes/vX.Y.Z.md` 双语说明，包含 `## 中文` 与 `## English`；
+release workflow 发布后会用该文件覆盖 Release body。
 
 clone 后启用一次本地提交校验钩子：
 
@@ -229,7 +233,8 @@ git config core.hooksPath .githooks
 git config commit.template .gitmessage
 ```
 
-发布历史见 [`CHANGELOG.md`](CHANGELOG.md)。
+机器生成的发布历史见 [`CHANGELOG.md`](CHANGELOG.md)，双语发布说明策略见
+[`docs/release-workflow.md`](docs/release-workflow.md)。
 
 ## 项目
 

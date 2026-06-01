@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.9"
       - run: python -m pip install -e ".[dev]"
-      - run: ruff check src tests
+      - run: ruff check src tests tools
       - run: python -m pytest -q
 
   release:
@@ -55,3 +55,12 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ steps.release.outputs.tag }}
+
+      - name: Publish | Apply curated bilingual release notes
+        if: steps.release.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          python tools/release_notes.py check "$RELEASE_TAG"
+          gh release edit "$RELEASE_TAG" --notes-file "docs/release-notes/$RELEASE_TAG.md"

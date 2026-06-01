@@ -6,7 +6,7 @@
 python -m venv .venv
 .venv/bin/pip install -e ".[dev,build]"
 .venv/bin/python -m pytest -q      # 239 passing
-.venv/bin/ruff check src tests     # clean
+.venv/bin/ruff check src tests tools  # clean
 ```
 
 Enable the commit tooling once after cloning:
@@ -43,18 +43,34 @@ fix(filter): use deterministic cold-start threshold on empty baseline
 
 ## Release process
 
-Releases are **fully automated** — there is no manual version bump or tag step.
+Releases are **version-automated** — there is no manual version bump or tag
+step. GitHub Release body is **not** fully automatic: each shipped tag needs a
+curated bilingual note under `docs/release-notes/vX.Y.Z.md`.
 
 1. Land Conventional Commits on `main` (direct push or merged PR).
-2. `.github/workflows/release.yml` runs: it re-verifies (`ruff` + `pytest`), then python-semantic-release computes the next version from the commits since the last tag.
-3. If a releasable commit is present (`feat` / `fix` / `perf` / `BREAKING CHANGE`), it:
+2. Before merging a releasable change, prepare and fill the expected release note:
+
+   ```bash
+   python tools/release_notes.py prepare vX.Y.Z
+   python tools/release_notes.py check vX.Y.Z
+   ```
+
+   The file must include both `## 中文` and `## English`; placeholders must be
+   removed before merge.
+3. `.github/workflows/release.yml` runs: it re-verifies (`ruff` + `pytest`), then python-semantic-release computes the next version from the commits since the last tag.
+4. If a releasable commit is present (`feat` / `fix` / `perf` / `BREAKING CHANGE`), it:
    - bumps `project.version` in `pyproject.toml`,
    - updates [`CHANGELOG.md`](CHANGELOG.md) (sectioned by type),
    - commits `chore(release): X.Y.Z`, tags `vX.Y.Z`,
-   - builds sdist + wheel and publishes a GitHub Release with generated notes.
-4. No releasable commit → no release (docs/chore-only pushes ship nothing).
+   - builds sdist + wheel,
+   - publishes a GitHub Release, then overwrites the generated body with
+     `docs/release-notes/vX.Y.Z.md`.
+5. No releasable commit → no release (docs/chore-only pushes ship nothing).
 
 Version policy: `0.x` while pre-1.0 (`major_on_zero = false`, so `feat` stays a minor bump). Layout of changelog/release notes is pinned in `[tool.semantic_release]` in `pyproject.toml` — do not hand-edit `CHANGELOG.md`.
+
+See [`docs/release-workflow.md`](docs/release-workflow.md) for the bilingual
+release-note policy and emergency repair command.
 
 ### Repo prerequisite (one-time)
 
