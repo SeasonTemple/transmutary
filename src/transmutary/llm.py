@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import enum
 import os
+import re
 import threading
 
 # Force litellm to use its bundled model-cost map instead of fetching the remote
@@ -167,6 +168,14 @@ class LLMBudgetExceeded(LLMError):
 _DATA_OPEN_REDACTED = "<<<UNTRUSTED_DATA_BLOCK_REDACTED>>>"
 _DATA_CLOSE_REDACTED = "<<<END_UNTRUSTED_DATA_BLOCK_REDACTED>>>"
 
+# Case-insensitive fence patterns. Lowercase / mixed-case fence markers from
+# attacker-controlled data would otherwise bypass the exact-string replacement
+# and create ambiguity about whether content is inside or outside the genuine
+# fence. The replacement text is always the canonical uppercase REDACTED token
+# so the genuine fence in the user-role wrapper remains the only valid one.
+_FENCE_OPEN_RE = re.compile(re.escape(_DATA_OPEN), re.IGNORECASE)
+_FENCE_CLOSE_RE = re.compile(re.escape(_DATA_CLOSE), re.IGNORECASE)
+
 
 def _neutralize_fences(data_block: str) -> str:
     """Strip any embedded fence markers from untrusted data before wrapping (KTD3).
@@ -174,13 +183,15 @@ def _neutralize_fences(data_block: str) -> str:
     Without this, attacker-controlled text (an issue body, a GHSA/OSV advisory) can
     embed the literal close marker, planting its own pseudo-instructions AFTER what
     the model is told is the trusted fence — defeating the data/instruction split.
-    We replace any occurrence of the open/close markers with inert REDACTED tokens
-    so the genuine fence the model relies on cannot be forged. Close is replaced
-    before open so the open replacement cannot recreate a close token.
+    We replace any case-variant occurrence of the open/close markers with inert
+    REDACTED tokens so the genuine fence the model relies on cannot be forged.
+    Close is replaced before open so the open replacement cannot recreate a close
+    token. The rest of the data block keeps its original casing — URLs, paths,
+    and code are not munged.
     """
-    return data_block.replace(_DATA_CLOSE, _DATA_CLOSE_REDACTED).replace(
-        _DATA_OPEN, _DATA_OPEN_REDACTED
-    )
+    data_block = _FENCE_CLOSE_RE.sub(_DATA_CLOSE_REDACTED, data_block)
+    data_block = _FENCE_OPEN_RE.sub(_DATA_OPEN_REDACTED, data_block)
+    return data_block
 
 
 def _build_messages(system_instruction: str, data_block: str) -> list:
