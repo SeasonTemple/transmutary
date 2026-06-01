@@ -30,6 +30,11 @@ def test_tables_created(store):
         "seen_set",
         "subscriber_token",
         "promoted_repo",
+        "admin_tracked_repo",
+        "admin_dependency_edge",
+        "admin_trend_topic",
+        "admin_trend_keyword",
+        "admin_delivery_preference",
     }
     cur = store._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     names = {r["name"] for r in cur.fetchall()}
@@ -169,6 +174,91 @@ def test_promote_records_source(store):
     store.promote_repo("acme/cli", source="mode-b")
     cur = store._conn.execute("SELECT source FROM promoted_repo WHERE repo=?", ("acme/cli",))
     assert cur.fetchone()["source"] == "mode-b"
+
+
+# --- admin config overrides -------------------------------------------------
+
+
+def test_admin_tracked_repo_crud_is_idempotent_and_sorted(store):
+    store.add_admin_repo("z/last")
+    store.add_admin_repo("a/first")
+    store.add_admin_repo("z/last")
+    assert store.list_admin_repos() == ["a/first", "z/last"]
+    cur = store._conn.execute("SELECT COUNT(*) c FROM admin_tracked_repo")
+    assert cur.fetchone()["c"] == 2
+
+    store.remove_admin_repo("z/last")
+    store.remove_admin_repo("missing/repo")
+    assert store.list_admin_repos() == ["a/first"]
+
+
+def test_admin_dependency_edge_crud_is_idempotent_and_sorted(store):
+    store.add_admin_dependency_edge("z/app", "a/lib")
+    store.add_admin_dependency_edge("a/app", "b/lib")
+    store.add_admin_dependency_edge("z/app", "a/lib")
+    assert [(e.from_repo, e.to_repo) for e in store.list_admin_dependency_edges()] == [
+        ("a/app", "b/lib"),
+        ("z/app", "a/lib"),
+    ]
+    cur = store._conn.execute("SELECT COUNT(*) c FROM admin_dependency_edge")
+    assert cur.fetchone()["c"] == 2
+
+    store.remove_admin_dependency_edge("z/app", "a/lib")
+    assert [(e.from_repo, e.to_repo) for e in store.list_admin_dependency_edges()] == [
+        ("a/app", "b/lib"),
+    ]
+
+
+def test_admin_trend_scope_replaces_values_with_stable_order(store):
+    store.set_admin_trend_scope(
+        topics=["llm", "agent", "llm"],
+        keywords=["rag", "evals", "rag"],
+    )
+    assert store.list_admin_trend_topics() == ["agent", "llm"]
+    assert store.list_admin_trend_keywords() == ["evals", "rag"]
+
+    store.set_admin_trend_scope(topics=["security"], keywords=[])
+    assert store.list_admin_trend_topics() == ["security"]
+    assert store.list_admin_trend_keywords() == []
+
+
+def test_admin_delivery_preferences_partial_and_replace(store):
+    assert store.get_admin_delivery_preferences().email_recipients is None
+    assert store.get_admin_delivery_preferences().digest_hour is None
+
+    store.set_admin_delivery_preferences(
+        email_recipients=["b@example.com", "a@example.com"],
+        digest_hour=17,
+    )
+    prefs = store.get_admin_delivery_preferences()
+    assert prefs.email_recipients == ["b@example.com", "a@example.com"]
+    assert prefs.digest_hour == 17
+
+    store.set_admin_delivery_preferences(email_recipients=None, digest_hour=8)
+    prefs = store.get_admin_delivery_preferences()
+    assert prefs.email_recipients is None
+    assert prefs.digest_hour == 8
+
+
+def test_admin_config_scrubs_credential_shaped_values(store):
+    store.add_admin_repo("safe/repo")
+    store.add_admin_dependency_edge("safe/repo", "dep/repo")
+    store.set_admin_trend_scope(
+        topics=["ai", "password=hunter2supersecret"],
+        keywords=["Authorization: Bearer toplevelsecret"],
+    )
+    store.set_admin_delivery_preferences(
+        email_recipients=["ghp_abcdefghijklmnop1234567890ABCD@example.com"],
+        digest_hour=9,
+    )
+    all_text = " ".join(store.dump_all_text())
+    for cred in (
+        "password=hunter2supersecret",
+        "Bearer toplevelsecret",
+        "ghp_abcdefghijklmnop1234567890ABCD",
+    ):
+        assert cred not in all_text
+    assert "[REDACTED]" in all_text
 
 
 # --- security: R21 credential scrubbing ---

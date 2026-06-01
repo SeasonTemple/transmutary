@@ -141,6 +141,15 @@ def test_security_and_release_intervals_match_constants():
     assert rel == RELEASE_ISSUE_INTERVAL_SECONDS
 
 
+def test_trend_cron_uses_effective_admin_digest_hour(store):
+    settings = _settings(repos=("acme/cli",), email=True)
+    store.set_admin_delivery_preferences(email_recipients=None, digest_hour=17)
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    trend = {j.id: j for j in sched.get_jobs()}["trend"]
+    assert str(trend.trigger.fields[5]) == "17"
+
+
 def test_backward_compat_placeholder_when_no_settings():
     # Regression guard (KTD-C): no settings → still only the placeholder job, with
     # scheduler as the first positional arg.
@@ -266,6 +275,17 @@ def test_boot_registers_promoted_repo_jobs(store):
     assert "reconcile" in ids
 
 
+def test_boot_registers_admin_repo_jobs(store):
+    store.add_admin_repo("admin/tracked")
+    settings = _settings(repos=("acme/cli",))
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    ids = _repo_job_ids(sched)
+    assert "security:admin/tracked" in ids
+    assert "release-issue:admin/tracked" in ids
+    assert "security:acme/cli" in ids
+
+
 # --- U3: reconcile cross-process sync + misdeletion protection ---
 
 
@@ -280,6 +300,33 @@ def test_reconcile_picks_up_promote_from_another_process(store):
     ids = _repo_job_ids(sched)
     assert "security:later/promoted" in ids
     assert "release-issue:later/promoted" in ids
+
+
+def test_reconcile_picks_up_admin_repo_from_another_process(store):
+    settings = _settings(repos=("acme/cli",))
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    assert "security:admin/later" not in _repo_job_ids(sched)
+
+    store.add_admin_repo("admin/later")
+    reconcile_repo_jobs(sched, _rt_store(settings, store))
+    ids = _repo_job_ids(sched)
+    assert "security:admin/later" in ids
+    assert "release-issue:admin/later" in ids
+
+
+def test_reconcile_removes_removed_admin_repo(store):
+    settings = _settings(repos=("acme/cli",))
+    store.add_admin_repo("admin/temp")
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    assert "security:admin/temp" in _repo_job_ids(sched)
+
+    store.remove_admin_repo("admin/temp")
+    reconcile_repo_jobs(sched, _rt_store(settings, store))
+    ids = _repo_job_ids(sched)
+    assert "security:admin/temp" not in ids
+    assert "release-issue:admin/temp" not in ids
 
 
 def test_reconcile_removes_demoted_repo(store):

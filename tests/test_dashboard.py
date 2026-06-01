@@ -267,7 +267,14 @@ def test_view_models_carry_no_tokens_or_credentials():
 # --- U3: Starlette app via TestClient ----------------------------------------
 
 
-def _client(d, *, seed=True, raise_server_exceptions=True, write_store=None):
+def _client(
+    d,
+    *,
+    seed=True,
+    raise_server_exceptions=True,
+    write_store=None,
+    admin_token=None,
+):
     """Dashboard app + TestClient over in-memory store + tmp artifacts."""
     from starlette.testclient import TestClient
 
@@ -279,7 +286,13 @@ def _client(d, *, seed=True, raise_server_exceptions=True, write_store=None):
     if seed:
         artifacts.write(_report("acme/cli", severity=Severity.CRITICAL), ts=1000.0)
     settings = _settings(artifact_root=root)
-    app = make_dashboard_app(settings, store, artifacts, write_store=write_store)
+    app = make_dashboard_app(
+        settings,
+        store,
+        artifacts,
+        write_store=write_store,
+        admin_token=admin_token,
+    )
     client = TestClient(
         app,
         base_url="http://localhost",
@@ -294,6 +307,19 @@ def _csrf(client):
     token = client.cookies.get("tmtry-csrf")
     assert token
     return token
+
+
+def _login(client, *, token="secret-admin-token"):
+    csrf = _csrf(client)
+    resp = client.post(
+        "/login",
+        data={"admin_token": token, "csrf_token": csrf},
+        headers={"origin": "http://localhost"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert client.cookies.get("tmtry-admin")
+    return csrf
 
 
 def test_index_lists_watchlist_with_source():
@@ -382,7 +408,17 @@ def test_routes_are_get_only_except_promote_writes():
         for route in client.app.routes:
             if isinstance(route, Route):
                 # R-D7: read-only — only GET (Starlette auto-adds HEAD).
-                if route.path in {"/promote", "/demote"}:
+                if route.path in {
+                    "/promote",
+                    "/demote",
+                    "/login",
+                    "/settings/repos",
+                    "/settings/repos/remove",
+                    "/settings/edges",
+                    "/settings/edges/remove",
+                    "/settings/trends",
+                    "/settings/delivery",
+                }:
                     assert route.methods <= {"GET", "POST", "HEAD"}
                 else:
                     assert route.methods <= {"GET", "HEAD"}
@@ -615,7 +651,267 @@ def test_index_links_stylesheet():
         client, *_ = _client(d)
         resp = client.get("/")
         # base.html references the same-origin stylesheet (CSP default-src 'self' OK)
-        assert '/static/dashboard.css' in resp.text
+        assert '/static/dashboard.css?v=' in resp.text
+        assert '/static/dashboard.js?v=' in resp.text
+
+
+# --- admin settings U3-U5 ----------------------------------------------------
+
+
+def test_settings_requires_admin_token_configured():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store)
+        resp = client.get("/settings")
+        assert resp.status_code == 503
+        assert "TRANSMUTARY_ADMIN_TOKEN" in resp.text
+
+
+def test_settings_redirects_to_login_when_unauthenticated():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        resp = client.get("/settings", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/login"
+
+
+def test_login_sets_http_only_admin_session_cookie_and_rejects_bad_token():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        csrf = _csrf(client)
+        bad = client.post(
+            "/login",
+            data={"admin_token": "wrong", "csrf_token": csrf},
+            headers={"origin": "http://localhost"},
+        )
+        assert bad.status_code == 403
+        assert "secret-admin-token" not in bad.text
+        assert "tmtry-admin" not in client.cookies
+
+        good = client.post(
+            "/login",
+            data={"admin_token": "secret-admin-token", "csrf_token": csrf},
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert good.status_code == 303
+        assert client.cookies.get("tmtry-admin")
+        set_cookie = good.headers["set-cookie"]
+        assert "HttpOnly" in set_cookie
+        assert "SameSite=strict" in set_cookie
+
+
+def test_settings_page_renders_secret_status_without_values(monkeypatch):
+    monkeypatch.setenv("TRANSMUTARY_GITHUB_TOKEN", "ghp_supersecretshouldnotrender000000")
+    monkeypatch.setenv("TRANSMUTARY_SMTP_PASSWORD", "smtp-secret-pw")
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        _login(client)
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        assert "Settings" in resp.text
+        assert "TRANSMUTARY_GITHUB_TOKEN" in resp.text
+        assert "configured" in resp.text
+        assert "ghp_supersecretshouldnotrender" not in resp.text
+        assert "smtp-secret-pw" not in resp.text
+
+
+def test_settings_page_uses_admin_control_plane_layout():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        write_store.add_admin_repo("admin/repo")
+        write_store.add_admin_dependency_edge("admin/repo", "acme/cli")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        _login(client)
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        assert 'class="status-strip"' in resp.text
+        assert 'class="settings-nav"' in resp.text
+        assert 'class="settings-grid"' in resp.text
+        for section in ("repos", "edges", "trends", "delivery", "runtime"):
+            assert f'id="{section}"' in resp.text
+        assert "admin/repo" in resp.text
+        assert "Control plane" in resp.text
+
+
+def test_settings_add_and_remove_admin_repo_requires_auth_and_csrf():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        resp = client.post(
+            "/settings/repos",
+            data={"repo": "admin/repo", "csrf_token": "bad"},
+            headers={"origin": "http://localhost"},
+        )
+        assert resp.status_code == 403
+        assert write_store.list_admin_repos() == []
+
+        csrf = _login(client)
+        resp = client.post(
+            "/settings/repos",
+            data={"repo": "admin/repo", "csrf_token": csrf},
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert write_store.list_admin_repos() == ["admin/repo"]
+
+        csrf = client.cookies.get("tmtry-csrf")
+        resp = client.post(
+            "/settings/repos/remove",
+            data={"repo": "admin/repo", "csrf_token": csrf},
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert write_store.list_admin_repos() == []
+
+
+def test_settings_rejects_invalid_repo_without_mutating():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        csrf = _login(client)
+        resp = client.post(
+            "/settings/repos",
+            data={"repo": "not a repo", "csrf_token": csrf},
+            headers={"origin": "http://localhost"},
+        )
+        assert resp.status_code == 400
+        assert write_store.list_admin_repos() == []
+
+
+def test_settings_dependency_edge_validates_effective_repos():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        write_store.add_admin_repo("admin/repo")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        csrf = _login(client)
+        bad = client.post(
+            "/settings/edges",
+            data={
+                "from_repo": "admin/repo",
+                "to_repo": "ghost/repo",
+                "csrf_token": csrf,
+            },
+            headers={"origin": "http://localhost"},
+        )
+        assert bad.status_code == 400
+        assert write_store.list_admin_dependency_edges() == []
+
+        ok = client.post(
+            "/settings/edges",
+            data={
+                "from_repo": "admin/repo",
+                "to_repo": "acme/cli",
+                "csrf_token": csrf,
+            },
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert ok.status_code == 303
+        assert [(e.from_repo, e.to_repo) for e in write_store.list_admin_dependency_edges()] == [
+            ("admin/repo", "acme/cli")
+        ]
+
+
+def test_settings_trend_and_delivery_forms_update_store():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        csrf = _login(client)
+        resp = client.post(
+            "/settings/trends",
+            data={
+                "topics": "agent\nai\nagent",
+                "keywords": "rag\nevals",
+                "csrf_token": csrf,
+            },
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert write_store.list_admin_trend_topics() == ["agent", "ai"]
+        assert write_store.list_admin_trend_keywords() == ["evals", "rag"]
+
+        resp = client.post(
+            "/settings/delivery",
+            data={
+                "email_recipients": "a@example.com\nb@example.com",
+                "digest_hour": "17",
+                "csrf_token": csrf,
+            },
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        prefs = write_store.get_admin_delivery_preferences()
+        assert prefs.email_recipients == ["a@example.com", "b@example.com"]
+        assert prefs.digest_hour == 17
+
+
+def test_settings_delivery_rejects_invalid_values():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        csrf = _login(client)
+        bad_hour = client.post(
+            "/settings/delivery",
+            data={
+                "email_recipients": "a@example.com",
+                "digest_hour": "25",
+                "csrf_token": csrf,
+            },
+            headers={"origin": "http://localhost"},
+        )
+        assert bad_hour.status_code == 400
+        bad_email = client.post(
+            "/settings/delivery",
+            data={
+                "email_recipients": "not-email",
+                "digest_hour": "9",
+                "csrf_token": csrf,
+            },
+            headers={"origin": "http://localhost"},
+        )
+        assert bad_email.status_code == 400
+        assert write_store.get_admin_delivery_preferences().digest_hour is None
+
+
+def test_settings_pages_have_no_inline_style():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        _login(client)
+        resp = client.get("/settings")
+        assert "style=" not in resp.text
+
+
+def test_login_page_uses_admin_access_layout():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        resp = client.get("/login")
+        assert resp.status_code == 200
+        assert 'class="login-shell"' in resp.text
+        assert 'class="login-card"' in resp.text
+        assert "Console access" in resp.text
+        assert "Secret boundary" in resp.text
+        assert "secret-admin-token" not in resp.text
+
+
+def test_readme_demo_gif_has_vhs_source_and_command():
+    with open("README.md", encoding="utf-8") as f:
+        readme = f.read()
+    with open("assets/demo.tape", encoding="utf-8") as f:
+        tape = f.read()
+    assert '<img src="assets/demo.gif"' in readme
+    assert "vhs assets/demo.tape" in readme
+    assert "Output assets/demo.gif" in tape
+    assert 'Type "transmutary-demo"' in tape
 
 
 def test_missing_jinja_raises_with_hint(monkeypatch):
@@ -925,6 +1221,22 @@ def test_i18n_dict_key_parity():
     from transmutary.dashboard import i18n
     # en and zh must carry identical keys (no missing translations).
     assert set(i18n.MESSAGES["en"]) == set(i18n.MESSAGES["zh"])
+
+
+def test_pages_embed_full_i18n_dictionary_for_client_switching():
+    from transmutary.dashboard import i18n
+
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        resp = client.get("/login")
+        assert resp.status_code == 200
+        assert '<script type="application/json" id="i18n-dict">' in resp.text
+        for key in i18n.MESSAGES["en"]:
+            assert f'"{key}"' in resp.text
+        assert "控制台访问" in resp.text
+        assert "Admin login" in resp.text
+        assert ".innerHTML" not in resp.text
 
 
 def test_i18n_cookie_drives_first_paint_language():

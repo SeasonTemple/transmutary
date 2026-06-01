@@ -29,6 +29,7 @@ from typing import Callable
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from .config import Credentials, Settings
+from .effective_config import effective_delivery
 from .pipeline import (
     PipelineRuntime,
     build_runtime,
@@ -220,6 +221,7 @@ def register_pipeline_jobs(
     settings = runtime.settings
     store = getattr(runtime, "store", None)
     repos = effective_repos(settings, store)
+    delivery = effective_delivery(settings, store)
 
     # KTD-D: high-risk alerts go out via RSS only when no email leg is configured.
     # Surface it ONCE at registration so the operator knows (RSS-only is legal).
@@ -243,7 +245,7 @@ def register_pipeline_jobs(
     scheduler.add_job(
         _isolated("trend", lambda: run_trend_tick(runtime, ts=time.time())),
         trigger="cron",
-        hour=settings.delivery.digest_hour,
+        hour=delivery.digest_hour,
         id="trend",
         max_instances=1,
         coalesce=True,

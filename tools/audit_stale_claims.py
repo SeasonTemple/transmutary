@@ -138,9 +138,15 @@ def _check_settings_repr_redaction(_text: str) -> bool:
     is declared with repr=False. The endpoint MAY be in repr — that is
     intentional, not a leak.
     """
-    from transmutary.config import Credentials, Settings, Watchlist, TrendScope, Delivery  # noqa: F401
-    import os
     import re as _re
+
+    from transmutary.config import (  # noqa: F401
+        Credentials,
+        Delivery,
+        Settings,
+        TrendScope,
+        Watchlist,
+    )
 
     src = (SRC / "config.py").read_text(encoding="utf-8")
     if not _re.search(
@@ -213,7 +219,10 @@ CLAIMS = [
         "title": "_embedding_index uses bare except (type-safety hole)",
         "file": "llm.py",
         "check": _check_embedding_index_narrow_excepts,
-        "why": "Report claims bare except; code already narrows to the 4 expected types across 3 except clauses.",
+        "why": (
+            "Report claims bare except; code already narrows to the 4 expected "
+            "types across 3 except clauses."
+        ),
     },
     {
         "id": "finding-01-p0",

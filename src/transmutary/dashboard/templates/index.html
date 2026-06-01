@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}transmutary — {{ t['page.overview'] }}{% endblock %}
+{% block title_key %}page.overview{% endblock %}
 {% block content %}
 
 <header class="topbar">
@@ -35,7 +36,7 @@
   <thead><tr><th scope="col" data-i18n="th.repo">{{ t['th.repo'] }}</th><th scope="col" data-i18n="th.source">{{ t['th.source'] }}</th><th scope="col"></th></tr></thead>
   <tbody>
   {% for entry in overview.watchlist %}
-  <tr><td><a class="repo" href="/repo/{{ entry.repo }}">{{ entry.repo }}</a></td><td><span class="pill{% if entry.source != 'config' %} promo{% endif %}">{{ entry.source }}</span></td><td class="act">{% if entry.demotable %}<a class="action-link" href="/demote?repo={{ entry.repo }}">{{ t['demote'] }}</a>{% endif %}</td></tr>
+  <tr><td><a class="repo" href="/repo/{{ entry.repo }}">{{ entry.repo }}</a></td><td><span class="pill{% if entry.source != 'config' %} promo{% endif %}">{{ entry.source }}</span></td><td class="act">{% if entry.demotable %}<a class="action-link" href="/demote?repo={{ entry.repo }}" data-i18n="demote">{{ t['demote'] }}</a>{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table></div>
@@ -51,7 +52,7 @@
     <span class="pill info">{{ c.kind }}</span>
     <a class="row-title" href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a>
     <span class="repo">{{ c.repo }}</span>
-    {% if c.repo in overview.promotable_repos %}<a class="row-action" href="/promote?repo={{ c.repo }}">{{ t['promote'] }}</a>{% endif %}
+    {% if c.repo in overview.promotable_repos %}<a class="row-action" href="/promote?repo={{ c.repo }}" data-i18n="promote">{{ t['promote'] }}</a>{% endif %}
   </div>
   {% endfor %}
 </div>

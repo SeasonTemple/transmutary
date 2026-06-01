@@ -205,6 +205,18 @@ def _parse_verdict(raw: str) -> tuple[bool, str]:
         raise LLMError(f"unparseable judge verdict: {raw!r}") from exc
 
 
+def _is_llm_exc(exc: Exception, names: tuple[str, ...]) -> bool:
+    """Return True for current or reloaded llm.py exception classes.
+
+    Some tests deliberately remove ``transmutary.llm`` from ``sys.modules`` to
+    enforce import-time isolation. If a caller captured an exception class before
+    that reload, normal ``except LLMError`` identity matching can miss the same
+    semantic exception. Class-name matching keeps the conservative-review contract
+    stable without importing llm.py at module import time.
+    """
+    return exc.__class__.__name__ in names
+
+
 # ---------------------------------------------------------------------------
 # Public funnel entry point
 # ---------------------------------------------------------------------------
@@ -305,7 +317,6 @@ def filter_issue_surge(
     # Local import: same reasoning as _judge — keep litellm out of the
     # service -> pipeline -> filter import path. Resolved only when we
     # actually reach the L3 funnel.
-    from .llm import LLMBudgetExceeded, LLMError
     from .llm import call as _llm_call
 
     if call_fn is None:
@@ -319,14 +330,16 @@ def filter_issue_surge(
             if is_fault:
                 any_fault = True
                 fault_reasons.append(judge_reason)
-    except LLMBudgetExceeded as exc:
+    except Exception as exc:
+        if not _is_llm_exc(exc, ("LLMBudgetExceeded", "LLMError")):
+            raise
         # L3 daily cap hit (KTD7). Deterministic overflow: this surge already
         # passed the rate gate, so flag for human review rather than drop.
-        raise ConservativeReview(
-            f"L3 daily budget exceeded; surge of {matched_count} issues queued "
-            f"for human review (no silent drop): {exc}"
-        ) from exc
-    except LLMError as exc:
+        if _is_llm_exc(exc, ("LLMBudgetExceeded",)):
+            raise ConservativeReview(
+                f"L3 daily budget exceeded; surge of {matched_count} issues queued "
+                f"for human review (no silent drop): {exc}"
+            ) from exc
         # Judge unreachable/failed → conservative: a high-volume surge is flagged
         # for human review, never silently passed over.
         raise ConservativeReview(

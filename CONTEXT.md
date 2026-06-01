@@ -24,7 +24,8 @@
 - **包依赖（package dependency）** — 仓库代码 manifest（如 `package.json`）中声明的依赖，系统**自动解析**。
 - **运行时服务链** — 部署时通过配置（base_url 等）形成的服务调用链，不在任何 manifest 里，故只能靠依赖边手工声明。
 - **指定范围（scope）** — 模式 B 趋势发现的筛选边界，由一个**过滤器**定义（MVP = AI 方向：topic 标签 + 关键词 OR 兜底）。
-- **晋升（promotion）** — 把模式 B 发现的热门候选仓加入关注清单，使其转由模式 A 盯着。实现：`promoted_repo` 表持久化晋升仓，有效清单 = config 关注清单 ∪ promoted；service 经 reconcile job 周期性把逐仓 job 全量同步到有效清单，CLI（`transmutary promote/demote/list-watchlist`，独立进程只写表）与看板 promote/demote UI（确认页 + CSRF/Origin 防护，只写 `promoted_repo` 表）的晋升经此免重启生效（F4）。
+- **晋升（promotion）** — 把模式 B 发现的热门候选仓加入关注清单，使其转由模式 A 盯着。实现：`promoted_repo` 表持久化晋升仓，有效清单 = YAML base 关注清单 ∪ SQLite admin overrides ∪ promoted；service 经 reconcile job 周期性把逐仓 job 全量同步到有效清单，CLI（`transmutary promote/demote/list-watchlist`，独立进程只写表）与看板 promote/demote UI（确认页 + CSRF/Origin 防护，只写 `promoted_repo` 表）的晋升经此免重启生效（F4）。
+- **Admin overrides** — Web Settings 写入 SQLite 的非 secret 配置覆盖层：跟踪仓、手工依赖边、趋势 topics/keywords、邮件收件人、digest hour。YAML 仍是 bootstrap/base config；provider secrets（GitHub/SMTP/RSS/LLM）仍只从 env 读取，UI 只显示 configured/missing 状态，不接收、不渲染、不持久化。
 
 ## 信号与事件
 

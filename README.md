@@ -69,6 +69,14 @@ Artifacts land in a fresh temp directory (printed at the top of the run; pass `-
 
 The run prints the artifact tree plus a couple of rendered-report excerpts so you can read the output it would deliver. Reproduce by copy-pasting the two commands above — no setup.
 
+To refresh the README terminal GIF after CLI/demo copy changes:
+
+```bash
+vhs assets/demo.tape
+```
+
+`assets/demo.tape` records only the offline `transmutary-demo` command. The Web dashboard image (`assets/dashboard.png`) should be refreshed from a browser screenshot so the admin UI is captured as users see it.
+
 ## How it works
 
 ```
@@ -176,9 +184,11 @@ cp .env.example .env            # fill credentials (gitignored, never baked into
 # prepare ./config/{watchlist,trend_scope,delivery}.yaml
 #   delivery.yaml: point state_db_path & artifact_root under /var/lib/transmutary
 docker compose up -d
+# optional local dashboard/admin UI
+docker compose --profile dashboard up -d dashboard
 ```
 
-The image runs as a non-root user; credentials come from `.env` at runtime; the state DB and private artifacts persist in the `transmutary-state` volume. Without Docker, run the entrypoint directly: `transmutary-serve` (reads `TRANSMUTARY_CONFIG_DIR`, default `config`).
+The image runs as a non-root user; credentials come from `.env` at runtime; the state DB and private artifacts persist in the `transmutary-state` volume. The dashboard profile shares the same config mount and state volume, binds `127.0.0.1:8787` by default, and expects `TRANSMUTARY_ADMIN_TOKEN` for the settings UI. For public access, keep it behind HTTPS/auth/rate limiting. Without Docker, run the entrypoints directly: `transmutary-serve` and `transmutary-dashboard` (both read `TRANSMUTARY_CONFIG_DIR`, default `config`).
 
 ## Dashboard
 
@@ -189,9 +199,13 @@ pip install -e ".[dashboard]"     # adds jinja2 (Starlette/uvicorn are already c
 transmutary-dashboard             # serves on http://127.0.0.1:8787
 ```
 
-It reuses the existing Starlette stack and store interfaces. On localhost it can promote/demote Mode B candidates through a server-side confirmation flow; the POST only writes the shared `promoted_repo` table, so the resident service picks it up on the next reconcile pass without restart. Security posture: binds `127.0.0.1` by default; a non-localhost bind is **refused** unless you pass `--allow-public`; public binds stay **read-only** unless you also pass `--allow-public-writes`. Write requests require a double-submit CSRF token, `SameSite=Strict` cookie, Origin/Referer host check, same-origin form action, and a confirmation page. Public writes have no built-in identity auth — put the dashboard behind an HTTPS authenticating proxy with rate limits / repo allow-lists before enabling them.
+It reuses the existing Starlette stack and store interfaces. On localhost it can promote/demote Mode B candidates through a server-side confirmation flow; the POST only writes the shared `promoted_repo` table, so the resident service picks it up on the next reconcile pass without restart.
 
-External repository content is HTML-escaped (XSS), dangerous source URLs are blanked, and credentials/tokens are never rendered. The dashboard write path does not edit `watchlist.yaml` / `trend_scope.yaml`; those higher-risk config writes and full token identity auth remain deferred.
+The Settings area is an authenticated admin control plane for non-secret config: add/remove tracked repos, add manual dependency edges, edit trend topics/keywords, and adjust email recipients / digest hour. It does **not** edit YAML files directly. Effective runtime config is `YAML base ∪ SQLite admin overrides ∪ promoted_repo`; the service reconcile job picks up repo-scope changes without restart. Provider secrets stay env-only: GitHub/SMTP/RSS/LLM credentials are never accepted through the UI, never rendered, and never persisted. The UI only shows configured/missing status.
+
+Security posture: binds `127.0.0.1` by default; a non-localhost bind is **refused** unless you pass `--allow-public`; public binds stay **read-only** unless you also pass `--allow-public-writes`. Settings writes require `TRANSMUTARY_ADMIN_TOKEN` login, a signed HttpOnly session cookie, double-submit CSRF, `SameSite=Strict`, Origin/Referer host check, same-origin form action, and server-side validation. Public admin use should still sit behind HTTPS, rate limits, and repo allow-lists.
+
+External repository content is HTML-escaped (XSS), dangerous source URLs are blanked, and credentials/tokens are never rendered. Filesystem paths (`state_db_path`, `artifact_root`, `feed_dir`) and provider credentials remain YAML/env-owned.
 
 The UI is a modern sidebar dashboard (stat tiles, Sentry-style issue stream, severity encoded by colour + icon + text for accessibility), with a light/dark theme toggle and an EN/中文 language toggle (both remembered, both rendered server-side on first paint so there is no flash). A per-request CSP nonce keeps the inline theme bootstrap script precisely allow-listed without weakening the policy.
 
@@ -236,7 +250,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ### Roadmap
 
-Deferred by design: channel interface abstraction, dashboard token identity auth, web editing for `watchlist.yaml` / `trend_scope.yaml`, subscription config, live resident run. (The dashboard, one-click promote/demote UI, L2 semantic grouping, and the optional critique→refine report pass are implemented — see [Dashboard](#dashboard) and [How it works: optional critique→refine](#how-it-works-optional-critiquerefine-r11).)
+Deferred by design: channel interface abstraction, Web secret storage/rotation, multi-user RBAC/OAuth, subscription config, live resident run controls. (The dashboard, admin non-secret settings UI, one-click promote/demote UI, L2 semantic grouping, and the optional critique→refine report pass are implemented — see [Dashboard](#dashboard) and [How it works: optional critique→refine](#how-it-works-optional-critiquerefine-r11).)
 
 ### Tests
 
