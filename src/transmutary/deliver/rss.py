@@ -19,6 +19,7 @@ from __future__ import annotations
 from feedgen.feed import FeedGenerator
 
 from ..report.schema import Report
+from .routes import DeliveryRoute
 
 # Feed identity. The feed id is a stable urn (NOT a tokenized URL) — R20: no token
 # is ever embedded in feed metadata or entry links.
@@ -71,7 +72,7 @@ def render_feed(reports: list[Report], *, feed_name: str, title: str) -> str:
     return fg.atom_str(pretty=True).decode("utf-8")
 
 
-def render_single(report: Report, *, feed_name: str = "immediate") -> str:
+def render_single(report: Report, *, feed_name: str = DeliveryRoute.IMMEDIATE.value) -> str:
     """Render one report as a single-entry feed (the immediate-push case)."""
     return render_feed(
         [report], feed_name=feed_name, title=f"transmutary {feed_name} feed"

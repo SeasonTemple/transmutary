@@ -6,7 +6,8 @@ SMTP failure degrades without dropping RSS (no channel.py — KTD1).
 
 from __future__ import annotations
 
-from transmutary.deliver.stub import DeliveryRoute, OutboundDelivery, deliver
+from transmutary.deliver.routes import DeliveryRoute
+from transmutary.deliver.stub import OutboundDelivery, deliver
 from transmutary.report.schema import Report, ReportKind, Severity
 
 

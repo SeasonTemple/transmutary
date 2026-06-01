@@ -28,10 +28,12 @@ from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
 
+from .routes import DeliveryRoute
+
 logger = logging.getLogger("transmutary.deliver.server")
 
 # Feeds that may be served (matches the two inline routes; KTD1).
-_VALID_FEEDS = frozenset({"immediate", "digest"})
+_VALID_FEEDS = frozenset(route.value for route in DeliveryRoute)
 
 
 def hash_token(token: str) -> str:

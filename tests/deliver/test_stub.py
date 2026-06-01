@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import os
 
-from transmutary.deliver.stub import DeliveryRoute, deliver
+from transmutary.deliver.routes import DeliveryRoute
+from transmutary.deliver.stub import deliver
 from transmutary.report.schema import Report, ReportKind, Severity
 
 

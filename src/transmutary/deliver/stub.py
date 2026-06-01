@@ -16,18 +16,14 @@ degrading WITHOUT dropping the RSS leg.
 
 from __future__ import annotations
 
-import enum
 import os
 from dataclasses import dataclass, field
 
 from ..report.schema import Report, Severity
 from . import email as email_mod
 from . import rss as rss_mod
+from .routes import DeliveryRoute
 
-
-class DeliveryRoute(str, enum.Enum):
-    IMMEDIATE = "immediate"  # high-risk → instant RSS + email (Phase 1)
-    DIGEST = "digest"  # low-priority → daily digest
 
 
 @dataclass
