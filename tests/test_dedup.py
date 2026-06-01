@@ -10,6 +10,7 @@ import pytest
 from transmutary.dedup import (
     DEFAULT_WINDOW_SECONDS,
     SourceItem,
+    _merge_intersecting,
     canonicalize_url,
     dedup_issue,
     dedup_release,
@@ -158,3 +159,47 @@ def test_keyword_bucket_multilingual():
     assert keyword_bucket("接口挂了") == "outage"
     assert keyword_bucket("CVE-2026-1 vulnerability") == "security"
     assert keyword_bucket("just a question") == "other"
+
+
+# ---------------------------------------------------------------------------
+# _merge_intersecting chain topology (R18 P0 regression guard).
+#
+# The iterative O(n²) merge in dedup._merge_intersecting was originally
+# flagged as a P0 ("drops groups when last group merges with multiple prior
+# groups"). The fix proposed union-find; on inspection the existing logic
+# actually rebuilds `merged` from scratch each outer iteration and only
+# appends `current` once, so the chain collapses correctly. These tests
+# pin the behavior so a future refactor to union-find cannot regress
+# either the chain or the disjoint case.
+# ---------------------------------------------------------------------------
+def test_merge_intersecting_chain_collapse():
+    # A∩B, B∩C, A∩C=∅ — chain where last group shares elements with two
+    # prior groups. The merge must collapse into a single connected
+    # component, not split or duplicate.
+    groups = [{"a", "b"}, {"b", "c"}, {"a", "c"}]
+    merged = _merge_intersecting(groups)
+    assert merged == [{"a", "b", "c"}]
+
+
+def test_merge_intersecting_disjoint_groups_preserved():
+    # No shared elements → each group survives as its own component, in
+    # insertion order, with no duplicates.
+    groups = [{"a"}, {"b"}, {"c"}]
+    merged = _merge_intersecting(groups)
+    assert merged == [{"a"}, {"b"}, {"c"}]
+
+
+def test_merge_intersecting_chain_via_merge_references():
+    # End-to-end R18 chain: three blogs. A cites upstream U1. B cites U1+U2.
+    # C cites U2+U3. The two-step transitive chain (A→B→C) must still
+    # collapse to a single independent source.
+    u1 = "https://github.com/acme/cli/issues/1"
+    u2 = "https://github.com/acme/cli/issues/2"
+    u3 = "https://github.com/acme/cli/issues/3"
+    items = [
+        SourceItem(url="https://blog-a.com/x", text=f"see {u1}"),
+        SourceItem(url="https://blog-b.net/y", text=f"per {u1} and {u2}"),
+        SourceItem(url="https://blog-c.org/z", text=f"from {u2} and {u3}"),
+    ]
+    result = merge_references(items)
+    assert result.independent_source_count() == 1
