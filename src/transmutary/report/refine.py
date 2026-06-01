@@ -67,7 +67,7 @@ def _critique_data(draft: str, evidence: str) -> str:
     return (
         "## DRAFT REPORT (untrusted)\n"
         f"{draft}\n\n"
-        "## ORIGINAL EVIDENCE (untrusted)\n"
+        "## ORIGINAL EVIDENCE (untrusted)\n\n"
         f"{evidence}"
     )
 
@@ -79,7 +79,7 @@ def _refine_data(draft: str, critique: str, evidence: str) -> str:
         f"{draft}\n\n"
         "## CRITIQUE OF THE DRAFT (untrusted)\n"
         f"{critique}\n\n"
-        "## ORIGINAL EVIDENCE (untrusted)\n"
+        "## ORIGINAL EVIDENCE (untrusted)\n\n"
         f"{evidence}"
     )
 
