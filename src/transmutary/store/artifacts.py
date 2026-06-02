@@ -3,7 +3,7 @@
 Writes a ``Report`` to ``<artifact_root>/<repo>/<ts>-<kind>.md``. The repo name
 is sanitized so it can NEVER escape the artifact root (a ``foo/bar`` repo maps to
 a single nested-but-contained directory; ``..`` / absolute paths are rejected).
-The artifact root is enforced 0700 at startup (KTD5).
+The artifact root is enforced 0700 at startup on POSIX platforms (KTD5).
 """
 
 from __future__ import annotations
@@ -11,11 +11,11 @@ from __future__ import annotations
 import json
 import os
 import re
-import stat
 import time
 from dataclasses import dataclass
 
 from ..report.schema import Report
+from .permissions import IS_WINDOWS, PrivatePermissionError, chmod_private, enforce_private_mode
 
 REQUIRED_DIR_MODE = 0o700
 
@@ -72,17 +72,18 @@ def sanitize_repo(repo: str) -> str:
 
 
 def _ensure_dir_permissions(path: str) -> None:
-    """Create dir with 0700 if missing; raise if existing dir is wider (KTD5)."""
-    if not os.path.exists(path):
-        os.makedirs(path, mode=REQUIRED_DIR_MODE, exist_ok=True)
-        # makedirs honors umask for intermediates; force the leaf.
-        os.chmod(path, REQUIRED_DIR_MODE)
-        return
-    mode = stat.S_IMODE(os.stat(path).st_mode)
-    if mode & 0o077:
-        raise ArtifactPermissionError(
-            f"Artifact dir {path!r} has permissions {oct(mode)}; require 0700 (R24)."
-        )
+    """Create dir with private perms; reject wider POSIX modes where meaningful."""
+    try:
+        if not os.path.exists(path):
+            os.makedirs(path, mode=REQUIRED_DIR_MODE, exist_ok=True)
+            chmod_private(path, REQUIRED_DIR_MODE)
+            return
+        if IS_WINDOWS:
+            chmod_private(path, REQUIRED_DIR_MODE)
+            return
+        enforce_private_mode(path, REQUIRED_DIR_MODE, "Artifact dir")
+    except PrivatePermissionError as exc:
+        raise ArtifactPermissionError(f"{exc} (R24)") from exc
 
 
 def _render_markdown(report: Report) -> str:
@@ -127,13 +128,15 @@ class ArtifactStore:
         _ensure_dir_permissions(directory)
         stem = f"{int(ts)}-{report.kind.value}"
         path = os.path.join(directory, f"{stem}.md")
+        path_existed = os.path.exists(path)
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(_render_markdown(report))
-        os.chmod(path, 0o600)
+        chmod_private(path, 0o600, inherited_ok=not path_existed)
         meta_path = os.path.join(directory, f"{stem}.json")
+        meta_path_existed = os.path.exists(meta_path)
         with open(meta_path, "w", encoding="utf-8") as fh:
             json.dump(report.to_dict(), fh, ensure_ascii=False)
-        os.chmod(meta_path, 0o600)
+        chmod_private(meta_path, 0o600, inherited_ok=not meta_path_existed)
         return path
 
     def read_meta(self, repo: str, filename: str) -> dict | None:

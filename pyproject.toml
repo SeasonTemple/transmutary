@@ -68,6 +68,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "real_windows_acl: run real Windows ACL integration instead of no-op ACL fixture",
+]
 
 [tool.ruff]
 line-length = 100

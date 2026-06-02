@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from transmutary.deliver.routes import DeliveryRoute
 from transmutary.deliver.stub import deliver
@@ -24,13 +25,13 @@ def test_high_risk_takes_immediate_path(tmp_path):
     res = deliver(_report(Severity.CRITICAL), artifact_root=str(tmp_path))
     assert res.route is DeliveryRoute.IMMEDIATE
     assert os.path.exists(res.path)
-    assert "_delivered/immediate" in res.path
+    assert Path(res.path).relative_to(tmp_path).parts[:2] == ("_delivered", "immediate")
 
 
 def test_low_priority_takes_digest_path(tmp_path):
     res = deliver(_report(Severity.NORMAL), artifact_root=str(tmp_path))
     assert res.route is DeliveryRoute.DIGEST
-    assert "_delivered/digest" in res.path
+    assert Path(res.path).relative_to(tmp_path).parts[:2] == ("_delivered", "digest")
 
 
 def test_urgency_override(tmp_path):
