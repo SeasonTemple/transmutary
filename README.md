@@ -218,6 +218,18 @@ The UI is a modern sidebar dashboard (stat tiles, Sentry-style issue stream, sev
 
 **Agent-native access** — every data endpoint supports content negotiation: request `Accept: application/json` (or `?format=json`) to get the view-model as JSON instead of HTML, with the same credential/token exclusion as the HTML path. `GET /llms.txt` describes the endpoint surface for agents (no private data).
 
+### LAN / intranet access
+
+To expose the dashboard on your local network (e.g. for team viewing or a reverse proxy on another machine), use the `dashboard-lan` profile:
+
+```bash
+docker compose --profile dashboard-lan up -d dashboard-lan
+```
+
+This binds `0.0.0.0:8787` on the host while reusing the same `.env`, config, and `transmutary-state` volume. The `--allow-public` flag is already set (it skips Host-header validation and sets `csrf_secure=False` so cookies work over plain HTTP). All hard gates remain: explicit opt-in, CSRF double-submit, and `TRANSMUTARY_ADMIN_TOKEN` authentication.
+
+**Important:** this mode accepts plaintext HTTP on your LAN. Only run it on a trusted network segment. For public internet access, place it behind an HTTPS reverse proxy with authentication and rate limiting (see security posture above).
+
 ## Architecture & docs
 
 - Domain glossary: [`CONTEXT.md`](CONTEXT.md)

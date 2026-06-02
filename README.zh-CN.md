@@ -217,6 +217,18 @@ Settings 区是带身份认证的 admin control plane，用于非 secret 配置�
 
 **Agent 友好** —— 每个数据端点支持内容协商：传 `Accept: application/json`（或 `?format=json`）即返回 view-model JSON 而非 HTML，凭据/token 排除与 HTML 路径一致。`GET /llms.txt` 向 agent 描述端点结构（不含私有数据）。
 
+### 局域网 / 内网访问
+
+若需在内网暴露看板（如团队浏览或另一台机器上的反代），使用 `dashboard-lan` profile：
+
+```bash
+docker compose --profile dashboard-lan up -d dashboard-lan
+```
+
+该模式将宿主侧绑定为 `0.0.0.0:8787`，复用同一 `.env`、配置与 `transmutary-state` 卷。`--allow-public` 已启用（跳过 Host 校验并将 `csrf_secure` 设为 `False`，使 cookie 在明文 HTTP 下可用）。安全硬门全部保留：显式 opt-in、CSRF double-submit、`TRANSMUTARY_ADMIN_TOKEN` 认证。
+
+**注意**：此模式在局域网使用明文 HTTP，仅在可信网络段运行。公网访问仍需放在 HTTPS 反向代理 + 鉴权 + 限流之后（参见上文安全姿态说明）。
+
 ## 架构与文档
 
 - 领域术语表：[`CONTEXT.md`](CONTEXT.md)

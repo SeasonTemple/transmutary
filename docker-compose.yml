@@ -42,5 +42,24 @@ services:
       timeout: 5s
       retries: 3
 
+  dashboard-lan:
+    image: ${TRANSMUTARY_IMAGE:-ghcr.io/seasontemple/transmutary:latest}
+    restart: unless-stopped
+    profiles: ["dashboard-lan"]
+    env_file:
+      - .env                      # 含 TRANSMUTARY_ADMIN_TOKEN；provider secrets 仍只走 env
+    entrypoint: []
+    command: ["transmutary-dashboard", "--host", "0.0.0.0", "--allow-public", "--allow-public-writes"]
+    ports:
+      - "0.0.0.0:8787:8787"       # 绑定所有接口，供局域网/内网访问；公网请放 HTTPS 鉴权反代后
+    volumes:
+      - ./config:/config:ro
+      - transmutary-state:/var/lib/transmutary
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/healthz', timeout=2).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   transmutary-state:

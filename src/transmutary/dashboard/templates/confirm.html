@@ -10,8 +10,8 @@
   <form method="post" action="{{ action }}">
     <input type="hidden" name="repo" value="{{ repo }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button class="action" type="submit" data-i18n="confirm">{{ t['confirm'] }}</button>
-    <a class="back" href="/" data-i18n="cancel">{{ t['cancel'] }}</a>
+    <button class="btn {% if action == '/demote' %}btn--danger{% else %}btn--primary{% endif %}" type="submit" data-i18n="confirm">{{ t['confirm'] }}</button>
+    <a class="btn btn--ghost" href="/" data-i18n="cancel">{{ t['cancel'] }}</a>
   </form>
 </div>
 

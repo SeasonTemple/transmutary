@@ -61,7 +61,7 @@ logger = logging.getLogger("transmutary.dashboard")
 
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-_STATIC_VERSION = "20260601-admin-ui-v2"
+_STATIC_VERSION = "20260602-ui-polish"
 _DEFAULT_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]", "::1"})
 _DEFAULT_PORT = 8787
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -162,7 +162,7 @@ def make_dashboard_app(
     store: StateStore,
     artifacts: ArtifactStore,
     *,
-    allowed_hosts: frozenset[str] | None = None,
+    allowed_hosts: frozenset[str] | None = _DEFAULT_ALLOWED_HOSTS,
     write_store: StateStore | None = None,
     csrf_secure: bool = False,
     admin_token: str | None = None,
@@ -170,7 +170,8 @@ def make_dashboard_app(
     """Build the dashboard ASGI app (no server bound)."""
     _require_jinja()
     templates = Jinja2Templates(directory=_TEMPLATES_DIR)  # autoescape on (R-D10)
-    allowed = allowed_hosts if allowed_hosts is not None else _DEFAULT_ALLOWED_HOSTS
+    # None = skip Host/Origin validation (LAN mode via --allow-public).
+    allowed = allowed_hosts
 
     def _lang(request: Request) -> str:
         """Resolve the request language from the cookie (whitelist, R-I4)."""
@@ -240,7 +241,7 @@ def make_dashboard_app(
             return _write_disabled()
         if not _admin_ok(request):
             return _error(request, "error_auth", 403)
-        if not check_origin(request, allowed):
+        if allowed is not None and not check_origin(request, allowed):
             return _error(request, "error_csrf", 403)
         if not verify_token(form.get("csrf_token"), request.cookies.get(CSRF_COOKIE)):
             return _error(request, "error_csrf", 403)
@@ -370,7 +371,7 @@ def make_dashboard_app(
     async def _write_action(request: Request, action: str) -> Response:
         if write_store is None:
             return _write_disabled()
-        if not check_origin(request, allowed):
+        if allowed is not None and not check_origin(request, allowed):
             return _error(request, "error_csrf", 403)
         body = (await request.body()).decode("utf-8", errors="replace")
         form = parse_qs(body, keep_blank_values=True)
@@ -422,7 +423,7 @@ def make_dashboard_app(
         if not admin_token:
             return _admin_disabled(request)
         form = await _form(request)
-        if not check_origin(request, allowed):
+        if allowed is not None and not check_origin(request, allowed):
             return _error(request, "error_csrf", 403)
         if not verify_token(form.get("csrf_token"), request.cookies.get(CSRF_COOKIE)):
             return _error(request, "error_csrf", 403)
@@ -588,10 +589,11 @@ def make_dashboard_app(
         Route("/static/dashboard.js", script, methods=["GET"]),
     ]
     middleware = [
-        Middleware(HostAllowlistMiddleware, allowed_hosts=allowed),
         Middleware(CSRFMiddleware, enabled=write_store is not None, secure=csrf_secure),
         Middleware(CSPNonceMiddleware),
     ]
+    if allowed is not None:
+        middleware.insert(0, Middleware(HostAllowlistMiddleware, allowed_hosts=allowed))
     return Starlette(
         debug=False,  # R-D17
         routes=routes,
@@ -651,8 +653,15 @@ def resolve_write_store(
     )
 
 
-def _allowed_hosts_for(host: str) -> frozenset[str]:
-    """Host-header allow-list for a given bind host (R-D14)."""
+def _allowed_hosts_for(host: str, *, allow_public: bool = False) -> frozenset[str] | None:
+    """Host-header allow-list for a given bind host (R-D14).
+
+    Returns ``None`` when *allow_public* is set — the opt-in ``--allow-public``
+    flag is treated as explicit permission to skip Host-header validation
+    (LAN / intranet deployment behind no reverse-proxy).
+    """
+    if allow_public:
+        return None
     if host in _DEFAULT_ALLOWED_HOSTS:
         return _DEFAULT_ALLOWED_HOSTS
     return _DEFAULT_ALLOWED_HOSTS | {host}
@@ -702,9 +711,11 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real serv
         settings,
         store,
         artifacts,
-        allowed_hosts=_allowed_hosts_for(host),
+        allowed_hosts=_allowed_hosts_for(host, allow_public=args.allow_public),
         write_store=write_store,
-        csrf_secure=not is_local_bind(host) and args.allow_public_writes,
+        csrf_secure=not args.allow_public
+        and not is_local_bind(host)
+        and args.allow_public_writes,
         admin_token=os.environ.get(admin_auth.ADMIN_TOKEN_ENV),
     )
 

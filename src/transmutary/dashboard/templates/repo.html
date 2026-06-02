@@ -8,8 +8,8 @@
   {% if runtime.in_watchlist %}<span class="pill" data-i18n="tag.observed">{{ t['tag.observed'] }}</span>
   {% else %}<span class="pill dim" data-i18n="tag.archived">{{ t['tag.archived'] }}</span>{% endif %}
 </h1>
-{% if runtime.promotable %}<a class="action-link" href="/promote?repo={{ runtime.repo }}" data-i18n="promote">{{ t['promote'] }}</a>{% endif %}
-{% if runtime.demotable %}<a class="action-link" href="/demote?repo={{ runtime.repo }}" data-i18n="demote">{{ t['demote'] }}</a>{% endif %}
+{% if runtime.promotable %}<a class="btn btn--primary" href="/promote?repo={{ runtime.repo }}" data-i18n="promote">{{ t['promote'] }}</a>{% endif %}
+{% if runtime.demotable %}<a class="btn btn--danger" href="/demote?repo={{ runtime.repo }}" data-i18n="demote">{{ t['demote'] }}</a>{% endif %}
 </header>
 
 <h2 class="sec" data-i18n="sec.runtime">{{ t['sec.runtime'] }}</h2>

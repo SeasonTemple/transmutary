@@ -56,7 +56,7 @@
     <form method="post" action="/settings/repos" class="settings-form compact-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="field"><span data-i18n="th.repo">{{ t['th.repo'] }}</span><input name="repo" value="{{ form_repo or '' }}" placeholder="owner/repo"></label>
-      <button class="action primary" type="submit" data-i18n="add">{{ t['add'] }}</button>
+      <button class="btn btn--primary" type="submit" data-i18n="add">{{ t['add'] }}</button>
     </form>
     <div class="table-shell"><table class="tbl">
       <thead><tr><th scope="col" data-i18n="th.repo">{{ t['th.repo'] }}</th><th scope="col" data-i18n="th.source">{{ t['th.source'] }}</th><th scope="col"></th></tr></thead>
@@ -70,7 +70,7 @@
           <form method="post" action="/settings/repos/remove" class="inline-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="repo" value="{{ entry.repo }}">
-            <button class="action" type="submit" data-i18n="remove">{{ t['remove'] }}</button>
+            <button class="btn btn--danger" type="submit" data-i18n="remove">{{ t['remove'] }}</button>
           </form>
           {% endif %}
         </td>
@@ -92,7 +92,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="field"><span data-i18n="th.from">{{ t['th.from'] }}</span><input name="from_repo" placeholder="owner/repo"></label>
       <label class="field"><span data-i18n="th.to">{{ t['th.to'] }}</span><input name="to_repo" placeholder="owner/repo"></label>
-      <button class="action primary" type="submit" data-i18n="add">{{ t['add'] }}</button>
+      <button class="btn btn--primary" type="submit" data-i18n="add">{{ t['add'] }}</button>
     </form>
     {% if settings_view.admin_dependency_edges %}
     <div class="table-shell"><table class="tbl">
@@ -105,7 +105,7 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="from_repo" value="{{ from_repo }}">
           <input type="hidden" name="to_repo" value="{{ to_repo }}">
-          <button class="action" type="submit" data-i18n="remove">{{ t['remove'] }}</button>
+          <button class="btn btn--danger" type="submit" data-i18n="remove">{{ t['remove'] }}</button>
         </form></td>
       </tr>
       {% endfor %}
@@ -126,7 +126,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="field"><span data-i18n="topics">{{ t['topics'] }}</span><textarea name="topics">{{ settings_view.trend_topics | join('\n') }}</textarea></label>
       <label class="field"><span data-i18n="keywords">{{ t['keywords'] }}</span><textarea name="keywords">{{ settings_view.trend_keywords | join('\n') }}</textarea></label>
-      <button class="action primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
+      <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
     </form>
   </section>
 
@@ -142,7 +142,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="field recipients-field"><span data-i18n="email_recipients">{{ t['email_recipients'] }}</span><textarea name="email_recipients">{{ settings_view.email_recipients | join('\n') }}</textarea></label>
       <label class="field hour-field"><span data-i18n="digest_hour">{{ t['digest_hour'] }}</span><input name="digest_hour" inputmode="numeric" value="{{ settings_view.digest_hour }}"></label>
-      <button class="action primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
+      <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
     </form>
   </section>
 
