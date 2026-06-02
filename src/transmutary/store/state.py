@@ -237,6 +237,7 @@ class StateStore:
             _harden_created_db_parent(parent, created=not parent_exists)
         if not is_memory:
             _ensure_db_permissions(db_path, create=True)
+            _ensure_sqlite_sidecar_permissions(db_path)
         self._conn = sqlite3.connect(
             db_path, check_same_thread=False, uri=db_path.startswith("file:")
         )

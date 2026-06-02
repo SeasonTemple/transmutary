@@ -384,6 +384,28 @@ def test_sidecar_permission_too_wide_fails_on_reopen(tmp_path):
         StateStore(str(db))
 
 
+def test_existing_sidecars_checked_before_sqlite_open(monkeypatch, tmp_path):
+    db = tmp_path / "state.sqlite3"
+    db.write_bytes(b"")
+    wal = str(db) + "-wal"
+    with open(wal, "wb") as fh:
+        fh.write(b"")
+    calls = []
+
+    def fake_ensure_db_permissions(path, *, create):
+        calls.append((path, create, "exists" if os.path.exists(wal) else "missing"))
+
+    def fake_connect(*args, **kwargs):
+        assert (wal, False, "exists") in calls
+        raise RuntimeError("stop before sqlite mutates sidecars")
+
+    monkeypatch.setattr(state_mod, "_ensure_db_permissions", fake_ensure_db_permissions)
+    monkeypatch.setattr(state_mod.sqlite3, "connect", fake_connect)
+
+    with pytest.raises(RuntimeError, match="stop before sqlite"):
+        StateStore(str(db))
+
+
 @pytest.mark.skipif(IS_WINDOWS, reason="POSIX mode bits are not reliable on Windows")
 def test_sidecar_permission_too_wide_is_ignored_by_read_only_open(tmp_path):
     db = tmp_path / "state.sqlite3"
