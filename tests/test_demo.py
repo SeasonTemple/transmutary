@@ -22,6 +22,8 @@ import httpx
 
 from transmutary import demo
 
+IS_WINDOWS = os.name == "nt"
+
 
 # ---------------------------------------------------------------------------
 # U1 — mock data + mock transport + stub call_fn
@@ -154,6 +156,17 @@ def test_main_default_uses_temp_dir_and_returns_zero(capsys):
     assert "transmutary-demo-" in os.path.basename(artifact_root)
 
 
+def test_print_report_excerpt_falls_back_when_relpath_crosses_drive(monkeypatch, tmp_path, capsys):
+    report = tmp_path / "report.md"
+    report.write_text("title\nbody\n", encoding="utf-8")
+
+    monkeypatch.setattr(demo.os.path, "relpath", lambda path: (_ for _ in ()).throw(ValueError))
+
+    demo._print_report_excerpt(str(report))
+
+    assert f"--- {report} ---" in capsys.readouterr().out
+
+
 def test_artifact_permissions_locked_down(tmp_path):
     rc = demo.main(["--out", str(tmp_path)])
     assert rc == 0
@@ -161,12 +174,14 @@ def test_artifact_permissions_locked_down(tmp_path):
     # Dirs created by ArtifactStore are 0700 (no group/other bits, KTD-C/KTD5).
     repo_dir = tmp_path / "octocat__hexbridge-cli"
     mode = stat.S_IMODE(os.stat(repo_dir).st_mode)
-    assert mode & 0o077 == 0, f"repo dir mode {oct(mode)} must be 0700"
+    if not IS_WINDOWS:
+        assert mode & 0o077 == 0, f"repo dir mode {oct(mode)} must be 0700"
 
     # Per-repo archive files are 0600.
     archive = next(iter(repo_dir.glob("*-diagnose.md")))
     fmode = stat.S_IMODE(os.stat(archive).st_mode)
-    assert fmode & 0o077 == 0, f"archive file mode {oct(fmode)} must be 0600"
+    if not IS_WINDOWS:
+        assert fmode & 0o077 == 0, f"archive file mode {oct(fmode)} must be 0600"
 
 
 def test_demo_module_does_not_import_into_production_path():

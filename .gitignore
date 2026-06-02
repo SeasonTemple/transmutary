@@ -17,6 +17,7 @@ uv.lock
 *.db
 artifacts/
 _delivered/
+var/
 var/demo/
 
 # 凭据 / 本地配置（禁入库 — R21/KTD4）

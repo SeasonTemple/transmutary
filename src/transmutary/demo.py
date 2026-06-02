@@ -437,7 +437,12 @@ def _print_report_excerpt(path: str, *, max_lines: int = 14) -> None:
     except OSError as exc:  # pragma: no cover - defensive
         print(f"  (could not read {path}: {exc})")
         return
-    print(f"\n--- {os.path.relpath(path)} ---")
+    try:
+        display_path = os.path.relpath(path)
+    except ValueError:
+        # Windows raises when the temp artifact dir and cwd are on different drives.
+        display_path = path
+    print(f"\n--- {display_path} ---")
     for line in lines[:max_lines]:
         print(f"  {line}")
     if len(lines) > max_lines:

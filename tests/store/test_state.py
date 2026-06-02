@@ -7,12 +7,15 @@ import stat
 
 import pytest
 
+import transmutary.store.state as state_mod
 from transmutary.store.state import (
     SEEN_SET_WINDOW_SECONDS,
     StatePermissionError,
     StateStore,
     scrub_credentials,
 )
+
+IS_WINDOWS = os.name == "nt"
 
 
 @pytest.fixture
@@ -66,6 +69,71 @@ def test_rw_store_reopens_existing_wal_database(tmp_path):
         assert second.is_promoted("hot/repo") is True
     finally:
         second.close()
+
+
+def test_rw_store_hardens_newly_created_db_parent_directory(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_chmod_private(path, mode, *, inherited_ok=False):
+        calls.append((path, mode, inherited_ok))
+
+    monkeypatch.setattr(state_mod, "chmod_private", fake_chmod_private)
+    db = tmp_path / "state" / "state.sqlite3"
+    store = StateStore(str(db))
+    try:
+        assert (os.path.abspath(str(db.parent)), 0o700, False) in calls
+    finally:
+        store.close()
+
+
+def test_rw_store_does_not_harden_existing_db_parent_directory(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_chmod_private(path, mode, *, inherited_ok=False):
+        calls.append((os.path.abspath(path), mode, inherited_ok))
+
+    monkeypatch.setattr(state_mod, "chmod_private", fake_chmod_private)
+    db = tmp_path / "state.sqlite3"
+    store = StateStore(str(db))
+    try:
+        assert (os.path.abspath(str(tmp_path)), 0o700, False) not in calls
+    finally:
+        store.close()
+
+
+def test_rw_store_hardens_existing_db_file_on_windows(monkeypatch, tmp_path):
+    calls = []
+    db = tmp_path / "state" / "state.sqlite3"
+    db.parent.mkdir()
+    db.write_bytes(b"")
+
+    def fake_chmod_private(path, mode, *, inherited_ok=False):
+        calls.append((os.path.abspath(path), mode, inherited_ok))
+
+    monkeypatch.setattr(state_mod, "IS_WINDOWS", True)
+    monkeypatch.setattr(state_mod, "chmod_private", fake_chmod_private)
+
+    store = StateStore(str(db))
+    try:
+        assert (os.path.abspath(str(db)), 0o600, False) in calls
+        assert (os.path.abspath(str(db.parent)), 0o700, False) not in calls
+    finally:
+        store.close()
+
+
+def test_read_only_store_does_not_harden_acl(monkeypatch, tmp_path):
+    db = tmp_path / "state.sqlite3"
+    store = StateStore(str(db))
+    store.close()
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("read-only open must not mutate permissions")
+
+    monkeypatch.setattr(state_mod, "chmod_private", fail_if_called)
+    monkeypatch.setattr(state_mod, "enforce_private_mode", fail_if_called)
+
+    ro = StateStore(str(db), read_only=True)
+    ro.close()
 
 
 def test_fingerprint_crud_and_upsert(store):
@@ -293,6 +361,7 @@ def test_credentials_never_land_in_db(store):
 
 # --- security: KTD5 file permission enforcement ---
 
+@pytest.mark.skipif(IS_WINDOWS, reason="POSIX mode bits are not reliable on Windows")
 def test_db_permission_too_wide_fails(tmp_path):
     db = tmp_path / "state.sqlite3"
     db.write_bytes(b"")
@@ -301,11 +370,53 @@ def test_db_permission_too_wide_fails(tmp_path):
         StateStore(str(db))
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="POSIX mode bits are not reliable on Windows")
+def test_sidecar_permission_too_wide_fails_on_reopen(tmp_path):
+    db = tmp_path / "state.sqlite3"
+    s = StateStore(str(db))
+    s.close()
+    wal = str(db) + "-wal"
+    with open(wal, "wb") as fh:
+        fh.write(b"")
+    os.chmod(wal, 0o644)
+
+    with pytest.raises(StatePermissionError):
+        StateStore(str(db))
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="POSIX mode bits are not reliable on Windows")
+def test_sidecar_permission_too_wide_is_ignored_by_read_only_open(tmp_path):
+    db = tmp_path / "state.sqlite3"
+    s = StateStore(str(db))
+    s.close()
+    wal = str(db) + "-wal"
+    with open(wal, "wb") as fh:
+        fh.write(b"")
+    os.chmod(wal, 0o644)
+
+    ro = StateStore(str(db), read_only=True)
+    ro.close()
+
+
 def test_db_created_with_0600(tmp_path):
     db = tmp_path / "sub" / "state.sqlite3"
     s = StateStore(str(db))
     try:
         mode = stat.S_IMODE(os.stat(db).st_mode)
-        assert mode & 0o077 == 0  # no group/other bits
+        if not IS_WINDOWS:
+            assert mode & 0o077 == 0  # no group/other bits
+    finally:
+        s.close()
+
+
+@pytest.mark.skipif(not IS_WINDOWS, reason="Windows-specific POSIX mode compatibility")
+def test_windows_wide_mode_db_is_accepted(tmp_path):
+    db = tmp_path / "state.sqlite3"
+    db.write_bytes(b"")
+    os.chmod(db, 0o666)
+    s = StateStore(str(db))
+    try:
+        s.promote_repo("owner/repo")
+        assert s.is_promoted("owner/repo") is True
     finally:
         s.close()

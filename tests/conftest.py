@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -47,6 +48,23 @@ def _no_real_embeddings(monkeypatch):
         raise llm.LLMError("embeddings stubbed in tests (no network)")
 
     monkeypatch.setattr(llm, "embed", _stub_embed)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _no_real_windows_acl(monkeypatch, request):
+    """Avoid slow PowerShell ACL rewrites in ordinary unit tests on Windows."""
+    if (
+        os.name != "nt"
+        or request.node.get_closest_marker("real_windows_acl")
+        or request.node.path.name == "test_permissions.py"
+    ):
+        yield
+        return
+
+    from transmutary.store import permissions
+
+    monkeypatch.setattr(permissions, "harden_windows_acl", lambda path: None)
     yield
 
 

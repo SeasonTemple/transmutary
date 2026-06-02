@@ -2,6 +2,8 @@
 
 Tables: event_fingerprint, star_snapshot, issue_baseline, seen_set,
 subscriber_token, collect_cursor. DB file is enforced 0600 at startup (KTD5).
+On Windows, POSIX mode bits are not reliable, so creation remains restrictive
+best-effort without rejecting the platform's synthetic group/other bits.
 All persisted text is scrubbed of credential patterns before write (R21):
 credentials must NEVER land in the DB, even inside a captured HTTP error body.
 
@@ -14,10 +16,11 @@ from __future__ import annotations
 import os
 import re
 import sqlite3
-import stat
 import threading
 import time
 from dataclasses import dataclass
+
+from .permissions import IS_WINDOWS, PrivatePermissionError, chmod_private, enforce_private_mode
 
 # Rolling seen-set window (R8). day-8 reappearance is treated as a NEW event
 # (known residual risk, documented in plan Risks).
@@ -164,7 +167,7 @@ CREATE TABLE IF NOT EXISTS admin_delivery_preference (
 
 
 def _ensure_db_permissions(path: str, *, create: bool) -> None:
-    """Enforce 0600 on the DB file. Wider perms raise (KTD5 startup check)."""
+    """Enforce private DB permissions where POSIX mode bits are meaningful."""
     if not os.path.exists(path):
         if create:
             # Create with restrictive perms before sqlite opens it.
@@ -172,12 +175,27 @@ def _ensure_db_permissions(path: str, *, create: bool) -> None:
             os.close(fd)
         else:
             return
-    mode = stat.S_IMODE(os.stat(path).st_mode)
-    if mode & 0o077:
-        raise StatePermissionError(
-            f"State DB {path!r} has permissions {oct(mode)}; require 0600. "
-            "Refusing to start (KTD5)."
-        )
+    try:
+        if IS_WINDOWS:
+            chmod_private(path, REQUIRED_DB_MODE)
+            return
+        enforce_private_mode(path, REQUIRED_DB_MODE, "State DB")
+    except PrivatePermissionError as exc:
+        raise StatePermissionError(f"{exc} Refusing to start (KTD5).") from exc
+
+
+def _ensure_sqlite_sidecar_permissions(path: str) -> None:
+    """Harden SQLite WAL/SHM sidecar files when SQLite creates them."""
+    for suffix in ("-wal", "-shm"):
+        sidecar = path + suffix
+        if os.path.exists(sidecar):
+            _ensure_db_permissions(sidecar, create=False)
+
+
+def _harden_created_db_parent(parent: str, *, created: bool) -> None:
+    """Make a newly created DB directory private without mutating arbitrary parents."""
+    if parent and created:
+        chmod_private(parent, 0o700)
 
 
 class StateStore:
@@ -214,7 +232,9 @@ class StateStore:
             return
 
         if not is_memory and parent:
+            parent_exists = os.path.isdir(parent)
             os.makedirs(parent, exist_ok=True)
+            _harden_created_db_parent(parent, created=not parent_exists)
         if not is_memory:
             _ensure_db_permissions(db_path, create=True)
         self._conn = sqlite3.connect(
@@ -232,6 +252,7 @@ class StateStore:
         if not is_memory:
             # Re-check after sqlite may have touched the file.
             _ensure_db_permissions(db_path, create=False)
+            _ensure_sqlite_sidecar_permissions(db_path)
 
     def _init_schema(self) -> None:
         with self._lock:

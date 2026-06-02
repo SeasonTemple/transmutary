@@ -7,6 +7,7 @@ import stat
 
 import pytest
 
+import transmutary.store.artifacts as artifacts_mod
 from transmutary.report.schema import Report, ReportKind, Severity, Source
 from transmutary.store.artifacts import (
     ArtifactPathError,
@@ -14,6 +15,8 @@ from transmutary.store.artifacts import (
     ArtifactStore,
     sanitize_repo,
 )
+
+IS_WINDOWS = os.name == "nt"
 
 
 def _report(repo="owner/name", sources=None, kind=ReportKind.DIAGNOSE):
@@ -73,15 +76,73 @@ def test_artifact_dir_created_0700(tmp_path):
     root = tmp_path / "art"
     ArtifactStore(str(root))
     mode = stat.S_IMODE(os.stat(root).st_mode)
-    assert mode & 0o077 == 0
+    if not IS_WINDOWS:
+        assert mode & 0o077 == 0
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="POSIX mode bits are not reliable on Windows")
 def test_world_readable_root_rejected(tmp_path):
     root = tmp_path / "art"
     root.mkdir(mode=0o755)
     os.chmod(root, 0o755)
     with pytest.raises(ArtifactPermissionError):
         ArtifactStore(str(root))
+
+
+@pytest.mark.skipif(not IS_WINDOWS, reason="Windows-specific POSIX mode compatibility")
+def test_windows_wide_mode_root_is_accepted(tmp_path):
+    root = tmp_path / "art"
+    root.mkdir()
+    os.chmod(root, 0o777)
+    store = ArtifactStore(str(root))
+    path = store.write(_report(), ts=1700000000)
+    assert os.path.exists(path)
+
+
+def test_existing_artifact_files_are_hardened_on_overwrite(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_chmod_private(path, mode, *, inherited_ok=False):
+        calls.append((os.path.basename(path), mode, inherited_ok))
+
+    monkeypatch.setattr(artifacts_mod, "chmod_private", fake_chmod_private)
+
+    store = ArtifactStore(str(tmp_path / "art"))
+    store.write(_report(), ts=1700000000)
+    calls.clear()
+    store.write(_report(), ts=1700000000)
+
+    assert ("1700000000-diagnose.md", 0o600, False) in calls
+    assert ("1700000000-diagnose.json", 0o600, False) in calls
+
+
+def test_existing_artifact_dirs_are_hardened_on_windows(monkeypatch, tmp_path):
+    calls = []
+    root = tmp_path / "art"
+    repo_dir = root / "owner__name"
+    repo_dir.mkdir(parents=True)
+
+    def fake_chmod_private(path, mode, *, inherited_ok=False):
+        calls.append((os.path.abspath(path), mode, inherited_ok))
+
+    monkeypatch.setattr(artifacts_mod, "IS_WINDOWS", True)
+    monkeypatch.setattr(artifacts_mod, "chmod_private", fake_chmod_private)
+
+    store = ArtifactStore(str(root))
+    store.write(_report(), ts=1700000000)
+
+    assert (os.path.abspath(root), 0o700, False) in calls
+    assert (os.path.abspath(repo_dir), 0o700, False) in calls
+
+
+def test_artifact_permission_hardening_failure_surfaces(monkeypatch, tmp_path):
+    def fail_chmod_private(path, mode, *, inherited_ok=False):
+        raise artifacts_mod.PrivatePermissionError("acl failed")
+
+    monkeypatch.setattr(artifacts_mod, "chmod_private", fail_chmod_private)
+
+    with pytest.raises(ArtifactPermissionError, match="acl failed"):
+        ArtifactStore(str(tmp_path / "art"))
 
 
 # --- read-only listing / reading (dashboard U1, R-D2/R-D11) ------------------
