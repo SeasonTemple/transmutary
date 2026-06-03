@@ -10,9 +10,10 @@
   var THEME_KEY = "tmtry-theme";
 
   var LLM_PRESETS = {
-    openai:    { url: "https://api.openai.com/v1", transport: "openai", strong: "openai/gpt-4o", cheap: "openai/gpt-4o-mini", embed: "openai/text-embedding-3-small" },
-    anthropic: { url: "https://api.anthropic.com", transport: "anthropic", strong: "anthropic/claude-sonnet-4-6", cheap: "anthropic/claude-haiku-4-5", embed: "" },
-    azure:     { url: "", transport: "azure", strong: "", cheap: "", embed: "" },
+    openai:             { url: "https://api.openai.com/v1", transport: "openai" },
+    anthropic:          { url: "https://api.anthropic.com", transport: "anthropic" },
+    azure:              { url: "", transport: "azure" },
+    minimax_anthropic:  { url: "https://api.minimaxi.com/anthropic/v1", transport: "anthropic" },
   };
 
   function loadI18n() {
@@ -99,27 +100,21 @@
     });
   }
 
-  /* LLM form: provider preset + test connection (event-bound, not inline — CSP). */
-  var llmProvider = document.getElementById("llm-provider");
-  if (llmProvider) {
-    llmProvider.addEventListener("change", function () {
-      var p = LLM_PRESETS[llmProvider.value];
+  /* LLM form: preset fills base_url + transport. Model name is user-typed bare. */
+  var llmPreset = document.getElementById("llm-preset");
+  if (llmPreset) {
+    llmPreset.addEventListener("change", function () {
+      var p = LLM_PRESETS[llmPreset.value];
       var urlEl = document.getElementById("llm-url");
-      var sEl = document.getElementById("llm-strong");
-      var cEl = document.getElementById("llm-cheap");
-      var eEl = document.getElementById("llm-embed");
-      // Lock URL for official providers; unlock for "anthropic_compat" / custom.
-      if (p && p.url && p.url !== "") {
-        urlEl.value = p.url;
+      var transportEl = document.getElementById("llm-transport");
+      if (p) {
+        if (p.url) urlEl.value = p.url;
+        if (p.transport) transportEl.value = p.transport;
         urlEl.readOnly = true;
       } else {
         urlEl.readOnly = false;
         urlEl.placeholder = "https://your-proxy.example.com/v1";
-      }
-      if (p) {
-        if (p.strong && !sEl.value) sEl.value = p.strong;
-        if (p.cheap && !cEl.value) cEl.value = p.cheap;
-        if (p.embed && !eEl.value) eEl.value = p.embed;
+        transportEl.value = "";
       }
     });
   }
