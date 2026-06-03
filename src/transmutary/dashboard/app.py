@@ -590,25 +590,17 @@ def make_dashboard_app(
         return _settings_redirect("llm")
 
     async def settings_llm_test(request: Request) -> Response:
-        """Test LLM connection. Uses form values if provided, else falls back to saved yaml.
-
-        Form keys: api_key, base_url, model_strong. Empty fields are filled from yaml.
-        """
+        """Test LLM connection using the saved config/llm.yaml."""
         if not admin_token or not _admin_ok(request):
             return JSONResponse({"ok": False, "error": "auth"}, status_code=403)
-        form = await _form(request)
         llm_cfg = load_llm_config(config_dir)
-        if llm_cfg is not None:
-            yaml_key = llm_cfg.api_key
-            yaml_url = llm_cfg.base_url
-            yaml_strong = llm_cfg.model_strong
-        else:
-            yaml_key, yaml_url, yaml_strong = "", None, None
-        api_key = (form.get("api_key") or "").strip() or yaml_key
-        base_url = (form.get("base_url") or "").strip() or yaml_url
-        model = (form.get("model_strong") or "").strip() or yaml_strong or "gpt-4o"
+        if llm_cfg is None:
+            return JSONResponse({"ok": False, "error": "No LLM config saved"})
+        from ..effective_config import effective_llm_config
+        api_key, base_url, models = effective_llm_config(settings, require=False)
         if not api_key:
-            return JSONResponse({"ok": False, "error": "No API key (form or yaml)"})
+            return JSONResponse({"ok": False, "error": "No API key configured"})
+        model = models.get("strong") or "gpt-4o"
         try:
             from ..llm import call
             call(
