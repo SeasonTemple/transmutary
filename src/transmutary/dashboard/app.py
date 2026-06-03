@@ -42,7 +42,7 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 
-from ..config import Settings
+from ..config import Settings, load_llm_config
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
 from . import auth as admin_auth
@@ -202,13 +202,19 @@ def make_dashboard_app(
         }
 
     def _secret_env() -> dict[str, str | None]:
+        llm_yaml = load_llm_config(config_dir)
+        llm_env_key = os.environ.get("TRANSMUTARY_LLM_API_KEY")
+        llm_key = llm_env_key or (llm_yaml.api_key if llm_yaml else None)
+        llm_env_url = os.environ.get("TRANSMUTARY_LLM_BASE_URL")
+        llm_url = llm_env_url or (llm_yaml.base_url if llm_yaml else None)
         return {
             "TRANSMUTARY_ADMIN_TOKEN": admin_token,
             "TRANSMUTARY_GITHUB_TOKEN": os.environ.get("TRANSMUTARY_GITHUB_TOKEN"),
             "TRANSMUTARY_SMTP_USER": os.environ.get("TRANSMUTARY_SMTP_USER"),
             "TRANSMUTARY_SMTP_PASSWORD": os.environ.get("TRANSMUTARY_SMTP_PASSWORD"),
             "TRANSMUTARY_RSS_TOKEN": os.environ.get("TRANSMUTARY_RSS_TOKEN"),
-            "TRANSMUTARY_LLM_API_KEY": os.environ.get("TRANSMUTARY_LLM_API_KEY"),
+            "TRANSMUTARY_LLM_API_KEY": llm_key,
+            "TRANSMUTARY_LLM_BASE_URL": llm_url,
         }
 
     def _admin_ok(request: Request) -> bool:
@@ -229,8 +235,11 @@ def make_dashboard_app(
             status_code=503,
         )
 
-    def _settings_redirect() -> Response:
-        return RedirectResponse("/settings", status_code=303)
+    def _settings_redirect(saved: str | None = None) -> Response:
+        url = "/settings"
+        if saved:
+            url = f"/settings?saved={saved}"
+        return RedirectResponse(url, status_code=303)
 
     async def _form(request: Request) -> dict[str, str]:
         body = (await request.body()).decode("utf-8", errors="replace")
@@ -258,6 +267,7 @@ def make_dashboard_app(
         request: Request,
         *,
         error_key: str | None = None,
+        success_key: str | None = None,
         status_code: int = 200,
         form_repo: str = "",
     ) -> Response:
@@ -273,6 +283,7 @@ def make_dashboard_app(
                     "active_nav": "settings",
                     "settings_view": view,
                     "error_key": error_key,
+                    "success_key": success_key,
                     "form_repo": form_repo,
                 },
             ),
@@ -453,7 +464,9 @@ def make_dashboard_app(
             return _admin_disabled(request)
         if not _admin_ok(request):
             return RedirectResponse("/login", status_code=303)
-        return _render_settings(request)
+        saved = request.query_params.get("saved")
+        success_key = f"saved_{saved}" if saved else None
+        return _render_settings(request, success_key=success_key)
 
     async def settings_add_repo(request: Request) -> Response:
         form = await _form(request)
@@ -466,7 +479,7 @@ def make_dashboard_app(
                 request, error_key="error_invalid_repo", status_code=400, form_repo=repo
             )
         write_store.add_admin_repo(repo)
-        return _settings_redirect()
+        return _settings_redirect("repo")
 
     async def settings_remove_repo(request: Request) -> Response:
         form = await _form(request)
@@ -475,7 +488,7 @@ def make_dashboard_app(
             return denied
         repo = form.get("repo", "").strip()
         write_store.remove_admin_repo(repo)
-        return _settings_redirect()
+        return _settings_redirect("repo_removed")
 
     async def settings_add_edge(request: Request) -> Response:
         form = await _form(request)
@@ -490,7 +503,7 @@ def make_dashboard_app(
         ):
             return _render_settings(request, error_key="error_invalid_edge", status_code=400)
         write_store.add_admin_dependency_edge(from_repo, to_repo)
-        return _settings_redirect()
+        return _settings_redirect("edge")
 
     async def settings_remove_edge(request: Request) -> Response:
         form = await _form(request)
@@ -501,7 +514,7 @@ def make_dashboard_app(
             form.get("from_repo", "").strip(),
             form.get("to_repo", "").strip(),
         )
-        return _settings_redirect()
+        return _settings_redirect("edge_removed")
 
     async def settings_trends(request: Request) -> Response:
         form = await _form(request)
@@ -512,7 +525,7 @@ def make_dashboard_app(
             topics=_split_lines(form.get("topics", "")),
             keywords=_split_lines(form.get("keywords", "")),
         )
-        return _settings_redirect()
+        return _settings_redirect("trends")
 
     async def settings_delivery(request: Request) -> Response:
         form = await _form(request)
@@ -538,7 +551,7 @@ def make_dashboard_app(
             email_recipients=recipients,
             digest_hour=digest_hour,
         )
-        return _settings_redirect()
+        return _settings_redirect("delivery")
 
     async def settings_llm(request: Request) -> Response:
         form = await _form(request)
@@ -566,7 +579,7 @@ def make_dashboard_app(
             and not host.startswith("127.0.0.1")
         ):
             logger.warning("LLM API key submitted over plaintext HTTP (host=%s)", host)
-        return _settings_redirect()
+        return _settings_redirect("llm")
 
     async def llms_txt(request: Request) -> Response:
         # Endpoint self-description for agents — NO private data (R-G1/KTD-G2).
