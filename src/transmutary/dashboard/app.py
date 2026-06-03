@@ -560,7 +560,11 @@ def make_dashboard_app(
         # ADV-11: warn when transmitted over plain HTTP (non-localhost, non-HTTPS).
         host = request.headers.get("host", "")
         scheme = request.url.scheme if hasattr(request.url, "scheme") else "http"
-        if scheme != "https" and not host.startswith("localhost") and not host.startswith("127.0.0.1"):
+        if (
+            scheme != "https"
+            and not host.startswith("localhost")
+            and not host.startswith("127.0.0.1")
+        ):
             logger.warning("LLM API key submitted over plaintext HTTP (host=%s)", host)
         return _settings_redirect()
 

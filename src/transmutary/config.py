@@ -11,7 +11,6 @@ enforced 0600 to preserve the KTD4 security invariant.
 from __future__ import annotations
 
 import os
-import stat
 from dataclasses import dataclass, field
 
 import yaml
