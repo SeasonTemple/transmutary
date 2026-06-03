@@ -84,6 +84,7 @@ a:focus-visible, summary:focus-visible, button:focus-visible {
   color: var(--text-secondary); font-family: var(--sans); font-size: .82rem; cursor: pointer;
 }
 .theme-btn:hover, .lang-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.side-foot .btn { justify-content: flex-start; }
 .theme-label { text-transform: capitalize; }
 .ro {
   font-size: .65rem; text-transform: uppercase; letter-spacing: .06em; color: var(--text-tertiary);
