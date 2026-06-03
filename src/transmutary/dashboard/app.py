@@ -604,6 +604,9 @@ def make_dashboard_app(
         if not api_key:
             return JSONResponse({"ok": False, "error": "No API key configured"})
         model = models.get("strong") or "gpt-4o"
+        # Strip LiteLLM transport prefix (e.g. "anthropic/") for display —
+        # the prefix is implementation detail, the model name is what's user-facing.
+        bare_model = model.split("/", 1)[-1] if "/" in model else model
         try:
             from ..llm import call
             call(
@@ -613,7 +616,7 @@ def make_dashboard_app(
                 base_url=base_url,
                 model=model,
             )
-            return JSONResponse({"ok": True, "model": model})
+            return JSONResponse({"ok": True, "model": bare_model})
         except Exception as exc:
             return JSONResponse({"ok": False, "error": str(exc)[:200]})
 
