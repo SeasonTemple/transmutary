@@ -94,6 +94,7 @@ def critique_refine(
     tier=None,
     api_key: str | None = None,
     base_url: str | None = None,
+    model: str | None = None,
 ) -> tuple[str, list[str]]:
     """Run a single critique→refine pass over ``draft`` (R11; KTD-B/KTD-D/KTD3).
 
@@ -145,6 +146,7 @@ def critique_refine(
             tier,
             api_key=api_key,
             base_url=base_url,
+            model=model,
         )
     except LLMError as exc:
         notes.append(f"critique-refine degraded to draft: critique stage failed ({exc})")
@@ -157,6 +159,7 @@ def critique_refine(
             tier,
             api_key=api_key,
             base_url=base_url,
+            model=model,
         )
     except LLMError as exc:
         notes.append(f"critique-refine degraded to draft: refine stage failed ({exc})")

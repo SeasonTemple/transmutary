@@ -160,6 +160,7 @@ def _judge(
     *,
     api_key: str | None,
     base_url: str | None,
+    model: str | None = None,
     call_fn=None,
 ) -> tuple[bool, str]:
     """Run the L3 judge through llm.py. Returns (is_fault, reason).
@@ -185,6 +186,7 @@ def _judge(
         ModelTier.STRONG,
         api_key=api_key,
         base_url=base_url,
+        model=model,
     )
     return _parse_verdict(raw)
 
@@ -261,6 +263,7 @@ def filter_issue_surge(
     abs_floor: int = DEFAULT_ABS_FLOOR,
     api_key: str | None = None,
     base_url: str | None = None,
+    model: str | None = None,
     call_fn=None,
     embed_fn=None,
 ) -> FilterDecision:
@@ -325,7 +328,8 @@ def filter_issue_surge(
         for group in groups:
             judge_calls += 1
             is_fault, judge_reason = _judge(
-                group, api_key=api_key, base_url=base_url, call_fn=call_fn
+                group, api_key=api_key, base_url=base_url, model=model,
+                call_fn=call_fn,
             )
             if is_fault:
                 any_fault = True

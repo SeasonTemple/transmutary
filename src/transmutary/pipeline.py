@@ -187,7 +187,7 @@ def _github_token(rt: PipelineRuntime) -> str | None:
 
 def _llm_api_key(rt: PipelineRuntime) -> str | None:
     """Return the effective LLM API key: env > yaml > creds fallback."""
-    key, _ = effective_llm_config(rt.settings, require=False)
+    key, _, _ = effective_llm_config(rt.settings, require=False)
     if key:
         return key
     # Fallback to creds (populated from env at Credentials.from_env time).
@@ -196,10 +196,16 @@ def _llm_api_key(rt: PipelineRuntime) -> str | None:
 
 def _llm_base_url(rt: PipelineRuntime) -> str | None:
     """Return the effective LLM base URL: env > yaml > settings fallback."""
-    _, url = effective_llm_config(rt.settings, require=False)
+    _, url, _ = effective_llm_config(rt.settings, require=False)
     if url is not None:
         return url
     return rt.settings.llm_base_url
+
+
+def _llm_model(rt: PipelineRuntime) -> str | None:
+    """Return the effective LLM model: env > yaml > None."""
+    _, _, model = effective_llm_config(rt.settings, require=False)
+    return model
 
 
 def _embed_fn(rt: PipelineRuntime):
@@ -345,6 +351,7 @@ def run_release_issue_tick(
     token = _github_token(rt)
     api_key = _llm_api_key(rt)
     base_url = _llm_base_url(rt)
+    model = _llm_model(rt)
     result = ReleaseIssueTickResult(repo=repo)
 
     since = rt.store.get_cursor(repo)
@@ -370,7 +377,8 @@ def run_release_issue_tick(
             anchor_ts=ev.ts,
         )
         outcome = diagnose(
-            ctx, api_key=api_key, base_url=base_url, call_fn=call_fn, refine=refine_reports
+            ctx, api_key=api_key, base_url=base_url, model=model,
+            call_fn=call_fn, refine=refine_reports,
         )
         _deliver_report(rt, outcome.report, outcome.report.severity)
         result.diagnosed += 1
@@ -389,6 +397,7 @@ def run_release_issue_tick(
                 baseline_rate=baseline_rate,
                 api_key=api_key,
                 base_url=base_url,
+                model=model,
                 call_fn=_llm_call_default() if call_fn is _UNSET else call_fn,
                 embed_fn=_embed_fn(rt) if embed_fn is _UNSET else embed_fn,
             )
@@ -416,7 +425,8 @@ def run_release_issue_tick(
                 anchor_ts=anchor,
             )
             outcome = diagnose(
-                ctx, api_key=api_key, base_url=base_url, call_fn=call_fn, refine=refine_reports
+                ctx, api_key=api_key, base_url=base_url, model=model,
+                call_fn=call_fn, refine=refine_reports,
             )
             _deliver_report(rt, outcome.report, outcome.report.severity)
             result.diagnosed += 1
@@ -482,6 +492,7 @@ def run_security_tick(
     token = _github_token(rt)
     api_key = _llm_api_key(rt)
     base_url = _llm_base_url(rt)
+    model = _llm_model(rt)
     result = SecurityTickResult()
 
     manual_edges = [
@@ -520,6 +531,7 @@ def run_security_tick(
             repo=repo,
             api_key=api_key,
             base_url=base_url,
+            model=model,
             call_fn=_llm_call_default() if call_fn is _UNSET else call_fn,
         )
         # Force the immediate (high-risk) route regardless of report severity (F3).
@@ -571,6 +583,7 @@ def run_trend_tick(
     """
     api_key = _llm_api_key(rt)
     base_url = _llm_base_url(rt)
+    model = _llm_model(rt)
     result = TrendTickResult()
 
     scope = effective_trend_scope(rt.settings, rt.store)
@@ -591,6 +604,7 @@ def run_trend_tick(
         rt.store,
         api_key=api_key,
         base_url=base_url,
+        model=model,
         call_fn=_llm_call_default() if call_fn is _UNSET else call_fn,
         embed_fn=_embed_fn(rt) if embed_fn is _UNSET else embed_fn,
         refine=refine_reports,

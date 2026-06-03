@@ -341,6 +341,7 @@ def diagnose(
     security_claims: list[SecurityClaim] | None = None,
     api_key: str | None = None,
     base_url: str | None = None,
+    model: str | None = None,
     call_fn=None,
     refine: bool = False,
 ) -> DiagnoseOutcome:
@@ -387,6 +388,7 @@ def diagnose(
             ModelTier.STRONG,
             api_key=api_key,
             base_url=base_url,
+            model=model,
         )
     except LLMError:
         raise
@@ -405,6 +407,7 @@ def diagnose(
             tier=ModelTier.STRONG,
             api_key=api_key,
             base_url=base_url,
+            model=model,
         )
 
     # Cross-validate any security conclusions against deterministic IDs (KTD2),

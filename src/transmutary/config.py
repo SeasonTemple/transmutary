@@ -182,12 +182,13 @@ class LLMConfig:
     """LLM credentials stored in ``config/llm.yaml`` (0600, never in SQLite).
 
     Provider is NOT stored — LiteLLM routes by model name. api_key is the sole
-    required field; base_url is optional. api_key is excluded from repr to
-    preserve KTD4 credential secrecy.
+    required field; base_url and model are optional. api_key is excluded from
+    repr to preserve KTD4 credential secrecy.
     """
 
     api_key: str = field(repr=False)
     base_url: str | None = None
+    model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -308,7 +309,10 @@ def load_llm_config(config_dir: str) -> LLMConfig | None:
     base_url = data.get("base_url")
     if base_url is not None:
         base_url = str(base_url)
-    return LLMConfig(api_key=api_key, base_url=base_url)
+    model = data.get("model")
+    if model is not None:
+        model = str(model)
+    return LLMConfig(api_key=api_key, base_url=base_url, model=model)
 
 
 def save_llm_config(config_dir: str, config: LLMConfig) -> None:
@@ -322,6 +326,8 @@ def save_llm_config(config_dir: str, config: LLMConfig) -> None:
     payload = {"api_key": config.api_key}
     if config.base_url is not None:
         payload["base_url"] = config.base_url
+    if config.model is not None:
+        payload["model"] = config.model
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         yaml.dump(payload, fh, default_flow_style=False)

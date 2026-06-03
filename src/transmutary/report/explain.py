@@ -306,6 +306,7 @@ def explain_trends(
     *,
     api_key: str | None = None,
     base_url: str | None = None,
+    model: str | None = None,
     call_fn=None,
     anchor_ts: str | None = None,
     embed_fn=None,
@@ -422,6 +423,7 @@ def explain_trends(
             ModelTier.CHEAP,
             api_key=api_key,
             base_url=base_url,
+            model=model,
         )
         call_count = 1
         rep_summaries = _parse_batch_summaries(raw, len(reps_cleaned))
@@ -462,6 +464,7 @@ def explain_trends(
                 tier=ModelTier.CHEAP,
                 api_key=api_key,
                 base_url=base_url,
+                model=model,
             )
             # Preserve summary_zh through refine; revise only EN summary.
             old_zh = bs.summary_zh if bs else ""

@@ -147,7 +147,7 @@ def _llm_settings(**overrides) -> Settings:
 
 def test_llm_env_wins_over_yaml():
     s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
-    key, url = effective_llm_config(
+    key, url, model = effective_llm_config(
         s,
         env={"TRANSMUTARY_LLM_API_KEY": "env-key", "TRANSMUTARY_LLM_BASE_URL": "https://env"},
     )
@@ -157,7 +157,7 @@ def test_llm_env_wins_over_yaml():
 
 def test_llm_yaml_used_when_env_missing():
     s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
-    key, url = effective_llm_config(s, env={})
+    key, url, model = effective_llm_config(s, env={})
     assert key == "yaml-key"
     assert url == "https://yaml"
 
@@ -170,14 +170,15 @@ def test_llm_both_missing_require_true_errors():
 
 def test_llm_both_missing_require_false_returns_empty():
     s = _llm_settings()
-    key, url = effective_llm_config(s, env={}, require=False)
+    key, url, model = effective_llm_config(s, env={}, require=False)
     assert key == ""
     assert url is None
+    assert model is None
 
 
 def test_llm_env_key_only_yaml_url_used():
     s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
-    key, url = effective_llm_config(
+    key, url, model = effective_llm_config(
         s, env={"TRANSMUTARY_LLM_API_KEY": "env-key"}
     )
     assert key == "env-key"

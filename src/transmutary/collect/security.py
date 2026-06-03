@@ -294,6 +294,7 @@ def build_alert(
     repo: str,
     api_key: str | None = None,
     base_url: str | None = None,
+    model: str | None = None,
     call_fn=None,
 ) -> Report:
     """Build a high-risk supply-chain alert Report for one advisory hit (F3).
@@ -330,6 +331,7 @@ def build_alert(
             ModelTier.CHEAP,
             api_key=api_key,
             base_url=base_url,
+            model=model,
         ).strip()
         advice, advice_zh = parse_bilingual(raw_advice)
     except LLMError:
