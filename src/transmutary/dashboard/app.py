@@ -564,6 +564,8 @@ def make_dashboard_app(
         api_key = form.get("api_key", "").strip()
         base_url = form.get("base_url", "").strip() or None
         provider = form.get("provider", "").strip() or None
+        if provider == "anthropic_compat":
+            provider = "anthropic"
         model_strong = form.get("model_strong", "").strip() or None
         model_cheap = form.get("model_cheap", "").strip() or None
         model_embed = form.get("model_embed", "").strip() or None

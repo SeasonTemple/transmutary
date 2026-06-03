@@ -104,15 +104,23 @@
   if (llmProvider) {
     llmProvider.addEventListener("change", function () {
       var p = LLM_PRESETS[llmProvider.value];
-      if (!p) return;
       var urlEl = document.getElementById("llm-url");
       var sEl = document.getElementById("llm-strong");
       var cEl = document.getElementById("llm-cheap");
       var eEl = document.getElementById("llm-embed");
-      if (p.url && !urlEl.value) urlEl.value = p.url;
-      if (p.strong && !sEl.value) sEl.value = p.strong;
-      if (p.cheap && !cEl.value) cEl.value = p.cheap;
-      if (p.embed && !eEl.value) eEl.value = p.embed;
+      // Lock URL for official providers; unlock for "anthropic_compat" / custom.
+      if (p && p.url && p.url !== "") {
+        urlEl.value = p.url;
+        urlEl.readOnly = true;
+      } else {
+        urlEl.readOnly = false;
+        urlEl.placeholder = "https://your-proxy.example.com/v1";
+      }
+      if (p) {
+        if (p.strong && !sEl.value) sEl.value = p.strong;
+        if (p.cheap && !cEl.value) cEl.value = p.cheap;
+        if (p.embed && !eEl.value) eEl.value = p.embed;
+      }
     });
   }
   var testBtn = document.getElementById("llm-test-btn");
