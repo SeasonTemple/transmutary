@@ -174,10 +174,13 @@
       <label class="field"><span data-i18n="settings_llm_preset">{{ t['settings_llm_preset'] }}</span>
         <select id="llm-preset" name="preset">
           <option value="">{{ t['settings_llm_provider_custom'] }}</option>
+          <option value="minimax" {% if llm_config and llm_config.transport == 'minimax' %}selected{% endif %}>MiniMax</option>
+          <option value="deepseek" {% if llm_config and llm_config.transport == 'deepseek' %}selected{% endif %}>DeepSeek</option>
           <option value="openai" {% if llm_config and llm_config.transport == 'openai' and not llm_config.base_url %}selected{% endif %}>OpenAI</option>
           <option value="anthropic" {% if llm_config and llm_config.transport == 'anthropic' and not llm_config.base_url %}selected{% endif %}>Anthropic</option>
           <option value="azure" {% if llm_config and llm_config.transport == 'azure' %}selected{% endif %}>Azure OpenAI</option>
-          <option value="minimax_anthropic" {% if llm_config and llm_config.transport == 'anthropic' and llm_config.base_url and 'minimaxi' in llm_config.base_url %}selected{% endif %}>MiniMax (Anthropic compat)</option>
+          <option value="openai_compat" {% if llm_config and llm_config.transport == 'openai' and llm_config.base_url %}selected{% endif %}>OpenAI Compatible</option>
+          <option value="anthropic_compat" {% if llm_config and llm_config.transport == 'anthropic' and llm_config.base_url %}selected{% endif %}>Anthropic Compatible</option>
         </select>
       </label>
       <input type="hidden" id="llm-transport" name="transport" value="{{ llm_config.transport or '' if llm_config else '' }}">

@@ -9,11 +9,18 @@
   var LANG_COOKIE = "tmtry-lang";
   var THEME_KEY = "tmtry-theme";
 
+  // preset -> { url, transport, lock }. transport is the LiteLLM provider prefix
+  // (native provider when one exists, else the wire protocol). lock=true means
+  // base_url is owned by LiteLLM default and the field is read-only; lock=false
+  // pre-fills a sensible default but lets the user edit (regional endpoints, proxies).
   var LLM_PRESETS = {
-    openai:             { url: "https://api.openai.com/v1", transport: "openai" },
-    anthropic:          { url: "https://api.anthropic.com", transport: "anthropic" },
-    azure:              { url: "", transport: "azure" },
-    minimax_anthropic:  { url: "https://api.minimaxi.com/anthropic/v1", transport: "anthropic" },
+    minimax:            { url: "https://api.minimaxi.com/v1", transport: "minimax", lock: false },
+    deepseek:           { url: "", transport: "deepseek", lock: true },
+    openai:             { url: "", transport: "openai", lock: true },
+    anthropic:          { url: "", transport: "anthropic", lock: true },
+    azure:              { url: "", transport: "azure", lock: false },
+    openai_compat:      { url: "", transport: "openai", lock: false },
+    anthropic_compat:   { url: "", transport: "anthropic", lock: false },
   };
 
   function loadI18n() {
@@ -108,12 +115,13 @@
       var urlEl = document.getElementById("llm-url");
       var transportEl = document.getElementById("llm-transport");
       if (p) {
-        if (p.url) urlEl.value = p.url;
-        if (p.transport) transportEl.value = p.transport;
-        urlEl.readOnly = true;
+        urlEl.value = p.url || "";
+        transportEl.value = p.transport || "";
+        urlEl.readOnly = !!p.lock;
+        if (!p.lock) urlEl.placeholder = "https://your-gateway.example.com/v1";
       } else {
         urlEl.readOnly = false;
-        urlEl.placeholder = "https://your-proxy.example.com/v1";
+        urlEl.placeholder = "https://your-gateway.example.com/v1";
         transportEl.value = "";
       }
     });
