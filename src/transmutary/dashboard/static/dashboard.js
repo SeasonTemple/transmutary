@@ -9,6 +9,13 @@
   var LANG_COOKIE = "tmtry-lang";
   var THEME_KEY = "tmtry-theme";
 
+  var LLM_PRESETS = {
+    openai:    { url: "https://api.openai.com/v1", strong: "gpt-4o", cheap: "gpt-4o-mini", embed: "text-embedding-3-small" },
+    anthropic: { url: "https://api.anthropic.com", strong: "claude-sonnet-4-6", cheap: "claude-haiku-4-5", embed: "" },
+    minimax:   { url: "https://api.minimaxi.com/anthropic", strong: "", cheap: "", embed: "" },
+    azure:     { url: "", strong: "", cheap: "", embed: "" },
+  };
+
   function loadI18n() {
     var node = document.getElementById("i18n-dict");
     if (!node) return {en: {}, zh: {}};
@@ -93,6 +100,52 @@
     });
   }
 
+  /* LLM form: provider preset + test connection (event-bound, not inline — CSP). */
+  var llmProvider = document.getElementById("llm-provider");
+  if (llmProvider) {
+    llmProvider.addEventListener("change", function () {
+      var p = LLM_PRESETS[llmProvider.value];
+      if (!p) return;
+      var urlEl = document.getElementById("llm-url");
+      var sEl = document.getElementById("llm-strong");
+      var cEl = document.getElementById("llm-cheap");
+      var eEl = document.getElementById("llm-embed");
+      if (p.url && !urlEl.value) urlEl.value = p.url;
+      if (p.strong && !sEl.value) sEl.value = p.strong;
+      if (p.cheap && !cEl.value) cEl.value = p.cheap;
+      if (p.embed && !eEl.value) eEl.value = p.embed;
+    });
+  }
+  var testBtn = document.getElementById("llm-test-btn");
+  if (testBtn) {
+    testBtn.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      console.log("[testLLM] clicked");
+      var result = document.getElementById("llm-test-result");
+      if (!result) { console.error("[testLLM] result span not found"); return; }
+      result.textContent = "Testing...";
+      result.style.color = "";
+      testBtn.disabled = true;
+      var csrf = (document.querySelector('input[name="csrf_token"]') || {}).value || "";
+      fetch("/settings/llm/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRF-Token": csrf },
+      })
+        .then(function (r) {
+          console.log("[testLLM] status:", r.status);
+          return r.json();
+        })
+        .then(function (d) {
+          console.log("[testLLM] response:", d);
+          result.textContent = d.ok ? "✓ OK (" + (d.model || "") + ")" : "✗ " + (d.error || "fail");
+          result.style.color = d.ok ? "#15803d" : "#dc2626";
+        })
+        .catch(function (e) { result.textContent = "✗ " + e; result.style.color = "#dc2626"; })
+        .finally(function () { testBtn.disabled = false; });
+    });
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
@@ -104,51 +157,4 @@
   if (msg) {
     setTimeout(function () { msg.remove(); }, 4000);
   }
-
-  /* LLM provider presets */
-  var presets = {
-    openai:    { url: "https://api.openai.com/v1", strong: "gpt-4o", cheap: "gpt-4o-mini", embed: "text-embedding-3-small" },
-    anthropic: { url: "https://api.anthropic.com", strong: "claude-sonnet-4-6", cheap: "claude-haiku-4-5", embed: "" },
-    minimax:   { url: "https://api.minimaxi.com/anthropic", strong: "", cheap: "", embed: "" },
-    azure:     { url: "", strong: "", cheap: "", embed: "" },
-  };
-  window.applyProviderPreset = function (sel) {
-    var p = presets[sel.value];
-    if (!p) return;
-    var urlEl = document.getElementById("llm-url");
-    var sEl = document.getElementById("llm-strong");
-    var cEl = document.getElementById("llm-cheap");
-    var eEl = document.getElementById("llm-embed");
-    if (p.url && !urlEl.value) urlEl.value = p.url;
-    if (p.strong && !sEl.value) sEl.value = p.strong;
-    if (p.cheap && !cEl.value) cEl.value = p.cheap;
-    if (p.embed && !eEl.value) eEl.value = p.embed;
-  };
-
-  /* LLM test connection */
-  window.testLLM = function (btn, ev) {
-    if (ev) { ev.preventDefault(); ev.stopPropagation(); }
-    console.log("[testLLM] clicked");
-    var result = document.getElementById("llm-test-result");
-    if (!result) { console.error("[testLLM] result span not found"); return; }
-    result.textContent = "Testing...";
-    result.style.color = "";
-    btn.disabled = true;
-    var csrf = (document.querySelector('input[name="csrf_token"]') || {}).value || "";
-    fetch("/settings/llm/test", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRF-Token": csrf },
-    })
-      .then(function (r) {
-        console.log("[testLLM] status:", r.status);
-        return r.json();
-      })
-      .then(function (d) {
-        console.log("[testLLM] response:", d);
-        result.textContent = d.ok ? "✓ OK (" + (d.model || "") + ")" : "✗ " + (d.error || "fail");
-        result.style.color = d.ok ? "#15803d" : "#dc2626";
-      })
-      .catch(function (e) { result.textContent = "✗ " + e; result.style.color = "#dc2626"; })
-      .finally(function () { btn.disabled = false; });
-  };
 })();

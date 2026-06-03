@@ -172,7 +172,7 @@
     <form method="post" action="/settings/llm" class="settings-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="field"><span data-i18n="settings_llm_provider">{{ t['settings_llm_provider'] }}</span>
-        <select id="llm-provider" onchange="applyProviderPreset(this)">
+        <select id="llm-provider">
           <option value="">{{ t['settings_llm_provider_custom'] }}</option>
           <option value="openai">OpenAI</option>
           <option value="anthropic">Anthropic</option>
@@ -187,7 +187,7 @@
       <label class="field"><span data-i18n="settings_llm_model_embed">{{ t['settings_llm_model_embed'] }}</span><input id="llm-embed" name="model_embed" placeholder="text-embedding-3-small (optional)"></label>
       <div class="form-actions">
         <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
-        <button class="btn" type="button" onclick="testLLM(this, event)" data-i18n="settings_llm_test">{{ t['settings_llm_test'] }}</button>
+        <button class="btn" type="button" id="llm-test-btn" data-i18n="settings_llm_test">{{ t['settings_llm_test'] }}</button>
         <span id="llm-test-result"></span>
       </div>
     </form>
