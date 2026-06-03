@@ -713,7 +713,12 @@ def _allowed_hosts_for(host: str, *, allow_public: bool = False) -> frozenset[st
 def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real server
     import argparse
 
+    from dotenv import load_dotenv
+
     from ..config import load_settings
+
+    # Load .env (if present) before any env-var reads.
+    load_dotenv()
 
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(prog="transmutary-dashboard")

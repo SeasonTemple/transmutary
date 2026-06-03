@@ -332,7 +332,11 @@ class Service:
 def main() -> None:  # pragma: no cover - real entrypoint, needs config + credentials
     import os
 
+    from dotenv import load_dotenv
+
     from .config import load_settings
+
+    load_dotenv()
 
     logging.basicConfig(level=logging.INFO)
     config_dir = os.environ.get("TRANSMUTARY_CONFIG_DIR", "config")

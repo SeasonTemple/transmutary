@@ -29,6 +29,7 @@ dependencies = [
     "apscheduler",
     "litellm",
     "pyyaml",
+    "python-dotenv",
 ]
 
 [project.scripts]
