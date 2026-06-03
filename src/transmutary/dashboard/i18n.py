@@ -136,6 +136,7 @@ MESSAGES: dict[str, dict[str, str]] = {
             "Environment variables take precedence."
         ),
         "settings_nav_llm": "LLM",
+        "settings_llm_model": "Model",
         "settings_secret_note": "Values are never accepted or rendered here.",
         "settings_runtime_note": "Filesystem ownership remains YAML/env controlled.",
         "empty_edges": "No admin dependency edges",
@@ -275,6 +276,7 @@ MESSAGES: dict[str, dict[str, str]] = {
             "环境变量优先级更高。"
         ),
         "settings_nav_llm": "LLM",
+        "settings_llm_model": "模型",
         "settings_secret_note": "这里不会接收或渲染任何密钥值。",
         "settings_runtime_note": "文件系统归属仍由 YAML/env 控制。",
         "empty_edges": "暂无管理依赖边",
