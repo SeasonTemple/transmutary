@@ -187,7 +187,7 @@
       <label class="field"><span data-i18n="settings_llm_model_embed">{{ t['settings_llm_model_embed'] }}</span><input id="llm-embed" name="model_embed" placeholder="text-embedding-3-small (optional)"></label>
       <div class="form-actions">
         <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
-        <button class="btn" type="button" onclick="testLLM(this)" data-i18n="settings_llm_test">{{ t['settings_llm_test'] }}</button>
+        <button class="btn" type="button" onclick="testLLM(this, event)" data-i18n="settings_llm_test">{{ t['settings_llm_test'] }}</button>
         <span id="llm-test-result"></span>
       </div>
     </form>

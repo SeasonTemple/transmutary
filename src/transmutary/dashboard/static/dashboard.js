@@ -126,18 +126,29 @@
   };
 
   /* LLM test connection */
-  window.testLLM = function (btn) {
+  window.testLLM = function (btn, ev) {
+    if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+    console.log("[testLLM] clicked");
     var result = document.getElementById("llm-test-result");
+    if (!result) { console.error("[testLLM] result span not found"); return; }
     result.textContent = "Testing...";
     result.style.color = "";
     btn.disabled = true;
-    fetch("/settings/llm/test", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } })
-      .then(function (r) { return r.json(); })
+    var csrf = (document.querySelector('input[name="csrf_token"]') || {}).value || "";
+    fetch("/settings/llm/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRF-Token": csrf },
+    })
+      .then(function (r) {
+        console.log("[testLLM] status:", r.status);
+        return r.json();
+      })
       .then(function (d) {
-        result.textContent = d.ok ? "✓ OK (" + d.model + ")" : "✗ " + d.error;
+        console.log("[testLLM] response:", d);
+        result.textContent = d.ok ? "✓ OK (" + (d.model || "") + ")" : "✗ " + (d.error || "fail");
         result.style.color = d.ok ? "#15803d" : "#dc2626";
       })
-      .catch(function () { result.textContent = "✗ Network error"; result.style.color = "#dc2626"; })
+      .catch(function (e) { result.textContent = "✗ " + e; result.style.color = "#dc2626"; })
       .finally(function () { btn.disabled = false; });
   };
 })();
