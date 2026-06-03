@@ -155,14 +155,41 @@
         <p class="panel-note" data-i18n="settings_llm_note">{{ t['settings_llm_note'] }}</p>
       </div>
     </div>
+    {% if llm_config %}
+    <div class="llm-status">
+      <span class="llm-status-dot ok"></span>
+      <span data-i18n="settings_llm_configured">{{ t['settings_llm_configured'] }}</span>
+      <code>{{ llm_config.api_key[:4] }}****</code>
+      {% if llm_config.base_url %}<code>{{ llm_config.base_url }}</code>{% endif %}
+      {% if llm_config.model_strong %}<code>{{ llm_config.model_strong }}</code>{% endif %}
+    </div>
+    {% else %}
+    <div class="llm-status">
+      <span class="llm-status-dot"></span>
+      <span data-i18n="settings_llm_not_configured">{{ t['settings_llm_not_configured'] }}</span>
+    </div>
+    {% endif %}
     <form method="post" action="/settings/llm" class="settings-form compact-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label class="field"><span>API Key</span><input name="api_key" type="password" placeholder="sk-..." autocomplete="off"></label>
-      <label class="field"><span>Base URL</span><input name="base_url" placeholder="https://api.openai.com/v1 (optional)"></label>
-      <label class="field"><span data-i18n="settings_llm_model_strong">{{ t['settings_llm_model_strong'] }}</span><input name="model_strong" placeholder="gpt-4o (optional)"></label>
-      <label class="field"><span data-i18n="settings_llm_model_cheap">{{ t['settings_llm_model_cheap'] }}</span><input name="model_cheap" placeholder="gpt-4o-mini (optional)"></label>
-      <label class="field"><span data-i18n="settings_llm_model_embed">{{ t['settings_llm_model_embed'] }}</span><input name="model_embed" placeholder="text-embedding-3-small (optional)"></label>
-      <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
+      <label class="field"><span>Provider</span>
+        <select id="llm-provider" onchange="applyProviderPreset(this)">
+          <option value="">— custom —</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="minimax">MiniMax</option>
+          <option value="azure">Azure OpenAI</option>
+        </select>
+      </label>
+      <label class="field"><span>API Key</span><input id="llm-key" name="api_key" type="password" placeholder="sk-..." autocomplete="off"></label>
+      <label class="field"><span>Base URL</span><input id="llm-url" name="base_url" placeholder="https://api.openai.com/v1 (optional)"></label>
+      <label class="field"><span data-i18n="settings_llm_model_strong">{{ t['settings_llm_model_strong'] }}</span><input id="llm-strong" name="model_strong" placeholder="gpt-4o (optional)"></label>
+      <label class="field"><span data-i18n="settings_llm_model_cheap">{{ t['settings_llm_model_cheap'] }}</span><input id="llm-cheap" name="model_cheap" placeholder="gpt-4o-mini (optional)"></label>
+      <label class="field"><span data-i18n="settings_llm_model_embed">{{ t['settings_llm_model_embed'] }}</span><input id="llm-embed" name="model_embed" placeholder="text-embedding-3-small (optional)"></label>
+      <div class="form-actions">
+        <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
+        <button class="btn" type="button" onclick="testLLM(this)" data-i18n="settings_llm_test">{{ t['settings_llm_test'] }}</button>
+        <span id="llm-test-result"></span>
+      </div>
     </form>
   </section>
 

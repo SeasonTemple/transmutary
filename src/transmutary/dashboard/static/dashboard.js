@@ -104,4 +104,40 @@
   if (msg) {
     setTimeout(function () { msg.remove(); }, 4000);
   }
+
+  /* LLM provider presets */
+  var presets = {
+    openai:    { url: "https://api.openai.com/v1", strong: "gpt-4o", cheap: "gpt-4o-mini", embed: "text-embedding-3-small" },
+    anthropic: { url: "https://api.anthropic.com", strong: "claude-sonnet-4-6", cheap: "claude-haiku-4-5", embed: "" },
+    minimax:   { url: "https://api.minimaxi.com/anthropic", strong: "", cheap: "", embed: "" },
+    azure:     { url: "", strong: "", cheap: "", embed: "" },
+  };
+  window.applyProviderPreset = function (sel) {
+    var p = presets[sel.value];
+    if (!p) return;
+    var urlEl = document.getElementById("llm-url");
+    var sEl = document.getElementById("llm-strong");
+    var cEl = document.getElementById("llm-cheap");
+    var eEl = document.getElementById("llm-embed");
+    if (p.url && !urlEl.value) urlEl.value = p.url;
+    if (p.strong && !sEl.value) sEl.value = p.strong;
+    if (p.cheap && !cEl.value) cEl.value = p.cheap;
+    if (p.embed && !eEl.value) eEl.value = p.embed;
+  };
+
+  /* LLM test connection */
+  window.testLLM = function (btn) {
+    var result = document.getElementById("llm-test-result");
+    result.textContent = "Testing...";
+    result.style.color = "";
+    btn.disabled = true;
+    fetch("/settings/llm/test", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        result.textContent = d.ok ? "✓ OK (" + d.model + ")" : "✗ " + d.error;
+        result.style.color = d.ok ? "#15803d" : "#dc2626";
+      })
+      .catch(function () { result.textContent = "✗ Network error"; result.style.color = "#dc2626"; })
+      .finally(function () { btn.disabled = false; });
+  };
 })();

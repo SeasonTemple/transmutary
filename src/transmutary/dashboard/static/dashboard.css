@@ -173,6 +173,11 @@ details > summary.sec { cursor: pointer; }
 .empty .ok { color: var(--up); }
 .saved { color: #15803d; font-size: .9rem; padding: .9rem 1rem; border: 1px solid #bbf7d0; border-radius: var(--r); background: #f0fdf4; }
 [data-theme="dark"] .saved { color: #4ade80; border-color: #166534; background: #052e16; }
+.llm-status { display: flex; align-items: center; gap: .5rem; padding: .5rem 1rem; font-size: .85rem; color: var(--text-secondary); }
+.llm-status code { background: var(--bg-surface); padding: .1rem .4rem; border-radius: 3px; font-size: .8rem; }
+.llm-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); display: inline-block; }
+.llm-status-dot.ok { background: #22c55e; }
+.form-actions { display: flex; align-items: center; gap: .5rem; }
 
 /* feeds */
 .feeds { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }

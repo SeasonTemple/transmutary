@@ -136,6 +136,9 @@ MESSAGES: dict[str, dict[str, str]] = {
             "Environment variables take precedence."
         ),
         "settings_nav_llm": "LLM",
+        "settings_llm_configured": "Configured:",
+        "settings_llm_not_configured": "Not configured.",
+        "settings_llm_test": "Test Connection",
         "settings_llm_model_strong": "Model (strong)",
         "settings_llm_model_cheap": "Model (cheap)",
         "settings_llm_model_embed": "Model (embed)",
@@ -278,6 +281,9 @@ MESSAGES: dict[str, dict[str, str]] = {
             "环境变量优先级更高。"
         ),
         "settings_nav_llm": "LLM",
+        "settings_llm_configured": "已配置：",
+        "settings_llm_not_configured": "未配置。",
+        "settings_llm_test": "测试连接",
         "settings_llm_model_strong": "模型（强）",
         "settings_llm_model_cheap": "模型（省）",
         "settings_llm_model_embed": "模型（向量）",

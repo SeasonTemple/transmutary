@@ -472,6 +472,7 @@ def test_routes_are_get_only_except_promote_writes():
                     "/settings/trends",
                     "/settings/delivery",
                     "/settings/llm",
+                    "/settings/llm/test",
                 }:
                     assert route.methods <= {"GET", "POST", "HEAD"}
                 else:

@@ -274,6 +274,7 @@ def make_dashboard_app(
         if write_store is None:
             return _write_disabled()
         view = data.build_admin_settings(settings, write_store, secret_env=_secret_env())
+        llm_cfg = load_llm_config(config_dir)
         return templates.TemplateResponse(
             request=request,
             name="settings.html",
@@ -285,6 +286,7 @@ def make_dashboard_app(
                     "error_key": error_key,
                     "success_key": success_key,
                     "form_repo": form_repo,
+                    "llm_config": llm_cfg,
                 },
             ),
             status_code=status_code,
@@ -587,6 +589,31 @@ def make_dashboard_app(
             logger.warning("LLM API key submitted over plaintext HTTP (host=%s)", host)
         return _settings_redirect("llm")
 
+    async def settings_llm_test(request: Request) -> Response:
+        """Test LLM connection using current config/llm.yaml."""
+        if not admin_token or not _admin_ok(request):
+            return JSONResponse({"ok": False, "error": "auth"}, status_code=403)
+        llm_cfg = load_llm_config(config_dir)
+        if llm_cfg is None:
+            return JSONResponse({"ok": False, "error": "No LLM config saved"})
+        from ..effective_config import effective_llm_config
+        api_key, base_url, models = effective_llm_config(settings, require=False)
+        if not api_key:
+            return JSONResponse({"ok": False, "error": "No API key configured"})
+        model = models.get("strong", "gpt-4o")
+        try:
+            from ..llm import call
+            call(
+                "Reply with exactly: OK",
+                "test",
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+            )
+            return JSONResponse({"ok": True, "model": model})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)[:200]})
+
     async def llms_txt(request: Request) -> Response:
         # Endpoint self-description for agents — NO private data (R-G1/KTD-G2).
         return PlainTextResponse(
@@ -632,6 +659,7 @@ def make_dashboard_app(
         Route("/settings/trends", settings_trends, methods=["POST"]),
         Route("/settings/delivery", settings_delivery, methods=["POST"]),
         Route("/settings/llm", settings_llm, methods=["POST"]),
+        Route("/settings/llm/test", settings_llm_test, methods=["POST"]),
         Route("/healthz", healthz, methods=["GET"]),
         Route("/llms.txt", llms_txt, methods=["GET"]),
         Route("/static/dashboard.css", stylesheet, methods=["GET"]),
