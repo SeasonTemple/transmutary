@@ -171,19 +171,18 @@
     {% endif %}
     <form method="post" action="/settings/llm" class="settings-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label class="field"><span data-i18n="settings_llm_vendor">{{ t['settings_llm_vendor'] }}</span>
-        <select id="llm-provider" name="vendor">
-          <option value="" {% if not llm_config or not llm_config.vendor %}selected{% endif %}>{{ t['settings_llm_provider_custom'] }}</option>
-          <option value="openai" {% if llm_config and llm_config.vendor == 'openai' %}selected{% endif %}>OpenAI</option>
-          <option value="anthropic" {% if llm_config and llm_config.vendor == 'anthropic' %}selected{% endif %}>Anthropic</option>
-          <option value="minimax" {% if llm_config and llm_config.vendor == 'minimax' %}selected{% endif %}>MiniMax</option>
-          <option value="azure" {% if llm_config and llm_config.vendor == 'azure' %}selected{% endif %}>Azure OpenAI</option>
+      <label class="field"><span data-i18n="settings_llm_transport">{{ t['settings_llm_transport'] }}</span>
+        <select id="llm-provider" name="transport">
+          <option value="" {% if not llm_config or not llm_config.transport %}selected{% endif %}>{{ t['settings_llm_provider_custom'] }}</option>
+          <option value="openai" {% if llm_config and llm_config.transport == 'openai' %}selected{% endif %}>OpenAI Compatible</option>
+          <option value="anthropic" {% if llm_config and llm_config.transport == 'anthropic' %}selected{% endif %}>Anthropic Compatible</option>
+          <option value="azure" {% if llm_config and llm_config.transport == 'azure' %}selected{% endif %}>Azure OpenAI</option>
         </select>
       </label>
       <label class="field"><span data-i18n="settings_llm_api_key">{{ t['settings_llm_api_key'] }}</span><input id="llm-key" name="api_key" type="password" placeholder="sk-..." value="{{ llm_config.api_key[:4] + '****' if llm_config else '' }}" autocomplete="off"></label>
       <label class="field"><span data-i18n="settings_llm_base_url">{{ t['settings_llm_base_url'] }}</span><input id="llm-url" name="base_url" placeholder="https://api.openai.com/v1" value="{{ llm_config.base_url or '' if llm_config else '' }}"></label>
-      <label class="field"><span data-i18n="settings_llm_model_strong">{{ t['settings_llm_model_strong'] }}</span><input id="llm-strong" name="model_strong" placeholder="MiniMax-M3" value="{{ llm_config.model_strong or '' if llm_config else '' }}"></label>
-      <label class="field"><span data-i18n="settings_llm_model_cheap">{{ t['settings_llm_model_cheap'] }}</span><input id="llm-cheap" name="model_cheap" placeholder="MiniMax-M2.7-highspeed" value="{{ llm_config.model_cheap or '' if llm_config else '' }}"></label>
+      <label class="field"><span data-i18n="settings_llm_model_strong">{{ t['settings_llm_model_strong'] }}</span><input id="llm-strong" name="model_strong" placeholder="minimax/MiniMax-M3" value="{{ llm_config.model_strong or '' if llm_config else '' }}"></label>
+      <label class="field"><span data-i18n="settings_llm_model_cheap">{{ t['settings_llm_model_cheap'] }}</span><input id="llm-cheap" name="model_cheap" placeholder="minimax/MiniMax-M2.7-highspeed" value="{{ llm_config.model_cheap or '' if llm_config else '' }}"></label>
       <label class="field"><span data-i18n="settings_llm_model_embed">{{ t['settings_llm_model_embed'] }}</span><input id="llm-embed" name="model_embed" placeholder="text-embedding-3-small" value="{{ llm_config.model_embed or '' if llm_config else '' }}"></label>
       <div class="form-actions">
         <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>

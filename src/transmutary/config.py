@@ -181,16 +181,16 @@ class Delivery:
 class LLMConfig:
     """LLM credentials stored in ``config/llm.yaml`` (0600, never in SQLite).
 
-    ``vendor`` identifies the model owner for display ("minimax", "openai",
-    "anthropic", "azure"). ``transport`` selects the LiteLLM SDK prefix
-    ("openai" | "anthropic" | "azure" | None). The form shows vendor; the
-    transport is auto-derived from vendor (overridable for custom proxies).
+    ``transport`` selects the LiteLLM SDK protocol (openai | anthropic | azure).
+    ``model_*`` fields accept the full LiteLLM model name (the user writes
+    vendor prefix themselves, e.g. ``minimax/MiniMax-M3`` or
+    ``anthropic/claude-3.5-sonnet``). For bare names without a ``/``,
+    ``transport`` is prepended at call time.
     api_key is excluded from repr to preserve KTD4 credential secrecy.
     """
 
     api_key: str = field(repr=False)
     base_url: str | None = None
-    vendor: str | None = None
     transport: str | None = None
     model_strong: str | None = None
     model_cheap: str | None = None
@@ -323,15 +323,16 @@ def load_llm_config(config_dir: str) -> LLMConfig | None:
     model_strong = _optional_str(data, "model_strong")
     model_cheap = _optional_str(data, "model_cheap")
     model_embed = _optional_str(data, "model_embed")
-    vendor = _optional_str(data, "vendor")
     transport = _optional_str(data, "transport")
-    # Back-compat: "provider" was the old transport name.
+    # Back-compat: "vendor" / "provider" → transport.
+    if transport is None:
+        transport = _optional_str(data, "vendor")
     if transport is None:
         transport = _optional_str(data, "provider")
     if model_strong is None:
         model_strong = _optional_str(data, "model")
     return LLMConfig(
-        api_key=api_key, base_url=base_url, vendor=vendor, transport=transport,
+        api_key=api_key, base_url=base_url, transport=transport,
         model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
     )
 
@@ -347,8 +348,6 @@ def save_llm_config(config_dir: str, config: LLMConfig) -> None:
     payload = {"api_key": config.api_key}
     if config.base_url is not None:
         payload["base_url"] = config.base_url
-    if config.vendor is not None:
-        payload["vendor"] = config.vendor
     if config.transport is not None:
         payload["transport"] = config.transport
     if config.model_strong is not None:

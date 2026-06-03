@@ -212,12 +212,13 @@ def test_llm_transport_prefixes_bare_yaml_model():
     assert models["strong"] == "openai/MiniMax-M3"
 
 
-def test_llm_vendor_doubles_as_transport_when_transport_unset():
+def test_llm_passes_through_user_written_vendor_prefix():
+    # User writes the full LiteLLM model name — no auto-prefixing.
     s = _llm_settings(llm_config=LLMConfig(
-        api_key="k", vendor="openai", model_strong="MiniMax-M3",
+        api_key="k", transport="openai", model_strong="minimax/MiniMax-M3",
     ))
     key, url, models = effective_llm_config(s, env={})
-    assert models["strong"] == "openai/MiniMax-M3"
+    assert models["strong"] == "minimax/MiniMax-M3"
 
 
 def test_llm_transport_does_not_double_prefix_already_prefixed():

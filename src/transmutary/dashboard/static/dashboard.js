@@ -10,9 +10,9 @@
   var THEME_KEY = "tmtry-theme";
 
   var LLM_PRESETS = {
-    openai:    { url: "https://api.openai.com/v1", provider: "openai", strong: "gpt-4o", cheap: "gpt-4o-mini", embed: "text-embedding-3-small" },
-    anthropic: { url: "https://api.anthropic.com", provider: "anthropic", strong: "claude-sonnet-4-6", cheap: "claude-haiku-4-5", embed: "" },
-    azure:     { url: "", provider: "azure", strong: "", cheap: "", embed: "" },
+    openai:    { url: "https://api.openai.com/v1", transport: "openai", strong: "openai/gpt-4o", cheap: "openai/gpt-4o-mini", embed: "openai/text-embedding-3-small" },
+    anthropic: { url: "https://api.anthropic.com", transport: "anthropic", strong: "anthropic/claude-sonnet-4-6", cheap: "anthropic/claude-haiku-4-5", embed: "" },
+    azure:     { url: "", transport: "azure", strong: "", cheap: "", embed: "" },
   };
 
   function loadI18n() {
