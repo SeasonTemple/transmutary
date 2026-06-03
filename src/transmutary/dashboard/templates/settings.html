@@ -176,7 +176,6 @@
           <option value="" {% if not llm_config or not llm_config.provider %}selected{% endif %}>{{ t['settings_llm_provider_custom'] }}</option>
           <option value="openai" {% if llm_config and llm_config.provider == 'openai' %}selected{% endif %}>OpenAI</option>
           <option value="anthropic" {% if llm_config and llm_config.provider == 'anthropic' %}selected{% endif %}>Anthropic</option>
-          <option value="minimax" {% if llm_config and llm_config.base_url and 'minimaxi' in llm_config.base_url %}selected{% endif %}>Anthropic Compatible</option>
           <option value="azure" {% if llm_config and llm_config.provider == 'azure' %}selected{% endif %}>Azure OpenAI</option>
         </select>
       </label>

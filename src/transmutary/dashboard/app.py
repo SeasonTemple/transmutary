@@ -564,10 +564,6 @@ def make_dashboard_app(
         api_key = form.get("api_key", "").strip()
         base_url = form.get("base_url", "").strip() or None
         provider = form.get("provider", "").strip() or None
-        # UI-level "minimax" maps to LiteLLM "anthropic" (MiniMax exposes an
-        # Anthropic-compatible endpoint — verified via error-header probe).
-        if provider == "minimax":
-            provider = "anthropic"
         model_strong = form.get("model_strong", "").strip() or None
         model_cheap = form.get("model_cheap", "").strip() or None
         model_embed = form.get("model_embed", "").strip() or None
