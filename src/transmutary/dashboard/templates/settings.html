@@ -146,6 +146,22 @@
     </form>
   </section>
 
+  <section class="settings-panel" id="llm" aria-labelledby="llm-title">
+    <div class="panel-head">
+      <div>
+        <p class="eyebrow">LLM</p>
+        <h2 id="llm-title" data-i18n="settings_llm_title">{{ t['settings_llm_title'] }}</h2>
+        <p class="panel-note" data-i18n="settings_llm_note">{{ t['settings_llm_note'] }}</p>
+      </div>
+    </div>
+    <form method="post" action="/settings/llm" class="settings-form compact-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="field"><span>API Key</span><input name="api_key" type="password" placeholder="sk-..." autocomplete="off"></label>
+      <label class="field"><span>Base URL</span><input name="base_url" placeholder="https://api.openai.com/v1 (optional)"></label>
+      <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
+    </form>
+  </section>
+
   <section class="settings-panel" id="runtime" aria-labelledby="runtime-title">
     <div class="panel-head">
       <div>

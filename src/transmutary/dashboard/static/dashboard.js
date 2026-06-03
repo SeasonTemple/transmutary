@@ -78,6 +78,19 @@
     }
     // sync labels to server-rendered language on load
     applyLang(currentLang());
+
+    // bilingual report body toggle
+    document.querySelectorAll(".lang-toggle .lang-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var lang = btn.getAttribute("data-lang");
+        btn.parentElement.querySelectorAll(".lang-btn").forEach(function (b) {
+          b.classList.toggle("active", b === btn);
+        });
+        document.querySelectorAll("[data-lang-body]").forEach(function (el) {
+          el.classList.toggle("hidden", el.getAttribute("data-lang-body") !== lang);
+        });
+      });
+    });
   }
 
   if (document.readyState === "loading") {

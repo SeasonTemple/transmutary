@@ -64,3 +64,39 @@ def test_schema_is_stdlib_only():
     )
     for forbidden in forbidden_imports:
         assert forbidden not in src
+
+
+# --- Bilingual body_md_zh (R6) -----------------------------------------------
+
+def test_to_dict_includes_body_md_zh_when_present():
+    r = _sample()
+    r.body_md_zh = "中文正文"
+    d = r.to_dict()
+    assert d["body_md_zh"] == "中文正文"
+
+
+def test_to_dict_body_md_zh_none():
+    r = _sample()
+    assert r.body_md_zh is None
+    d = r.to_dict()
+    assert d["body_md_zh"] is None
+
+
+def test_from_dict_without_body_md_zh_is_none():
+    d = _sample().to_dict()
+    del d["body_md_zh"]
+    r = Report.from_dict(d)
+    assert r.body_md_zh is None
+
+
+def test_from_dict_with_body_md_zh():
+    d = _sample().to_dict()
+    d["body_md_zh"] = "中文正文"
+    r = Report.from_dict(d)
+    assert r.body_md_zh == "中文正文"
+
+
+def test_to_dict_excludes_llm_config():
+    """ADV-09: LLMConfig must never appear in serialized report output."""
+    d = _sample().to_dict()
+    assert "llm_config" not in d

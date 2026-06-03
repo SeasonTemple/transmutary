@@ -67,6 +67,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_demote.add_argument("repo", help="repository as owner/repo")
 
     sub.add_parser("list-watchlist", help="list config + promoted repos")
+
+    sub.add_parser("config", help="configure LLM API key and base URL interactively")
     return parser
 
 
@@ -104,6 +106,43 @@ def _cmd_list(settings: Settings, out) -> int:
     return 0
 
 
+def _cmd_config(config_dir: str, out) -> int:
+    """Interactive LLM configuration wizard (R2)."""
+    import getpass
+
+    from .config import LLMConfig, load_llm_config, save_llm_config
+
+    existing = load_llm_config(config_dir)
+    if existing is not None:
+        masked = existing.api_key[:4] + "****" if len(existing.api_key) >= 4 else "****"
+        print(f"Current config: key={masked}", file=out)
+        if existing.base_url:
+            print(f"  base_url={existing.base_url}", file=out)
+
+    try:
+        api_key = getpass.getpass("LLM API key: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\nCancelled.", file=out)
+        return 0
+    if not api_key:
+        print("Cancelled (empty key).", file=out)
+        return 0
+
+    base_url = input("Base URL (optional, press Enter to skip): ").strip() or None
+
+    print(f"\nWill save: key={api_key[:4]}****", file=out)
+    if base_url:
+        print(f"  base_url={base_url}", file=out)
+    confirm = input("Confirm? [y/N] ").strip().lower()
+    if confirm != "y":
+        print("Cancelled.", file=out)
+        return 0
+
+    save_llm_config(config_dir, LLMConfig(api_key=api_key, base_url=base_url))
+    print("Saved to config/llm.yaml", file=out)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None, *, out=None) -> int:
     """Parse args, dispatch, and return a process exit code.
 
@@ -120,6 +159,10 @@ def main(argv: Sequence[str] | None = None, *, out=None) -> int:
     if args.command in ("promote", "demote") and not _valid_repo(args.repo):
         print(f"error: invalid repo {args.repo!r}; expected owner/repo", file=sys.stderr)
         return 2
+
+    # config subcommand doesn't need settings — only config_dir.
+    if args.command == "config":
+        return _cmd_config(args.config_dir, out)
 
     try:
         settings = _load(args.config_dir)

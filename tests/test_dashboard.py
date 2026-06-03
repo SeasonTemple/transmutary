@@ -386,6 +386,59 @@ def test_report_page_blanks_javascript_source_href():
         assert 'href="https://safe.example"' in resp.text
 
 
+def test_report_page_with_zh_body_shows_lang_toggle():
+    """Bilingual report renders a language toggle and both bodies."""
+    with tempfile.TemporaryDirectory() as d:
+        client, store, artifacts, settings = _client(d, seed=False)
+        rpt = Report(
+            title="Bilingual report",
+            kind=ReportKind.DIAGNOSE,
+            repo="acme/cli",
+            severity=Severity.HIGH,
+            body_md="English body",
+            body_md_zh="中文正文",
+            created_at="2026-01-01T00:00:00Z",
+        )
+        artifacts.write(rpt, ts=4000.0)
+        resp = client.get("/report/acme/cli/4000-diagnose.md")
+        assert resp.status_code == 200
+        assert "English body" in resp.text
+        assert "中文正文" in resp.text
+        assert "lang-toggle" in resp.text
+
+
+def test_report_page_without_zh_body_no_toggle():
+    """Monolingual report does not render a language toggle."""
+    with tempfile.TemporaryDirectory() as d:
+        client, store, artifacts, settings = _client(d, seed=False)
+        rpt = _report("acme/cli")
+        assert rpt.body_md_zh is None
+        artifacts.write(rpt, ts=5000.0)
+        resp = client.get("/report/acme/cli/5000-diagnose.md")
+        assert resp.status_code == 200
+        assert "lang-toggle" not in resp.text
+
+
+def test_report_json_includes_body_zh():
+    """JSON format includes body_zh from sidecar."""
+    with tempfile.TemporaryDirectory() as d:
+        client, store, artifacts, settings = _client(d, seed=False)
+        rpt = Report(
+            title="JSON bilingual",
+            kind=ReportKind.DIAGNOSE,
+            repo="acme/cli",
+            severity=Severity.HIGH,
+            body_md="EN",
+            body_md_zh="ZH",
+            created_at="2026-01-01T00:00:00Z",
+        )
+        artifacts.write(rpt, ts=6000.0)
+        resp = client.get("/report/acme/cli/6000-diagnose.md?format=json")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["body_zh"] == "ZH"
+
+
 def test_report_path_traversal_404():
     with tempfile.TemporaryDirectory() as d:
         client, *_ = _client(d)
@@ -418,6 +471,7 @@ def test_routes_are_get_only_except_promote_writes():
                     "/settings/edges/remove",
                     "/settings/trends",
                     "/settings/delivery",
+                    "/settings/llm",
                 }:
                     assert route.methods <= {"GET", "POST", "HEAD"}
                 else:

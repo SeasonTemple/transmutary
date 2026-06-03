@@ -1,14 +1,17 @@
 """Configuration loading + credential handling (U1, R21, KTD4).
 
 Parses three YAML files (watchlist / trend_scope / delivery) into a ``Settings``
-object. Credentials (GitHub token, SMTP, RSS token, LLM API key + optional
-base_url) are read ONLY from ``os.environ``; they are NEVER serialized into
-repr / logs / SQLite / reports (KTD4).
+object. Non-LLM credentials (GitHub token, SMTP, RSS token) are read ONLY from
+``os.environ``; they are NEVER serialized into repr / logs / SQLite / reports
+(KTD4). LLM credentials (API key + base URL) may come from env vars OR
+``config/llm.yaml`` (see :func:`effective_llm_config`); the YAML file is
+enforced 0600 to preserve the KTD4 security invariant.
 """
 
 from __future__ import annotations
 
 import os
+import stat
 from dataclasses import dataclass, field
 
 import yaml
@@ -25,12 +28,13 @@ ENV_LLM_API_KEY = "TRANSMUTARY_LLM_API_KEY"
 ENV_LLM_BASE_URL = "TRANSMUTARY_LLM_BASE_URL"  # optional; OpenAI-compat endpoint
 
 # Required credentials — load fails clearly if any of these is missing.
+# NOTE: ENV_LLM_API_KEY is intentionally absent — LLM key resolution goes
+# through effective_llm_config() which merges env > llm.yaml > error.
 _REQUIRED_ENV = (
     ENV_GITHUB_TOKEN,
     ENV_SMTP_USER,
     ENV_SMTP_PASSWORD,
     ENV_RSS_TOKEN,
-    ENV_LLM_API_KEY,
 )
 
 
@@ -128,7 +132,7 @@ class Credentials:
             smtp_user=env[ENV_SMTP_USER],
             smtp_password=env[ENV_SMTP_PASSWORD],
             rss_token=env[ENV_RSS_TOKEN],
-            llm_api_key=env[ENV_LLM_API_KEY],
+            llm_api_key=env.get(ENV_LLM_API_KEY, ""),
         )
 
 
@@ -175,17 +179,33 @@ class Delivery:
 
 
 @dataclass(frozen=True)
+class LLMConfig:
+    """LLM credentials stored in ``config/llm.yaml`` (0600, never in SQLite).
+
+    Provider is NOT stored — LiteLLM routes by model name. api_key is the sole
+    required field; base_url is optional. api_key is excluded from repr to
+    preserve KTD4 credential secrecy.
+    """
+
+    api_key: str = field(repr=False)
+    base_url: str | None = None
+
+
+@dataclass(frozen=True)
 class Settings:
     """Top-level loaded configuration.
 
     ``credentials`` is held but never serialized; ``llm_base_url`` is non-secret
-    config (an endpoint URL) and may appear in repr.
+    config (an endpoint URL) and may appear in repr. ``llm_config`` carries the
+    file-based LLM credentials from ``config/llm.yaml`` for use by
+    :func:`effective_llm_config`.
     """
 
     watchlist: Watchlist
     trend_scope: TrendScope
     delivery: Delivery
     llm_base_url: str | None = None
+    llm_config: LLMConfig | None = field(default=None, repr=False)
     # credentials excluded from repr to avoid any chance of leaking via str(Settings)
     credentials: Credentials | None = field(default=None, repr=False, compare=False)
 
@@ -266,6 +286,48 @@ def parse_delivery(data: dict) -> Delivery:
         raise ConfigError(f"delivery config missing required key: {exc}") from exc
 
 
+def load_llm_config(config_dir: str) -> LLMConfig | None:
+    """Load LLM credentials from ``config/llm.yaml`` (0600 enforced).
+
+    Returns ``None`` when the file does not exist. Raises :class:`ConfigError`
+    on malformed content or overly broad permissions.
+    """
+    from .store.permissions import IS_WINDOWS, PrivatePermissionError, enforce_private_mode
+
+    path = os.path.join(config_dir, "llm.yaml")
+    if not os.path.exists(path):
+        return None
+    if not IS_WINDOWS:
+        try:
+            enforce_private_mode(path, 0o600, "LLM config")
+        except PrivatePermissionError as exc:
+            raise ConfigError(str(exc)) from exc
+    data = _load_yaml(path)
+    api_key = data.get("api_key")
+    if not api_key or not isinstance(api_key, str):
+        raise ConfigError("llm.yaml must contain a non-empty 'api_key' string")
+    base_url = data.get("base_url")
+    if base_url is not None:
+        base_url = str(base_url)
+    return LLMConfig(api_key=api_key, base_url=base_url)
+
+
+def save_llm_config(config_dir: str, config: LLMConfig) -> None:
+    """Write LLM credentials to ``config/llm.yaml`` with 0600 permissions.
+
+    Uses ``os.open`` with mode 0o600 so the file is NEVER world-readable,
+    even transiently (no TOCTOU window between create and chmod).
+    """
+    os.makedirs(config_dir, exist_ok=True)
+    path = os.path.join(config_dir, "llm.yaml")
+    payload = {"api_key": config.api_key}
+    if config.base_url is not None:
+        payload["base_url"] = config.base_url
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        yaml.dump(payload, fh, default_flow_style=False)
+
+
 def load_settings(
     config_dir: str,
     *,
@@ -290,11 +352,13 @@ def load_settings(
 
     credentials = Credentials.from_env(env) if require_credentials else None
     llm_base_url = env.get(ENV_LLM_BASE_URL)
+    llm_config = load_llm_config(config_dir)
 
     return Settings(
         watchlist=watchlist,
         trend_scope=trend_scope,
         delivery=delivery,
         llm_base_url=llm_base_url,
+        llm_config=llm_config,
         credentials=credentials,
     )

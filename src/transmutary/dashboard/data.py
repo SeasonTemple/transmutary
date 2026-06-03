@@ -107,17 +107,20 @@ class SourceLink:
 class ReportView:
     card: ReportCard
     body: str  # raw markdown, rendered as escaped <pre> by the template (KTD-Dash-3)
+    body_zh: str | None  # Chinese markdown, None when unavailable
     sources: tuple[SourceLink, ...]
 
     def to_dict(self) -> dict:
-        # `body` is untrusted external markdown — a JSON consumer MUST escape it
-        # before any HTML rendering. The trust marker documents that contract.
-        return {
+        # `body` / `body_zh` are untrusted external markdown — a JSON consumer MUST
+        # escape them before any HTML rendering. The trust marker documents that contract.
+        d: dict = {
             "card": self.card.to_dict(),
             "body": self.body,
+            "body_zh": self.body_zh,
             "sources": [s.to_dict() for s in self.sources],
             "_content_trust": "external",
         }
+        return d
 
 
 @dataclass(frozen=True)
@@ -404,7 +407,7 @@ def build_report_view(
 
     The body is the raw markdown (rendered as escaped ``<pre>``); the card fields
     and sources come from the trusted sidecar JSON (R-D15), never re-parsed from
-    the untrusted body.
+    the untrusted body. ``body_md_zh`` is read from the sidecar (ADV-10).
     """
     body = artifacts.read_report(repo, filename)
     if body is None:
@@ -421,4 +424,6 @@ def build_report_view(
         ts=ts,
         filename=filename,
     )
-    return ReportView(card=card, body=body, sources=_sources_from_meta(meta))
+    # Read bilingual body from sidecar (ADV-10), not from .md parsing.
+    body_zh = meta.get("body_md_zh")
+    return ReportView(card=card, body=body, body_zh=body_zh, sources=_sources_from_meta(meta))

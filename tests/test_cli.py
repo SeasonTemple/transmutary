@@ -130,3 +130,32 @@ def test_works_without_any_credentials(cfg, monkeypatch):
         monkeypatch.delenv(var, raising=False)
     code, _ = _run(["--config-dir", config_dir, "list-watchlist"])
     assert code == 0
+
+
+# --- config subcommand -------------------------------------------------------
+
+def test_config_saves_llm_yaml(cfg, monkeypatch):
+    import os
+    import yaml
+
+    config_dir, _ = cfg
+    monkeypatch.setattr("getpass.getpass", lambda prompt: "sk-test-key-123")
+    monkeypatch.setattr("builtins.input", lambda prompt: (
+        "" if "Base URL" in prompt else "y"
+    ))
+    code, out = _run(["--config-dir", config_dir, "config"])
+    assert code == 0
+    assert "Saved" in out
+    llm_path = os.path.join(config_dir, "llm.yaml")
+    assert os.path.exists(llm_path)
+    with open(llm_path) as f:
+        data = yaml.safe_load(f)
+    assert data["api_key"] == "sk-test-key-123"
+
+
+def test_config_cancel_empty_key(cfg, monkeypatch):
+    config_dir, _ = cfg
+    monkeypatch.setattr("getpass.getpass", lambda prompt: "")
+    code, out = _run(["--config-dir", config_dir, "config"])
+    assert code == 0
+    assert "Cancelled" in out

@@ -225,6 +225,14 @@ pre {
 .sources a { color: var(--accent); text-decoration: none; word-break: break-all; }
 .sources a:hover { text-decoration: underline; }
 
+/* bilingual report lang toggle */
+.lang-toggle { display: inline-flex; gap: 0; margin-bottom: .5rem; }
+.lang-toggle .lang-btn { font-size: .78rem; padding: .25rem .6rem; border-radius: 0; }
+.lang-toggle .lang-btn:first-child { border-radius: var(--r) 0 0 var(--r); }
+.lang-toggle .lang-btn:last-child { border-radius: 0 var(--r) var(--r) 0; }
+.lang-toggle .lang-btn.active { background: var(--accent); color: #fff; }
+.hidden { display: none !important; }
+
 /* admin login */
 .login-shell {
   min-height: calc(100vh - 7rem); display: grid; grid-template-columns: minmax(0, 1fr) minmax(24rem, 28rem);

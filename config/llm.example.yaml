@@ -1,0 +1,9 @@
+# LLM provider credentials.
+# Prefer `transmutary config` or the dashboard settings panel to edit this file.
+# Permissions are enforced to 0600 (owner read/write only).
+#
+# Required:
+api_key: ""               # Your LLM API key (e.g. sk-...)
+
+# Optional:
+# base_url: ""            # OpenAI-compatible endpoint override

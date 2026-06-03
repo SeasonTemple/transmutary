@@ -8,6 +8,7 @@ from transmutary.config import (
     ConfigError,
     Delivery,
     DependencyEdge,
+    LLMConfig,
     RepoEntry,
     Settings,
     TrendScope,
@@ -16,6 +17,7 @@ from transmutary.config import (
 from transmutary.effective_config import (
     effective_delivery,
     effective_dependency_edges,
+    effective_llm_config,
     effective_repo_sources,
     effective_repos,
     effective_trend_scope,
@@ -122,3 +124,61 @@ def test_effective_delivery_partial_admin_values(store):
     delivery = effective_delivery(_settings(), store)
     assert delivery.email_recipients == ["base@example.com"]
     assert delivery.digest_hour == 6
+
+
+# --- effective_llm_config ---------------------------------------------------
+
+def _llm_settings(**overrides) -> Settings:
+    defaults = dict(
+        watchlist=Watchlist(
+            repos=[RepoEntry(repo="a/b")], dependency_edges=[],
+        ),
+        trend_scope=TrendScope(topics=["ai"], keywords=[]),
+        delivery=Delivery(
+            state_db_path=":memory:",
+            artifact_root="/tmp/a",
+            token_max_age_days=90,
+            digest_hour=9,
+        ),
+    )
+    defaults.update(overrides)
+    return Settings(**defaults)
+
+
+def test_llm_env_wins_over_yaml():
+    s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
+    key, url = effective_llm_config(
+        s,
+        env={"TRANSMUTARY_LLM_API_KEY": "env-key", "TRANSMUTARY_LLM_BASE_URL": "https://env"},
+    )
+    assert key == "env-key"
+    assert url == "https://env"
+
+
+def test_llm_yaml_used_when_env_missing():
+    s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
+    key, url = effective_llm_config(s, env={})
+    assert key == "yaml-key"
+    assert url == "https://yaml"
+
+
+def test_llm_both_missing_require_true_errors():
+    s = _llm_settings()
+    with pytest.raises(ConfigError, match="LLM API key"):
+        effective_llm_config(s, env={}, require=True)
+
+
+def test_llm_both_missing_require_false_returns_empty():
+    s = _llm_settings()
+    key, url = effective_llm_config(s, env={}, require=False)
+    assert key == ""
+    assert url is None
+
+
+def test_llm_env_key_only_yaml_url_used():
+    s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
+    key, url = effective_llm_config(
+        s, env={"TRANSMUTARY_LLM_API_KEY": "env-key"}
+    )
+    assert key == "env-key"
+    assert url == "https://yaml"

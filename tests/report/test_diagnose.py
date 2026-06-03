@@ -457,3 +457,37 @@ def test_refine_keeps_injection_in_data_slot_only():
     assert any(injection in c["data"] for c in seen)
     assert all(injection not in c["system"] for c in seen)
     assert "PWNED" not in out.report.body_md
+
+
+# --- Bilingual annotation symmetry (P1 fix, R10/ADV-12) ----------------------
+
+def test_bilingual_forced_hits_symmetric():
+    """Forced-hit annotations must appear in BOTH EN and ZH bodies, not cross-contaminated."""
+    def _call(system, data_block, tier=None, **kw):
+        # LLM says package is safe (triggers forced-hit when cross-validation finds ID)
+        return (
+            "English diagnosis. Package is safe and not vulnerable.\n\n"
+            "<!-- BILINGUAL:SPLIT -->\n\n中文诊断。该包是安全的，没有漏洞。"
+        )
+
+    ctx = EventContext(
+        repo="acme/cli",
+        title="t",
+        primary=[CleanInput(repo="acme/cli", text="503 down", ts="2026-05-20T00:00:00Z")],
+        sources=[SourceItem(url="https://github.com/acme/cli/issues/1"),
+                 SourceItem(url="https://github.com/acme/cli/issues/2")],
+        anchor_ts="2026-05-20T01:00:00Z",
+    )
+    out = diagnose(ctx, call_fn=_call, security_claims=[SecurityClaim(
+        package="pkg", llm_says_vulnerable=False,
+        deterministic_ids=["GHSA-aaaa-bbbb-cccc"],
+    )])
+    # EN body must contain the forced-hit annotation.
+    assert "CONFIRMED ADVISORY" in out.report.body_md
+    assert "GHSA-aaaa-bbbb-cccc" in out.report.body_md
+    # ZH body must also contain the annotation (in Chinese).
+    assert out.report.body_md_zh is not None
+    assert "GHSA-aaaa-bbbb-cccc" in out.report.body_md_zh
+    assert "已确认" in out.report.body_md_zh
+    # EN annotation must NOT appear in ZH body (no cross-contamination).
+    assert "CONFIRMED ADVISORY" not in out.report.body_md_zh
