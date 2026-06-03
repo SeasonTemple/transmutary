@@ -54,7 +54,7 @@ RELEASE_ISSUE_INTERVAL_SECONDS = 600
 # jobs against the effective watchlist (config ∪ promoted). This is the bridge
 # that lets a CLI ``promote`` in a SEPARATE process reach the live scheduler
 # without a restart.
-RECONCILE_INTERVAL_SECONDS = 60
+RECONCILE_INTERVAL_SECONDS = 600  # 10 min — was 1 min, way too aggressive
 
 
 def _isolated(job_id: str, func: Callable[[], None]) -> Callable[[], None]:
