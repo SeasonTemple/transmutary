@@ -147,7 +147,7 @@ def _llm_settings(**overrides) -> Settings:
 
 def test_llm_env_wins_over_yaml():
     s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
-    key, url, model = effective_llm_config(
+    key, url, models = effective_llm_config(
         s,
         env={"TRANSMUTARY_LLM_API_KEY": "env-key", "TRANSMUTARY_LLM_BASE_URL": "https://env"},
     )
@@ -157,7 +157,7 @@ def test_llm_env_wins_over_yaml():
 
 def test_llm_yaml_used_when_env_missing():
     s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
-    key, url, model = effective_llm_config(s, env={})
+    key, url, models = effective_llm_config(s, env={})
     assert key == "yaml-key"
     assert url == "https://yaml"
 
@@ -170,16 +170,35 @@ def test_llm_both_missing_require_true_errors():
 
 def test_llm_both_missing_require_false_returns_empty():
     s = _llm_settings()
-    key, url, model = effective_llm_config(s, env={}, require=False)
+    key, url, models = effective_llm_config(s, env={}, require=False)
     assert key == ""
     assert url is None
-    assert model is None
+    assert isinstance(models, dict)
 
 
 def test_llm_env_key_only_yaml_url_used():
     s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
-    key, url, model = effective_llm_config(
+    key, url, models = effective_llm_config(
         s, env={"TRANSMUTARY_LLM_API_KEY": "env-key"}
     )
     assert key == "env-key"
     assert url == "https://yaml"
+
+
+def test_llm_per_tier_model_env_overrides():
+    s = _llm_settings(llm_config=LLMConfig(
+        api_key="k", model_strong="yaml-strong", model_cheap="yaml-cheap",
+    ))
+    key, url, models = effective_llm_config(
+        s, env={"TRANSMUTARY_LLM_MODEL_STRONG": "env-strong"},
+    )
+    assert models["strong"] == "env-strong"
+    assert models["cheap"] == "yaml-cheap"
+
+
+def test_llm_per_tier_model_defaults():
+    s = _llm_settings(llm_config=LLMConfig(api_key="k"))
+    key, url, models = effective_llm_config(s, env={})
+    assert models["strong"] == "gpt-4o"
+    assert models["cheap"] == "gpt-4o-mini"
+    assert models["embed"] == "text-embedding-3-small"

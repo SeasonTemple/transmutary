@@ -100,35 +100,55 @@ def effective_llm_config(
     *,
     env: dict[str, str] | None = None,
     require: bool = True,
-) -> tuple[str, str | None, str | None]:
-    """Return ``(api_key, base_url, model)`` for LLM calls.
+) -> tuple[str, str | None, dict[str, str]]:
+    """Return ``(api_key, base_url, models)`` for LLM calls.
 
-    Precedence: ``TRANSMUTARY_LLM_*`` env > ``config/llm.yaml`` fields.
+    ``models`` maps tier name to resolved model string:
+    ``{"strong": "gpt-4o", "cheap": "gpt-4o-mini", "embed": "text-embedding-3-small"}``.
+
+    Precedence per field: ``TRANSMUTARY_LLM_*`` env > ``config/llm.yaml`` > defaults.
     When ``require=False`` and both sources are empty, returns
-    ``("", None, None)`` — used by the dashboard where LLM may be unconfigured.
+    ``("", None, {})`` — used by the dashboard where LLM may be unconfigured.
     """
     import os
+
+    from .llm import DEFAULT_TIER_MODELS, ModelTier
 
     env = os.environ if env is None else env
     env_key = env.get(ENV_LLM_API_KEY, "")
     env_url = env.get(ENV_LLM_BASE_URL) or None
-    env_model = env.get("TRANSMUTARY_LLM_MODEL") or None
 
     yaml_cfg = settings.llm_config
     yaml_key = yaml_cfg.api_key if yaml_cfg is not None else ""
     yaml_url = yaml_cfg.base_url if yaml_cfg is not None else None
-    yaml_model = yaml_cfg.model if yaml_cfg is not None else None
 
     api_key = env_key or yaml_key
     base_url = env_url if env_url is not None else yaml_url
-    model = env_model if env_model is not None else yaml_model
 
     if require and not api_key:
         raise ConfigError(
             "LLM API key not configured: set TRANSMUTARY_LLM_API_KEY or "
             "configure via `transmutary config` / dashboard settings"
         )
-    return (api_key, base_url, model)
+
+    # Per-tier model resolution: env > yaml > DEFAULT_TIER_MODELS.
+    tiers = {
+        "strong": (env.get("TRANSMUTARY_LLM_MODEL_STRONG") or None,
+                   yaml_cfg.model_strong if yaml_cfg is not None else None,
+                   DEFAULT_TIER_MODELS[ModelTier.STRONG]),
+        "cheap": (env.get("TRANSMUTARY_LLM_MODEL_CHEAP") or None,
+                  yaml_cfg.model_cheap if yaml_cfg is not None else None,
+                  DEFAULT_TIER_MODELS[ModelTier.CHEAP]),
+        "embed": (env.get("TRANSMUTARY_LLM_MODEL_EMBED") or None,
+                  yaml_cfg.model_embed if yaml_cfg is not None else None,
+                  DEFAULT_TIER_MODELS[ModelTier.EMBED]),
+    }
+    models = {
+        tier: (env_m or yaml_m or default)
+        for tier, (env_m, yaml_m, default) in tiers.items()
+    }
+
+    return (api_key, base_url, models)
 
 
 __all__ = (

@@ -159,7 +159,9 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="field"><span>API Key</span><input name="api_key" type="password" placeholder="sk-..." autocomplete="off"></label>
       <label class="field"><span>Base URL</span><input name="base_url" placeholder="https://api.openai.com/v1 (optional)"></label>
-      <label class="field"><span data-i18n="settings_llm_model">{{ t['settings_llm_model'] }}</span><input name="model" placeholder="gpt-4o / claude-sonnet-4-6 (optional)"></label>
+      <label class="field"><span data-i18n="settings_llm_model_strong">{{ t['settings_llm_model_strong'] }}</span><input name="model_strong" placeholder="gpt-4o (optional)"></label>
+      <label class="field"><span data-i18n="settings_llm_model_cheap">{{ t['settings_llm_model_cheap'] }}</span><input name="model_cheap" placeholder="gpt-4o-mini (optional)"></label>
+      <label class="field"><span data-i18n="settings_llm_model_embed">{{ t['settings_llm_model_embed'] }}</span><input name="model_embed" placeholder="text-embedding-3-small (optional)"></label>
       <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
     </form>
   </section>

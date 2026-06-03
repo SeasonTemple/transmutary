@@ -182,13 +182,15 @@ class LLMConfig:
     """LLM credentials stored in ``config/llm.yaml`` (0600, never in SQLite).
 
     Provider is NOT stored — LiteLLM routes by model name. api_key is the sole
-    required field; base_url and model are optional. api_key is excluded from
-    repr to preserve KTD4 credential secrecy.
+    required field; base_url and per-tier model overrides are optional. api_key
+    is excluded from repr to preserve KTD4 credential secrecy.
     """
 
     api_key: str = field(repr=False)
     base_url: str | None = None
-    model: str | None = None
+    model_strong: str | None = None
+    model_cheap: str | None = None
+    model_embed: str | None = None
 
 
 @dataclass(frozen=True)
@@ -286,6 +288,11 @@ def parse_delivery(data: dict) -> Delivery:
         raise ConfigError(f"delivery config missing required key: {exc}") from exc
 
 
+def _optional_str(data: dict, key: str) -> str | None:
+    v = data.get(key)
+    return str(v) if v is not None else None
+
+
 def load_llm_config(config_dir: str) -> LLMConfig | None:
     """Load LLM credentials from ``config/llm.yaml`` (0600 enforced).
 
@@ -309,10 +316,16 @@ def load_llm_config(config_dir: str) -> LLMConfig | None:
     base_url = data.get("base_url")
     if base_url is not None:
         base_url = str(base_url)
-    model = data.get("model")
-    if model is not None:
-        model = str(model)
-    return LLMConfig(api_key=api_key, base_url=base_url, model=model)
+    model_strong = _optional_str(data, "model_strong")
+    model_cheap = _optional_str(data, "model_cheap")
+    model_embed = _optional_str(data, "model_embed")
+    # Back-compat: single "model" key maps to model_strong.
+    if model_strong is None:
+        model_strong = _optional_str(data, "model")
+    return LLMConfig(
+        api_key=api_key, base_url=base_url,
+        model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
+    )
 
 
 def save_llm_config(config_dir: str, config: LLMConfig) -> None:
@@ -326,8 +339,12 @@ def save_llm_config(config_dir: str, config: LLMConfig) -> None:
     payload = {"api_key": config.api_key}
     if config.base_url is not None:
         payload["base_url"] = config.base_url
-    if config.model is not None:
-        payload["model"] = config.model
+    if config.model_strong is not None:
+        payload["model_strong"] = config.model_strong
+    if config.model_cheap is not None:
+        payload["model_cheap"] = config.model_cheap
+    if config.model_embed is not None:
+        payload["model_embed"] = config.model_embed
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         yaml.dump(payload, fh, default_flow_style=False)

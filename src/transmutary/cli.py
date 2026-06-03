@@ -118,8 +118,12 @@ def _cmd_config(config_dir: str, out) -> int:
         print(f"Current config: key={masked}", file=out)
         if existing.base_url:
             print(f"  base_url={existing.base_url}", file=out)
-        if existing.model:
-            print(f"  model={existing.model}", file=out)
+        if existing.model_strong:
+            print(f"  model_strong={existing.model_strong}", file=out)
+        if existing.model_cheap:
+            print(f"  model_cheap={existing.model_cheap}", file=out)
+        if existing.model_embed:
+            print(f"  model_embed={existing.model_embed}", file=out)
 
     try:
         api_key = getpass.getpass("LLM API key: ").strip()
@@ -131,19 +135,28 @@ def _cmd_config(config_dir: str, out) -> int:
         return 0
 
     base_url = input("Base URL (optional, press Enter to skip): ").strip() or None
-    model = input("Model (optional, press Enter to skip): ").strip() or None
+    model_strong = input("Model - strong (optional): ").strip() or None
+    model_cheap = input("Model - cheap (optional): ").strip() or None
+    model_embed = input("Model - embed (optional): ").strip() or None
 
     print(f"\nWill save: key={api_key[:4]}****", file=out)
     if base_url:
         print(f"  base_url={base_url}", file=out)
-    if model:
-        print(f"  model={model}", file=out)
+    if model_strong:
+        print(f"  model_strong={model_strong}", file=out)
+    if model_cheap:
+        print(f"  model_cheap={model_cheap}", file=out)
+    if model_embed:
+        print(f"  model_embed={model_embed}", file=out)
     confirm = input("Confirm? [y/N] ").strip().lower()
     if confirm != "y":
         print("Cancelled.", file=out)
         return 0
 
-    save_llm_config(config_dir, LLMConfig(api_key=api_key, base_url=base_url, model=model))
+    save_llm_config(config_dir, LLMConfig(
+        api_key=api_key, base_url=base_url,
+        model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
+    ))
     print("Saved to config/llm.yaml", file=out)
     return 0
 
