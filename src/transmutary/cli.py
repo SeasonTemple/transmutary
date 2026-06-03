@@ -118,8 +118,10 @@ def _cmd_config(config_dir: str, out) -> int:
         print(f"Current config: key={masked}", file=out)
         if existing.base_url:
             print(f"  base_url={existing.base_url}", file=out)
-        if existing.provider:
-            print(f"  provider={existing.provider}", file=out)
+        if existing.vendor:
+            print(f"  vendor={existing.vendor}", file=out)
+        if existing.transport and existing.transport != existing.vendor:
+            print(f"  transport={existing.transport}", file=out)
         if existing.model_strong:
             print(f"  model_strong={existing.model_strong}", file=out)
         if existing.model_cheap:
@@ -137,7 +139,7 @@ def _cmd_config(config_dir: str, out) -> int:
         return 0
 
     base_url = input("Base URL (optional, press Enter to skip): ").strip() or None
-    provider = input("Provider (openai/anthropic/azure, optional): ").strip() or None
+    vendor = input("Vendor (openai/anthropic/minimax/azure, optional): ").strip() or None
     model_strong = input("Model - strong (optional): ").strip() or None
     model_cheap = input("Model - cheap (optional): ").strip() or None
     model_embed = input("Model - embed (optional): ").strip() or None
@@ -145,8 +147,8 @@ def _cmd_config(config_dir: str, out) -> int:
     print(f"\nWill save: key={api_key[:4]}****", file=out)
     if base_url:
         print(f"  base_url={base_url}", file=out)
-    if provider:
-        print(f"  provider={provider}", file=out)
+    if vendor:
+        print(f"  vendor={vendor}", file=out)
     if model_strong:
         print(f"  model_strong={model_strong}", file=out)
     if model_cheap:
@@ -158,8 +160,9 @@ def _cmd_config(config_dir: str, out) -> int:
         print("Cancelled.", file=out)
         return 0
 
+    transport = "anthropic" if vendor == "minimax" else vendor
     save_llm_config(config_dir, LLMConfig(
-        api_key=api_key, base_url=base_url, provider=provider,
+        api_key=api_key, base_url=base_url, vendor=vendor, transport=transport,
         model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
     ))
     print("Saved to config/llm.yaml", file=out)

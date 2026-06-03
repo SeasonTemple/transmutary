@@ -181,14 +181,17 @@ class Delivery:
 class LLMConfig:
     """LLM credentials stored in ``config/llm.yaml`` (0600, never in SQLite).
 
-    The form only takes the BARE model name (e.g. ``MiniMax-M3``). ``provider``
-    determines the LiteLLM prefix prepended at call time (``openai/MiniMax-M3``).
+    ``vendor`` identifies the model owner for display ("minimax", "openai",
+    "anthropic", "azure"). ``transport`` selects the LiteLLM SDK prefix
+    ("openai" | "anthropic" | "azure" | None). The form shows vendor; the
+    transport is auto-derived from vendor (overridable for custom proxies).
     api_key is excluded from repr to preserve KTD4 credential secrecy.
     """
 
     api_key: str = field(repr=False)
     base_url: str | None = None
-    provider: str | None = None  # "openai" | "anthropic" | "azure" | None (raw model)
+    vendor: str | None = None
+    transport: str | None = None
     model_strong: str | None = None
     model_cheap: str | None = None
     model_embed: str | None = None
@@ -320,12 +323,15 @@ def load_llm_config(config_dir: str) -> LLMConfig | None:
     model_strong = _optional_str(data, "model_strong")
     model_cheap = _optional_str(data, "model_cheap")
     model_embed = _optional_str(data, "model_embed")
-    provider = _optional_str(data, "provider")
-    # Back-compat: single "model" key maps to model_strong.
+    vendor = _optional_str(data, "vendor")
+    transport = _optional_str(data, "transport")
+    # Back-compat: "provider" was the old transport name.
+    if transport is None:
+        transport = _optional_str(data, "provider")
     if model_strong is None:
         model_strong = _optional_str(data, "model")
     return LLMConfig(
-        api_key=api_key, base_url=base_url, provider=provider,
+        api_key=api_key, base_url=base_url, vendor=vendor, transport=transport,
         model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
     )
 
@@ -341,8 +347,10 @@ def save_llm_config(config_dir: str, config: LLMConfig) -> None:
     payload = {"api_key": config.api_key}
     if config.base_url is not None:
         payload["base_url"] = config.base_url
-    if config.provider is not None:
-        payload["provider"] = config.provider
+    if config.vendor is not None:
+        payload["vendor"] = config.vendor
+    if config.transport is not None:
+        payload["transport"] = config.transport
     if config.model_strong is not None:
         payload["model_strong"] = config.model_strong
     if config.model_cheap is not None:

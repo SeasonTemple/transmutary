@@ -148,19 +148,41 @@ def effective_llm_config(
         for tier, (env_m, yaml_m, default) in tiers.items()
     }
 
-    # Apply provider prefix to bare model names (env or yaml).
-    # env > yaml > None. Empty string means "use bare name (no prefix)".
-    env_provider = env.get("TRANSMUTARY_LLM_PROVIDER") or None
-    yaml_provider = yaml_cfg.provider if yaml_cfg is not None else None
-    provider = env_provider or yaml_provider
-    if provider:
-        prefix = provider if provider.endswith("/") else provider + "/"
+    # Apply LiteLLM transport prefix to bare model names.
+    # Vendor (display) is separate from transport (protocol). Vendor defaults
+    # to the same as transport unless set explicitly.
+    env_transport = (
+        env.get("TRANSMUTARY_LLM_TRANSPORT")
+        or env.get("TRANSMUTARY_LLM_PROVIDER")
+        or None
+    )
+    yaml_transport = yaml_cfg.transport if yaml_cfg is not None else None
+    if yaml_transport is None and yaml_cfg is not None:
+        # Back-compat: vendor doubles as transport if transport unset.
+        yaml_transport = yaml_cfg.vendor
+    transport = env_transport or yaml_transport
+    if transport:
+        prefix = transport if transport.endswith("/") else transport + "/"
         models = {
             tier: (prefix + m) if "/" not in m else m
             for tier, m in models.items()
         }
 
     return (api_key, base_url, models)
+
+
+def effective_llm_vendor(settings: Settings) -> str | None:
+    """Return the LLM vendor name for display (e.g. "minimax", "openai").
+
+    env > yaml > None. Independent of transport — the vendor is what shows up
+    in user-facing model labels, not the protocol hint.
+    """
+    import os
+    env = os.environ
+    env_v = env.get("TRANSMUTARY_LLM_VENDOR") or None
+    if env_v:
+        return env_v
+    return settings.llm_config.vendor if settings.llm_config is not None else None
 
 
 __all__ = (

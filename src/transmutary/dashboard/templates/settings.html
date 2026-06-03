@@ -171,13 +171,13 @@
     {% endif %}
     <form method="post" action="/settings/llm" class="settings-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label class="field"><span data-i18n="settings_llm_provider">{{ t['settings_llm_provider'] }}</span>
-        <select id="llm-provider" name="provider">
-          <option value="" {% if not llm_config or not llm_config.provider %}selected{% endif %}>{{ t['settings_llm_provider_custom'] }}</option>
-          <option value="openai" {% if llm_config and llm_config.provider == 'openai' %}selected{% endif %}>OpenAI</option>
-          <option value="anthropic" {% if llm_config and llm_config.provider == 'anthropic' %}selected{% endif %}>Anthropic</option>
-          <option value="anthropic_compat" {% if llm_config and llm_config.provider == 'anthropic' and llm_config.base_url and 'minimaxi' in llm_config.base_url %}selected{% endif %}>Anthropic Compatible</option>
-          <option value="azure" {% if llm_config and llm_config.provider == 'azure' %}selected{% endif %}>Azure OpenAI</option>
+      <label class="field"><span data-i18n="settings_llm_vendor">{{ t['settings_llm_vendor'] }}</span>
+        <select id="llm-provider" name="vendor">
+          <option value="" {% if not llm_config or not llm_config.vendor %}selected{% endif %}>{{ t['settings_llm_provider_custom'] }}</option>
+          <option value="openai" {% if llm_config and llm_config.vendor == 'openai' %}selected{% endif %}>OpenAI</option>
+          <option value="anthropic" {% if llm_config and llm_config.vendor == 'anthropic' %}selected{% endif %}>Anthropic</option>
+          <option value="minimax" {% if llm_config and llm_config.vendor == 'minimax' %}selected{% endif %}>MiniMax</option>
+          <option value="azure" {% if llm_config and llm_config.vendor == 'azure' %}selected{% endif %}>Azure OpenAI</option>
         </select>
       </label>
       <label class="field"><span data-i18n="settings_llm_api_key">{{ t['settings_llm_api_key'] }}</span><input id="llm-key" name="api_key" type="password" placeholder="sk-..." value="{{ llm_config.api_key[:4] + '****' if llm_config else '' }}" autocomplete="off"></label>

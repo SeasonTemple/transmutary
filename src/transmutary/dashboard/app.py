@@ -563,9 +563,13 @@ def make_dashboard_app(
         from ..config import LLMConfig, save_llm_config
         api_key = form.get("api_key", "").strip()
         base_url = form.get("base_url", "").strip() or None
-        provider = form.get("provider", "").strip() or None
-        if provider == "anthropic_compat":
-            provider = "anthropic"
+        vendor = form.get("vendor", "").strip() or None
+        # Default transport: most vendors match their name. MiniMax exposes an
+        # Anthropic-compatible endpoint so its transport is "anthropic".
+        if vendor == "minimax":
+            transport = "anthropic"
+        else:
+            transport = vendor
         model_strong = form.get("model_strong", "").strip() or None
         model_cheap = form.get("model_cheap", "").strip() or None
         model_embed = form.get("model_embed", "").strip() or None
@@ -578,7 +582,7 @@ def make_dashboard_app(
                 request, error_key="error_empty_api_key", status_code=400
             )
         save_llm_config(config_dir, LLMConfig(
-            api_key=api_key, base_url=base_url, provider=provider,
+            api_key=api_key, base_url=base_url, vendor=vendor, transport=transport,
             model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
         ))
         # ADV-11: warn when transmitted over plain HTTP (non-localhost, non-HTTPS).
@@ -599,14 +603,17 @@ def make_dashboard_app(
         llm_cfg = load_llm_config(config_dir)
         if llm_cfg is None:
             return JSONResponse({"ok": False, "error": "No LLM config saved"})
-        from ..effective_config import effective_llm_config
+        from ..effective_config import effective_llm_config, effective_llm_vendor
         api_key, base_url, models = effective_llm_config(settings, require=False)
         if not api_key:
             return JSONResponse({"ok": False, "error": "No API key configured"})
         model = models.get("strong") or "gpt-4o"
-        # Strip LiteLLM transport prefix (e.g. "anthropic/") for display —
-        # the prefix is implementation detail, the model name is what's user-facing.
+        # Display: "<vendor>/<bare_model>" (matches opencode/chatbox convention).
+        # The transport prefix in `model` is the LiteLLM SDK hint, not the
+        # user-facing label. Strip it; use vendor instead.
         bare_model = model.split("/", 1)[-1] if "/" in model else model
+        vendor = effective_llm_vendor(settings)
+        display_model = f"{vendor}/{bare_model}" if vendor else bare_model
         try:
             from ..llm import call
             call(
@@ -616,7 +623,7 @@ def make_dashboard_app(
                 base_url=base_url,
                 model=model,
             )
-            return JSONResponse({"ok": True, "model": bare_model})
+            return JSONResponse({"ok": True, "model": display_model})
         except Exception as exc:
             return JSONResponse({"ok": False, "error": str(exc)[:200]})
 
