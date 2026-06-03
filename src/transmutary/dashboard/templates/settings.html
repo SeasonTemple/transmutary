@@ -173,7 +173,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="field"><span data-i18n="settings_llm_preset">{{ t['settings_llm_preset'] }}</span>
         <select id="llm-preset" name="preset">
-          <option value="">{{ t['settings_llm_provider_custom'] }}</option>
+          <option value="" disabled {% if not llm_config %}selected{% endif %}>{{ t['settings_llm_preset_choose'] }}</option>
           <option value="minimax" {% if llm_config and llm_config.transport == 'minimax' %}selected{% endif %}>MiniMax</option>
           <option value="deepseek" {% if llm_config and llm_config.transport == 'deepseek' %}selected{% endif %}>DeepSeek</option>
           <option value="openai" {% if llm_config and llm_config.transport == 'openai' and not llm_config.base_url %}selected{% endif %}>OpenAI</option>
