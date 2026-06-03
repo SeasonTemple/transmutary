@@ -131,7 +131,10 @@ MESSAGES: dict[str, dict[str, str]] = {
             "Email delivery activates only when recipients and SMTP host are configured."
         ),
         "settings_llm_title": "LLM Configuration",
-        "settings_llm_note": "API key and base URL are stored locally in config/llm.yaml (0600). Environment variables take precedence.",
+        "settings_llm_note": (
+            "API key and base URL are stored locally in config/llm.yaml (0600). "
+            "Environment variables take precedence."
+        ),
         "settings_nav_llm": "LLM",
         "settings_secret_note": "Values are never accepted or rendered here.",
         "settings_runtime_note": "Filesystem ownership remains YAML/env controlled.",
@@ -260,7 +263,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "settings_trend_note": "每行一个 topic 或 keyword；保存前会去重。",
         "settings_delivery_note": "只有收件人与 SMTP host 都配置后才启用邮件投递。",
         "settings_llm_title": "LLM 配置",
-        "settings_llm_note": "API key 和 base URL 存储在本地的 config/llm.yaml（0600 权限）。环境变量优先级更高。",
+        "settings_llm_note": (
+            "API key 和 base URL 存储在本地的 config/llm.yaml（0600 权限）。"
+            "环境变量优先级更高。"
+        ),
         "settings_nav_llm": "LLM",
         "settings_secret_note": "这里不会接收或渲染任何密钥值。",
         "settings_runtime_note": "文件系统归属仍由 YAML/env 控制。",

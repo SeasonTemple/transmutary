@@ -136,6 +136,7 @@ def test_works_without_any_credentials(cfg, monkeypatch):
 
 def test_config_saves_llm_yaml(cfg, monkeypatch):
     import os
+
     import yaml
 
     config_dir, _ = cfg

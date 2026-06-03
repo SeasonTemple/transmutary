@@ -25,7 +25,7 @@
 - **运行时服务链** — 部署时通过配置（base_url 等）形成的服务调用链，不在任何 manifest 里，故只能靠依赖边手工声明。
 - **指定范围（scope）** — 模式 B 趋势发现的筛选边界，由一个**过滤器**定义（MVP = AI 方向：topic 标签 + 关键词 OR 兜底）。
 - **晋升（promotion）** — 把模式 B 发现的热门候选仓加入关注清单，使其转由模式 A 盯着。实现：`promoted_repo` 表持久化晋升仓，有效清单 = YAML base 关注清单 ∪ SQLite admin overrides ∪ promoted；service 经 reconcile job 周期性把逐仓 job 全量同步到有效清单，CLI（`transmutary promote/demote/list-watchlist`，独立进程只写表）与看板 promote/demote UI（确认页 + CSRF/Origin 防护，只写 `promoted_repo` 表）的晋升经此免重启生效（F4）。
-- **Admin overrides** — Web Settings 写入 SQLite 的非 secret 配置覆盖层：跟踪仓、手工依赖边、趋势 topics/keywords、邮件收件人、digest hour。YAML 仍是 bootstrap/base config；provider secrets（GitHub/SMTP/RSS/LLM）仍只从 env 读取，UI 只显示 configured/missing 状态，不接收、不渲染、不持久化。
+- **Admin overrides** — Web Settings 写入 SQLite 的非 secret 配置覆盖层：跟踪仓、手工依赖边、趋势 topics/keywords、邮件收件人、digest hour。YAML 仍是 bootstrap/base config。非 LLM provider secrets（GitHub/SMTP/RSS）仍只从 env 读取，UI 只显示 configured/missing 状态，不接收、不渲染、不持久化。LLM API key + base URL 可通过 Settings 面板或 `transmutary config` CLI 写入 `config/llm.yaml`（0600 权限），优先级：env > yaml > error。
 
 ## 信号与事件
 
@@ -46,7 +46,7 @@
 ## 产物与投递
 
 - **分析产物（artifact）** — 对单个仓库的分析结果，按**仓库名建目录**存放（人可读、可 git 版本化）。
-- **报告（report）** — LLM 基于产物/事件上下文生成的可投递文档：**诊断报告**（模式 A，溯源+处置）或**说明报告**（模式 B，能力+趋势）。
+- **报告（report）** — LLM 基于产物/事件上下文生成的可投递文档：**诊断报告**（模式 A，溯源+处置）或**说明报告**（模式 B，能力+趋势）。单次 LLM 调用同时生成英文正文（`body_md`）和中文正文（`body_md_zh`），用 `<!-- BILINGUAL:SPLIT -->` 分隔后解析。Dashboard 报告页支持 EN/ZH 切换。安全注解（forced_hits、blocked notes）对称追加到两种语言。
 - **批判-修订（critique-refine）** — 报告质量增强的可选三段式：`综合（出初稿 draft）→ 批判（LLM 批判自己的初稿，找未据证断言/遗漏/逻辑洞）→ 修订（据批判出修订稿）`。**默认关**，调用方（pipeline tick 的 `refine_reports`）显式开才启。两段批判/修订都经 llm.py 单入口：批判/修订**指令**进 system 槽、初稿/批判/证据进 **data 槽**（与第三方内容一视同仁，防注入越权）。**修订稿不豁免任何安全管控**——诊断的修订稿照过 cross_validate（OSV/GHSA 交叉校验）+ sanitize（裁决脱敏）+ R18 门控，与初稿完全相同；批判-修订只在「初稿生成」这一步前注入，不改其后安全管线。任一阶段 LLM 故障→降级用初稿（报告不产不出）。
 - **channel** — 报告的投递**目标/输出**（非接口抽象）。MVP 是两个具体输出：**RSS**（带 token 的私有 feed，不公开索引）与**邮件**（现成邮箱 SMTP），用**内联两分支路由**分发，**不引接口抽象**（待加入第三个 channel 再引，见 R14/KTD1）。
 - **分级触达** — 高危事件即时推送、趋势/一般问题进定期摘要的投递策略。

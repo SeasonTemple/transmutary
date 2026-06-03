@@ -8,7 +8,7 @@ deliver, diagnose, explain) import from here.
 from __future__ import annotations
 
 import enum
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Any
 
 

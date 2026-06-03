@@ -3,6 +3,39 @@
 <!-- v0.1.0 为首发，条目手工撰写；后续版本由 python-semantic-release 从 -->
 <!-- main 分支的 Conventional Commits 自动生成，请勿手工编辑后续条目。 -->
 
+## v0.13.0 (2026-06-03)
+
+LLM 可视化配置 + 报告双语输出。
+
+### Features
+
+- **LLM 可视化配置** — Dashboard Settings 新增 LLM Configuration 面板（API key masked 输入 + base URL）；CLI `transmutary config` 交互式子命令；凭据写入 `config/llm.yaml`（0600 权限）。
+- **凭据优先级链** — `TRANSMUTARY_LLM_API_KEY` env var > `config/llm.yaml` > ConfigError。LLM key 从 `_REQUIRED_ENV` 移除，非 LLM 凭据（GitHub/SMTP/RSS）仍必须通过环境变量。
+- **报告双语输出** — 单次 LLM 调用同时生成中英正文（`<!-- BILINGUAL:SPLIT -->` 分隔），三条管道全覆盖（diagnose/explain/security build_alert）。
+- **安全注解对称** — forced_hits / blocked notes 同时追加到 EN 和 ZH 正文。
+- **BILINGUAL:SPLIT 标记消毒** — `_neutralize_fences()` 清理 untrusted data 中的标记，防注入。
+- **Dashboard 报告页语言切换** — 有 `body_md_zh` 时显示 EN/ZH 切换按钮。
+- **RSS 双语条目** — feed entry 包含中英两段正文。
+
+### Security
+
+- `LLMConfig.api_key` + `Settings.llm_config` — `repr=False`（KTD4 凭据不泄露）
+- `save_llm_config` — `os.open` with `0o600` atomically（无 TOCTOU 窗口）
+- `base_url` scheme validation in settings handler
+
+### Implementation units
+
+- U1 — LLM config file + loader + credential resolution
+- U2 — Dashboard LLM settings UI + CLI config command
+- U3 — Bilingual report schema + LLM instructions + body parser
+- U4 — Bilingual artifact rendering + dashboard display + RSS
+
+### Quality
+
+500+ tests passing · ruff clean · Apache-2.0
+
+---
+
 ## v0.1.0 (2026-05-30)
 
 首个 MVP —— 嬗变（Transmutary）模式 A/B 双管线观测系统全功能就绪。

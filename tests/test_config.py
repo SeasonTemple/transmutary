@@ -8,7 +8,6 @@ from transmutary.config import (
     ConfigError,
     Credentials,
     Delivery,
-    DependencyEdge,
     LLMConfig,
     RepoEntry,
     Settings,
@@ -200,7 +199,6 @@ def test_load_llm_config_missing_api_key(tmp_path):
 
 def test_load_llm_config_overly_broad_permissions(tmp_path):
     import os
-    import stat
 
     p = tmp_path / "llm.yaml"
     p.write_text("api_key: sk-key\n")
@@ -226,8 +224,6 @@ def test_save_llm_config_writes_0600(tmp_path):
 
 
 def test_save_then_load_roundtrip(tmp_path):
-    import os
-
     cfg = LLMConfig(api_key="sk-rt", base_url="https://rt.test")
     save_llm_config(str(tmp_path), cfg)
     loaded = load_llm_config(str(tmp_path))
