@@ -171,17 +171,17 @@
     {% endif %}
     <form method="post" action="/settings/llm" class="settings-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label class="field"><span>Provider</span>
+      <label class="field"><span data-i18n="settings_llm_provider">{{ t['settings_llm_provider'] }}</span>
         <select id="llm-provider" onchange="applyProviderPreset(this)">
-          <option value="">— custom —</option>
+          <option value="">{{ t['settings_llm_provider_custom'] }}</option>
           <option value="openai">OpenAI</option>
           <option value="anthropic">Anthropic</option>
           <option value="minimax">MiniMax</option>
           <option value="azure">Azure OpenAI</option>
         </select>
       </label>
-      <label class="field"><span>API Key</span><input id="llm-key" name="api_key" type="password" placeholder="sk-..." autocomplete="off"></label>
-      <label class="field"><span>Base URL</span><input id="llm-url" name="base_url" placeholder="https://api.openai.com/v1 (optional)"></label>
+      <label class="field"><span data-i18n="settings_llm_api_key">{{ t['settings_llm_api_key'] }}</span><input id="llm-key" name="api_key" type="password" placeholder="sk-..." autocomplete="off"></label>
+      <label class="field"><span data-i18n="settings_llm_base_url">{{ t['settings_llm_base_url'] }}</span><input id="llm-url" name="base_url" placeholder="https://api.openai.com/v1"></label>
       <label class="field"><span data-i18n="settings_llm_model_strong">{{ t['settings_llm_model_strong'] }}</span><input id="llm-strong" name="model_strong" placeholder="gpt-4o (optional)"></label>
       <label class="field"><span data-i18n="settings_llm_model_cheap">{{ t['settings_llm_model_cheap'] }}</span><input id="llm-cheap" name="model_cheap" placeholder="gpt-4o-mini (optional)"></label>
       <label class="field"><span data-i18n="settings_llm_model_embed">{{ t['settings_llm_model_embed'] }}</span><input id="llm-embed" name="model_embed" placeholder="text-embedding-3-small (optional)"></label>
