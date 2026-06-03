@@ -563,6 +563,11 @@ def make_dashboard_app(
         from ..config import LLMConfig, save_llm_config
         api_key = form.get("api_key", "").strip()
         base_url = form.get("base_url", "").strip() or None
+        provider = form.get("provider", "").strip() or None
+        # UI-level "minimax" maps to LiteLLM "anthropic" (MiniMax exposes an
+        # Anthropic-compatible endpoint — verified via error-header probe).
+        if provider == "minimax":
+            provider = "anthropic"
         model_strong = form.get("model_strong", "").strip() or None
         model_cheap = form.get("model_cheap", "").strip() or None
         model_embed = form.get("model_embed", "").strip() or None
@@ -575,7 +580,7 @@ def make_dashboard_app(
                 request, error_key="error_empty_api_key", status_code=400
             )
         save_llm_config(config_dir, LLMConfig(
-            api_key=api_key, base_url=base_url,
+            api_key=api_key, base_url=base_url, provider=provider,
             model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
         ))
         # ADV-11: warn when transmitted over plain HTTP (non-localhost, non-HTTPS).
