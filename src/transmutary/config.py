@@ -181,13 +181,14 @@ class Delivery:
 class LLMConfig:
     """LLM credentials stored in ``config/llm.yaml`` (0600, never in SQLite).
 
-    Provider is NOT stored — LiteLLM routes by model name. api_key is the sole
-    required field; base_url and per-tier model overrides are optional. api_key
-    is excluded from repr to preserve KTD4 credential secrecy.
+    The form only takes the BARE model name (e.g. ``MiniMax-M3``). ``provider``
+    determines the LiteLLM prefix prepended at call time (``openai/MiniMax-M3``).
+    api_key is excluded from repr to preserve KTD4 credential secrecy.
     """
 
     api_key: str = field(repr=False)
     base_url: str | None = None
+    provider: str | None = None  # "openai" | "anthropic" | "azure" | None (raw model)
     model_strong: str | None = None
     model_cheap: str | None = None
     model_embed: str | None = None
@@ -319,11 +320,12 @@ def load_llm_config(config_dir: str) -> LLMConfig | None:
     model_strong = _optional_str(data, "model_strong")
     model_cheap = _optional_str(data, "model_cheap")
     model_embed = _optional_str(data, "model_embed")
+    provider = _optional_str(data, "provider")
     # Back-compat: single "model" key maps to model_strong.
     if model_strong is None:
         model_strong = _optional_str(data, "model")
     return LLMConfig(
-        api_key=api_key, base_url=base_url,
+        api_key=api_key, base_url=base_url, provider=provider,
         model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
     )
 
@@ -339,6 +341,8 @@ def save_llm_config(config_dir: str, config: LLMConfig) -> None:
     payload = {"api_key": config.api_key}
     if config.base_url is not None:
         payload["base_url"] = config.base_url
+    if config.provider is not None:
+        payload["provider"] = config.provider
     if config.model_strong is not None:
         payload["model_strong"] = config.model_strong
     if config.model_cheap is not None:

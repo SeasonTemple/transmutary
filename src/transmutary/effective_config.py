@@ -148,6 +148,18 @@ def effective_llm_config(
         for tier, (env_m, yaml_m, default) in tiers.items()
     }
 
+    # Apply provider prefix to bare model names (env or yaml).
+    # env > yaml > None. Empty string means "use bare name (no prefix)".
+    env_provider = env.get("TRANSMUTARY_LLM_PROVIDER") or None
+    yaml_provider = yaml_cfg.provider if yaml_cfg is not None else None
+    provider = env_provider or yaml_provider
+    if provider:
+        prefix = provider if provider.endswith("/") else provider + "/"
+        models = {
+            tier: (prefix + m) if "/" not in m else m
+            for tier, m in models.items()
+        }
+
     return (api_key, base_url, models)
 
 

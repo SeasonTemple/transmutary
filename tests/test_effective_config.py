@@ -202,3 +202,29 @@ def test_llm_per_tier_model_defaults():
     assert models["strong"] == "gpt-4o"
     assert models["cheap"] == "gpt-4o-mini"
     assert models["embed"] == "text-embedding-3-small"
+
+
+def test_llm_provider_prefixes_bare_yaml_model():
+    s = _llm_settings(llm_config=LLMConfig(
+        api_key="k", provider="openai", model_strong="MiniMax-M3",
+    ))
+    key, url, models = effective_llm_config(s, env={})
+    assert models["strong"] == "openai/MiniMax-M3"
+
+
+def test_llm_provider_does_not_double_prefix_already_prefixed():
+    s = _llm_settings(llm_config=LLMConfig(
+        api_key="k", provider="openai", model_strong="openai/MiniMax-M3",
+    ))
+    key, url, models = effective_llm_config(s, env={})
+    assert models["strong"] == "openai/MiniMax-M3"
+
+
+def test_llm_provider_env_over_yaml():
+    s = _llm_settings(llm_config=LLMConfig(
+        api_key="k", provider="openai", model_strong="MiniMax-M3",
+    ))
+    key, url, models = effective_llm_config(
+        s, env={"TRANSMUTARY_LLM_PROVIDER": "anthropic"},
+    )
+    assert models["strong"] == "anthropic/MiniMax-M3"
