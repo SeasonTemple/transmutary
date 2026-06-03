@@ -169,7 +169,7 @@
       <span data-i18n="settings_llm_not_configured">{{ t['settings_llm_not_configured'] }}</span>
     </div>
     {% endif %}
-    <form method="post" action="/settings/llm" class="settings-form compact-form">
+    <form method="post" action="/settings/llm" class="settings-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="field"><span>Provider</span>
         <select id="llm-provider" onchange="applyProviderPreset(this)">
