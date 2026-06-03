@@ -101,15 +101,27 @@ python -m venv .venv
 
 ### Configure
 
-Copy the example configs and fill them in. Credentials are read from environment variables (`TRANSMUTARY_*`) and are never persisted.
+Copy the example configs and fill them in. Non-LLM credentials (GitHub token, SMTP, RSS) are read from environment variables only. LLM credentials may come from env vars **or** `config/llm.yaml` (0600 permissions).
 
 ```bash
 cp config/watchlist.example.yaml   config/watchlist.yaml
 cp config/trend_scope.example.yaml config/trend_scope.yaml
 cp config/delivery.example.yaml    config/delivery.yaml
 export TRANSMUTARY_GITHUB_TOKEN=...      # read-only
+```
+
+**LLM configuration** — three options (pick one):
+
+```bash
+# Option 1: environment variables
 export TRANSMUTARY_LLM_API_KEY=...       # any LiteLLM-supported provider
 export TRANSMUTARY_LLM_BASE_URL=...      # optional: OpenAI/Anthropic-compatible endpoint
+
+# Option 2: interactive CLI wizard
+.venv/bin/transmutary config
+
+# Option 3: Dashboard Settings panel → LLM Configuration
+#           (available after starting the dashboard)
 ```
 
 ### Verify
@@ -126,6 +138,7 @@ export TRANSMUTARY_LLM_BASE_URL=...      # optional: OpenAI/Anthropic-compatible
 | `config/watchlist.yaml` | Mode A repos + manual dependency edges |
 | `config/trend_scope.yaml` | Mode B scope filter (topics + keywords) |
 | `config/delivery.yaml` | DB/artifact paths, digest hour, optional RSS feed dir + SMTP recipients |
+| `config/llm.yaml` | LLM API key + optional base URL (0600, env vars take precedence) |
 
 ## Output & storage
 

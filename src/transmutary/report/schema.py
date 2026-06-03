@@ -8,7 +8,7 @@ deliver, diagnose, explain) import from here.
 from __future__ import annotations
 
 import enum
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -53,6 +53,7 @@ class Report:
     """The shared, deliverable report structure (R12, KTD1).
 
     The ``sources`` section has a fixed structure across both modes.
+    ``body_md_zh`` holds the Chinese translation when available (R6).
     """
 
     kind: ReportKind
@@ -62,13 +63,20 @@ class Report:
     severity: Severity
     created_at: str  # ISO-8601 timestamp string
     sources: list[Source] = field(default_factory=list)
+    body_md_zh: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        d = asdict(self)
-        d["kind"] = self.kind.value
-        d["severity"] = self.severity.value
-        d["sources"] = [s.to_dict() for s in self.sources]
-        return d
+        """Explicit field construction — avoids ``asdict`` leaking unintended fields."""
+        return {
+            "kind": self.kind.value,
+            "repo": self.repo,
+            "title": self.title,
+            "body_md": self.body_md,
+            "body_md_zh": self.body_md_zh,
+            "severity": self.severity.value,
+            "created_at": self.created_at,
+            "sources": [s.to_dict() for s in self.sources],
+        }
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Report:
@@ -80,4 +88,5 @@ class Report:
             severity=Severity(d["severity"]),
             created_at=d["created_at"],
             sources=[Source.from_dict(s) for s in d.get("sources", [])],
+            body_md_zh=d.get("body_md_zh"),
         )

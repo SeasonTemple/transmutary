@@ -100,15 +100,27 @@ python -m venv .venv
 
 ### 配置
 
-复制示例配置并填写。凭据从环境变量（`TRANSMUTARY_*`）读取，不入库。
+复制示例配置并填写。非 LLM 凭据（GitHub token、SMTP、RSS）仅从环境变量读取。LLM 凭据可来自环境变量**或** `config/llm.yaml`（0600 权限）。
 
 ```bash
 cp config/watchlist.example.yaml   config/watchlist.yaml
 cp config/trend_scope.example.yaml config/trend_scope.yaml
 cp config/delivery.example.yaml    config/delivery.yaml
 export TRANSMUTARY_GITHUB_TOKEN=...      # 只读
+```
+
+**LLM 配置** — 三种方式（任选其一）：
+
+```bash
+# 方式 1：环境变量
 export TRANSMUTARY_LLM_API_KEY=...       # 任意 LiteLLM 支持的 provider
 export TRANSMUTARY_LLM_BASE_URL=...      # 可选：OpenAI/Anthropic-compatible 端点
+
+# 方式 2：交互式 CLI 向导
+.venv/bin/transmutary config
+
+# 方式 3：Dashboard Settings 面板 → LLM Configuration
+#           （启动 dashboard 后可用）
 ```
 
 ### 验证
@@ -125,6 +137,7 @@ export TRANSMUTARY_LLM_BASE_URL=...      # 可选：OpenAI/Anthropic-compatible 
 | `config/watchlist.yaml` | 模式 A 仓库 + 手工依赖边 |
 | `config/trend_scope.yaml` | 模式 B 范围过滤器（topics + keywords） |
 | `config/delivery.yaml` | DB/产物路径、摘要发送时辰、可选 RSS feed 目录 + SMTP 收件人 |
+| `config/llm.yaml` | LLM API key + 可选 base URL（0600 权限，环境变量优先） |
 
 ## 产物与存储
 
@@ -207,7 +220,7 @@ transmutary-dashboard             # 默认 http://127.0.0.1:8787
 
 复用现有 Starlette 栈与 store 接口。localhost 下可在看板通过服务端确认流 promote/demote 模式 B 候选仓；POST 只写共享的 `promoted_repo` 表，常驻 service 下一轮 reconcile 自动拾取，无需重启。
 
-Settings 区是带身份认证的 admin control plane，用于非 secret 配置：添加/移除跟踪仓、添加手工依赖边、编辑趋势 topics/keywords、调整邮件收件人与 digest hour。它**不直接改 YAML 文件**。有效运行时配置 = `YAML base ∪ SQLite admin overrides ∪ promoted_repo`；service reconcile job 会免重启拾取仓库范围变化。Provider secrets 仍只走 env：GitHub/SMTP/RSS/LLM 凭据不会通过 UI 输入、不会渲染、不会持久化；UI 只显示 configured/missing 状态。
+Settings 区是带身份认证的 admin control plane，用于非 secret 配置：添加/移除跟踪仓、添加手工依赖边、编辑趋势 topics/keywords、调整邮件收件人与 digest hour、**配置 LLM API key + base URL**。它**不直接改 YAML 文件**（LLM 配置除外——写入 `config/llm.yaml`，0600 权限）。有效运行时配置 = `YAML base ∪ SQLite admin overrides ∪ promoted_repo`；service reconcile job 会免重启拾取仓库范围变化。GitHub/SMTP/RSS 凭据仍只走 env，不会通过 UI 输入、不会渲染、不会持久化；LLM API key 可通过 Settings 面板或 `transmutary config` CLI 安全配置。
 
 安全姿态：默认绑 `127.0.0.1`；非 localhost 绑定**硬拒**除非显式传 `--allow-public`；公网绑定默认仍**只读**，必须再传 `--allow-public-writes` 才暴露写端点。Settings 写入要求 `TRANSMUTARY_ADMIN_TOKEN` 登录、签名 HttpOnly session cookie、double-submit CSRF、`SameSite=Strict`、Origin/Referer host 校验、同源 form action 与服务端校验。公网 admin 仍应放在 HTTPS、限流、仓名白名单之后。
 

@@ -13,17 +13,15 @@ from transmutary.store.artifacts import (
     ArtifactPathError,
     ArtifactPermissionError,
     ArtifactStore,
+    _render_markdown,
     sanitize_repo,
 )
 
 IS_WINDOWS = os.name == "nt"
 
 
-def _report(repo="owner/name", sources=None, kind=ReportKind.DIAGNOSE):
-    return Report(
-        kind=kind,
-        repo=repo,
-        title="t",
+def _report(repo="owner/name", sources=None, kind=ReportKind.DIAGNOSE, **kw):
+    defaults = dict(
         body_md="body",
         severity=Severity.HIGH,
         created_at="2026-05-29T10:00:00Z",
@@ -31,6 +29,11 @@ def _report(repo="owner/name", sources=None, kind=ReportKind.DIAGNOSE):
             Source("s1", "https://example.com/1", "2026-05-29T09:00:00Z")
         ],
     )
+    defaults.update(kw)
+    return Report(kind=kind, repo=repo, title="t", **defaults)
+
+
+_r = _report
 
 
 def test_write_to_repo_dir_with_sources(tmp_path):
@@ -209,3 +212,38 @@ def test_read_report_rejects_traversal_and_missing(tmp_path):
     assert store.read_report("octo/cli", "1700000000-diagnose.txt") is None
     # Well-formed but absent → None (no raise).
     assert store.read_report("octo/cli", "1699999999-diagnose.md") is None
+
+
+# --- Bilingual rendering (R6) ------------------------------------------------
+
+def test_render_markdown_includes_zh_body(tmp_path):
+    report = _r(body_md="EN body", body_md_zh="ZH 正文")
+    rendered = _render_markdown(report)
+    assert "## 中文" in rendered
+    assert "ZH 正文" in rendered
+    assert "EN body" in rendered
+
+
+def test_render_markdown_no_zh_body_backward_compat(tmp_path):
+    report = _r(body_md="EN only", body_md_zh=None)
+    rendered = _render_markdown(report)
+    assert "## 中文" not in rendered
+    assert "EN only" in rendered
+
+
+def test_json_sidecar_contains_body_md_zh(tmp_path):
+    store = ArtifactStore(str(tmp_path / "art"))
+    report = _r(body_md="EN", body_md_zh="ZH")
+    store.write(report, ts=1700000000.0)
+    meta = store.read_meta("owner/name", "1700000000-diagnose.md")
+    assert meta is not None
+    assert meta["body_md_zh"] == "ZH"
+
+
+def test_json_sidecar_body_md_zh_none_when_absent(tmp_path):
+    store = ArtifactStore(str(tmp_path / "art"))
+    report = _r(body_md="EN", body_md_zh=None)
+    store.write(report, ts=1700000000.0)
+    meta = store.read_meta("owner/name", "1700000000-diagnose.md")
+    assert meta is not None
+    assert meta["body_md_zh"] is None

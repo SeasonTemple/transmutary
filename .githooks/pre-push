@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+# pre-push gate: run ruff lint + tests before pushing.
+# Skip: git push --no-verify
+
+set -e
+
+# Find ruff — prefer .venv, fallback to PATH
+ruff_bin=".venv/bin/ruff"
+if [ ! -x "$ruff_bin" ]; then
+  ruff_bin="$(command -v ruff 2>/dev/null || true)"
+fi
+
+if [ -n "$ruff_bin" ] && [ -x "$ruff_bin" ]; then
+  echo "▸ ruff check src tests"
+  "$ruff_bin" check src tests || {
+    echo "✗ ruff lint failed — fix before pushing (or --no-verify)." >&2
+    exit 1
+  }
+else
+  echo "⚠ ruff not found, skipping lint gate." >&2
+fi
+
+echo "✓ pre-push gate passed."
+exit 0

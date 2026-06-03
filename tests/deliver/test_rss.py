@@ -57,3 +57,21 @@ def test_digest_feed_multiple_entries():
     reports = [_report(Severity.NORMAL), _report(Severity.INFO)]
     xml = render_feed(reports, feed_name="digest", title="daily digest")
     assert xml.count("<entry") == 2
+
+
+# --- Bilingual RSS entries (R8) ----------------------------------------------
+
+def test_rss_entry_includes_zh_body():
+    r = _report()
+    r.body_md_zh = "疑似根因：上游发布。"
+    xml = render_single(r)
+    assert "疑似根因" in xml
+    assert "## 中文" in xml
+
+
+def test_rss_entry_without_zh_body_unchanged():
+    r = _report()
+    assert r.body_md_zh is None
+    xml = render_single(r)
+    assert "## 中文" not in xml
+    assert "Suspected root cause" in xml

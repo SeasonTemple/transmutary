@@ -24,6 +24,15 @@
 {% endif %}
 
 <h2 class="sec" data-i18n="sec.report">{{ t['sec.report'] }}</h2>
-<pre>{{ view.body }}</pre>
+{% if view.body_zh %}
+<div class="lang-toggle">
+  <button class="lang-btn active" data-lang="en" data-i18n="report.lang.en">{{ t['report.lang.en'] }}</button>
+  <button class="lang-btn" data-lang="zh" data-i18n="report.lang.zh">{{ t['report.lang.zh'] }}</button>
+</div>
+<pre class="report-body" data-lang-body="en">{{ view.body }}</pre>
+<pre class="report-body hidden" data-lang-body="zh">{{ view.body_zh }}</pre>
+{% else %}
+<pre class="report-body">{{ view.body }}</pre>
+{% endif %}
 
 {% endblock %}

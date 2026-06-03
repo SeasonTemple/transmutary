@@ -43,7 +43,7 @@ from .collect.trend import TrendCandidate, collect_trends
 from .config import Credentials, Settings
 from .dedup import SourceItem, dedup_advisory, dedup_release
 from .deliver.stub import OutboundDelivery, deliver
-from .effective_config import effective_delivery, effective_trend_scope
+from .effective_config import effective_delivery, effective_llm_config, effective_trend_scope
 from .filter import ConservativeReview, IssueObservation, filter_issue_surge
 from .report.diagnose import EventContext, diagnose
 from .report.explain import explain_trends
@@ -151,6 +151,7 @@ def build_runtime(
             trend_scope=settings.trend_scope,
             delivery=delivery,
             llm_base_url=settings.llm_base_url,
+            llm_config=settings.llm_config,
             credentials=settings.credentials,
         )
     client = client if client is not None else make_client()
@@ -185,10 +186,19 @@ def _github_token(rt: PipelineRuntime) -> str | None:
 
 
 def _llm_api_key(rt: PipelineRuntime) -> str | None:
+    """Return the effective LLM API key: env > yaml > creds fallback."""
+    key, _ = effective_llm_config(rt.settings, require=False)
+    if key:
+        return key
+    # Fallback to creds (populated from env at Credentials.from_env time).
     return rt.creds.llm_api_key if rt.creds is not None else None
 
 
 def _llm_base_url(rt: PipelineRuntime) -> str | None:
+    """Return the effective LLM base URL: env > yaml > settings fallback."""
+    _, url = effective_llm_config(rt.settings, require=False)
+    if url is not None:
+        return url
     return rt.settings.llm_base_url
 
 

@@ -9,6 +9,8 @@ do not each invent their own merge rules.
 from __future__ import annotations
 
 from .config import (
+    ENV_LLM_API_KEY,
+    ENV_LLM_BASE_URL,
     ConfigError,
     Delivery,
     DependencyEdge,
@@ -93,9 +95,44 @@ def effective_delivery(settings: Settings, store: StateStore | None) -> Delivery
     )
 
 
+def effective_llm_config(
+    settings: Settings,
+    *,
+    env: dict[str, str] | None = None,
+    require: bool = True,
+) -> tuple[str, str | None]:
+    """Return ``(api_key, base_url)`` for LLM calls.
+
+    Precedence: ``TRANSMUTARY_LLM_API_KEY`` env > ``config/llm.yaml`` api_key >
+    :class:`ConfigError` (when ``require=True``). Base URL follows the same
+    precedence. When ``require=False`` and both sources are empty, returns
+    ``("", None)`` — used by the dashboard where LLM may be unconfigured.
+    """
+    import os
+
+    env = os.environ if env is None else env
+    env_key = env.get(ENV_LLM_API_KEY, "")
+    env_url = env.get(ENV_LLM_BASE_URL) or None
+
+    yaml_cfg = settings.llm_config
+    yaml_key = yaml_cfg.api_key if yaml_cfg is not None else ""
+    yaml_url = yaml_cfg.base_url if yaml_cfg is not None else None
+
+    api_key = env_key or yaml_key
+    base_url = env_url if env_url is not None else yaml_url
+
+    if require and not api_key:
+        raise ConfigError(
+            "LLM API key not configured: set TRANSMUTARY_LLM_API_KEY or "
+            "configure via `transmutary config` / dashboard settings"
+        )
+    return (api_key, base_url)
+
+
 __all__ = (
-    "effective_dependency_edges",
     "effective_delivery",
+    "effective_dependency_edges",
+    "effective_llm_config",
     "effective_repo_sources",
     "effective_repos",
     "effective_trend_scope",

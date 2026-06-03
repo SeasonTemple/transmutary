@@ -42,6 +42,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "sec.runtime": "Runtime state",
         "sec.sources": "Sources",
         "sec.report": "Report",
+        "report.lang.en": "English",
+        "report.lang.zh": "中文",
         "note.watchlist": "config ∪ promoted",
         "note.feeds": "token via Authorization header, not shown",
         "th.repo": "Repo",
@@ -80,6 +82,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "confirm_demote_q": "Remove this promoted repo from the watchlist?",
         "write_busy": "The state database is busy. Try again in a moment.",
         "error_csrf": "Request rejected. Refresh the page and try again.",
+        "error_empty_api_key": "LLM API key is required.",
         "error_invalid_repo": "Invalid repository name. Expected owner/repo.",
         "error_not_promoted": "Only promoted repos can be removed from the dashboard.",
         "auth_unavailable": (
@@ -127,6 +130,12 @@ MESSAGES: dict[str, dict[str, str]] = {
         "settings_delivery_note": (
             "Email delivery activates only when recipients and SMTP host are configured."
         ),
+        "settings_llm_title": "LLM Configuration",
+        "settings_llm_note": (
+            "API key and base URL are stored locally in config/llm.yaml (0600). "
+            "Environment variables take precedence."
+        ),
+        "settings_nav_llm": "LLM",
         "settings_secret_note": "Values are never accepted or rendered here.",
         "settings_runtime_note": "Filesystem ownership remains YAML/env controlled.",
         "empty_edges": "No admin dependency edges",
@@ -176,6 +185,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "sec.runtime": "运行态",
         "sec.sources": "来源",
         "sec.report": "报告",
+        "report.lang.en": "English",
+        "report.lang.zh": "中文",
         "note.watchlist": "config ∪ 晋升",
         "note.feeds": "token 经 Authorization 头传递，不展示",
         "th.repo": "仓库",
@@ -214,6 +225,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "confirm_demote_q": "从关注清单移除该晋升仓库？",
         "write_busy": "状态数据库正忙，请稍后重试。",
         "error_csrf": "请求已拒绝。请刷新页面后重试。",
+        "error_empty_api_key": "LLM API key 不能为空。",
         "error_invalid_repo": "仓库名无效，应为 owner/repo。",
         "error_not_promoted": "只有已晋升仓库可从看板取消。",
         "auth_unavailable": "配置 TRANSMUTARY_ADMIN_TOKEN 后才可使用管理设置。",
@@ -250,6 +262,12 @@ MESSAGES: dict[str, dict[str, str]] = {
         "settings_edge_note": "手工依赖边两端必须引用当前已跟踪仓库。",
         "settings_trend_note": "每行一个 topic 或 keyword；保存前会去重。",
         "settings_delivery_note": "只有收件人与 SMTP host 都配置后才启用邮件投递。",
+        "settings_llm_title": "LLM 配置",
+        "settings_llm_note": (
+            "API key 和 base URL 存储在本地的 config/llm.yaml（0600 权限）。"
+            "环境变量优先级更高。"
+        ),
+        "settings_nav_llm": "LLM",
         "settings_secret_note": "这里不会接收或渲染任何密钥值。",
         "settings_runtime_note": "文件系统归属仍由 YAML/env 控制。",
         "empty_edges": "暂无管理依赖边",

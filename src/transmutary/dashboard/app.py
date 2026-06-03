@@ -166,6 +166,7 @@ def make_dashboard_app(
     write_store: StateStore | None = None,
     csrf_secure: bool = False,
     admin_token: str | None = None,
+    config_dir: str = "config",
 ) -> Starlette:
     """Build the dashboard ASGI app (no server bound)."""
     _require_jinja()
@@ -539,6 +540,34 @@ def make_dashboard_app(
         )
         return _settings_redirect()
 
+    async def settings_llm(request: Request) -> Response:
+        form = await _form(request)
+        denied = _require_post_auth(request, form)
+        if denied is not None:
+            return denied
+        from ..config import LLMConfig, save_llm_config
+        api_key = form.get("api_key", "").strip()
+        base_url = form.get("base_url", "").strip() or None
+        if not api_key:
+            return _render_settings(
+                request, error_key="error_empty_api_key", status_code=400
+            )
+        if base_url and not base_url.startswith(("https://", "http://")):
+            return _render_settings(
+                request, error_key="error_empty_api_key", status_code=400
+            )
+        save_llm_config(config_dir, LLMConfig(api_key=api_key, base_url=base_url))
+        # ADV-11: warn when transmitted over plain HTTP (non-localhost, non-HTTPS).
+        host = request.headers.get("host", "")
+        scheme = request.url.scheme if hasattr(request.url, "scheme") else "http"
+        if (
+            scheme != "https"
+            and not host.startswith("localhost")
+            and not host.startswith("127.0.0.1")
+        ):
+            logger.warning("LLM API key submitted over plaintext HTTP (host=%s)", host)
+        return _settings_redirect()
+
     async def llms_txt(request: Request) -> Response:
         # Endpoint self-description for agents — NO private data (R-G1/KTD-G2).
         return PlainTextResponse(
@@ -583,6 +612,7 @@ def make_dashboard_app(
         Route("/settings/edges/remove", settings_remove_edge, methods=["POST"]),
         Route("/settings/trends", settings_trends, methods=["POST"]),
         Route("/settings/delivery", settings_delivery, methods=["POST"]),
+        Route("/settings/llm", settings_llm, methods=["POST"]),
         Route("/healthz", healthz, methods=["GET"]),
         Route("/llms.txt", llms_txt, methods=["GET"]),
         Route("/static/dashboard.css", stylesheet, methods=["GET"]),
@@ -717,6 +747,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - real serv
         and not is_local_bind(host)
         and args.allow_public_writes,
         admin_token=os.environ.get(admin_auth.ADMIN_TOKEN_ENV),
+        config_dir=config_dir,
     )
 
     import uvicorn

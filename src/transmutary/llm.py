@@ -167,6 +167,8 @@ class LLMBudgetExceeded(LLMError):
 
 _DATA_OPEN_REDACTED = "<<<UNTRUSTED_DATA_BLOCK_REDACTED>>>"
 _DATA_CLOSE_REDACTED = "<<<END_UNTRUSTED_DATA_BLOCK_REDACTED>>>"
+_BILINGUAL_SPLIT_MARKER = "<!-- BILINGUAL:SPLIT -->"
+_BILINGUAL_SPLIT_REDACTED = "[split-marker-redacted]"
 
 def _fence_pattern(marker: str) -> re.Pattern[str]:
     inner = marker.removeprefix("<<<").removesuffix(">>>")
@@ -197,6 +199,9 @@ def _neutralize_fences(data_block: str) -> str:
     """
     data_block = _FENCE_CLOSE_RE.sub(_DATA_CLOSE_REDACTED, data_block)
     data_block = _FENCE_OPEN_RE.sub(_DATA_OPEN_REDACTED, data_block)
+    # ADV-07: neutralize BILINGUAL:SPLIT marker in untrusted data to prevent
+    # attackers from injecting a fake split point that hijacks bilingual parsing.
+    data_block = data_block.replace(_BILINGUAL_SPLIT_MARKER, _BILINGUAL_SPLIT_REDACTED)
     return data_block
 
 

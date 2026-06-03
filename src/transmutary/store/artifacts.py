@@ -89,7 +89,10 @@ def _ensure_dir_permissions(path: str) -> None:
 def _render_markdown(report: Report) -> str:
     lines = [f"# {report.title}", "", f"- kind: {report.kind.value}",
              f"- repo: {report.repo}", f"- severity: {report.severity.value}",
-             f"- created_at: {report.created_at}", "", report.body_md, "", "## Sources"]
+             f"- created_at: {report.created_at}", "", report.body_md]
+    if report.body_md_zh:
+        lines.extend(["", "## 中文", "", report.body_md_zh])
+    lines.extend(["", "## Sources"])
     if report.sources:
         for s in report.sources:
             lines.append(f"- `{s.source_id}` {s.url} (fetched {s.fetched_at})")

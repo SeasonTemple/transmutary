@@ -330,6 +330,19 @@ def _stub_call(
             "## Recommended actions\n"
             "Pin to v2.3.5 or set HEXBRIDGE_HTTP1=1 until the gateway supports "
             "HTTP/2; track the upstream fix for the connection-pool deadlock."
+            "\n\n<!-- BILINGUAL:SPLIT -->\n\n"
+            "## 疑似根因\n"
+            "v2.4.0 版本将默认传输协议切换为 HTTP/2 并移除了旧版重试垫片。"
+            "在仅支持 HTTP/1 的反向代理/网关后面的下游调用方现在在负载下收到 "
+            "504 网关超时。\n\n"
+            "## 受影响的依赖\n"
+            "hexbridge-cli >= 2.4.0 在通过 HTTP/1 网关路由时受影响。\n\n"
+            "## 相关仓库（通过依赖边）\n"
+            "octocat/hexbridge-gateway 报告拒绝来自 CLI 客户端的 HTTP/2 升级 — "
+            "从网关侧观察到的同一事件。\n\n"
+            "## 建议操作\n"
+            "在网关支持 HTTP/2 之前固定到 v2.3.5 或设置 HEXBRIDGE_HTTP1=1；"
+            "跟踪连接池死锁的上游修复。"
         )
 
     # Mode B trend explainer (explain.py) - must return a JSON array keyed by index.
@@ -341,12 +354,16 @@ def _stub_call(
                     "summary": "An open-source framework for building autonomous "
                     "LLM agents (tool use, planning, memory). Trending as teams "
                     "move from single prompts to multi-step agent workflows.",
+                    "summary_zh": "一个用于构建自主 LLM 代理（工具使用、规划、记忆）的"
+                    "开源框架。随着团队从单次提示转向多步骤代理工作流而趋势上升。",
                 },
                 {
                     "index": 1,
                     "summary": "A fast embedded vector database for LLM retrieval "
                     "with hybrid keyword + semantic search. Rising alongside the "
                     "shift toward local, on-disk RAG stores.",
+                    "summary_zh": "一个用于 LLM 检索的快速嵌入式向量数据库，"
+                    "支持混合关键词+语义搜索。随着向本地磁盘 RAG 存储的转变而上升。",
                 },
             ]
         )
@@ -357,6 +374,9 @@ def _stub_call(
             "Upgrade ansi-regex to >= 5.0.1 (or >= 6.0.1), which fixes the ReDoS. "
             "Pin the resolved version and re-run your lockfile audit to confirm no "
             "transitive copy remains."
+            "\n\n<!-- BILINGUAL:SPLIT -->\n\n"
+            "将 ansi-regex 升级到 >= 5.0.1（或 >= 6.0.1），修复 ReDoS 漏洞。"
+            "固定解析版本并重新运行锁定文件审计，确认不存在传递副本。"
         )
 
     return "(demo stub: no report generated for this stage)"

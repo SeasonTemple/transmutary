@@ -37,8 +37,10 @@ def _render_entry(fg: FeedGenerator, report: Report) -> None:
     fe.title(report.title)
     fe.updated(report.created_at)
     # Body as content; source URLs (non-secret) listed in the content, not as
-    # tokenized links (R20).
+    # tokenized links (R20). Append Chinese body when available.
     body = report.body_md
+    if report.body_md_zh:
+        body = body + "\n\n## 中文\n\n" + report.body_md_zh
     if report.sources:
         lines = [body, "", "Sources:"]
         for s in report.sources:

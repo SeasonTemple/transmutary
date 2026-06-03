@@ -24,6 +24,7 @@ from transmutary.config import (
     Credentials,
     Delivery,
     DependencyEdge,
+    LLMConfig,
     RepoEntry,
     Settings,
     TrendScope,
@@ -54,6 +55,7 @@ def _settings(
     artifact_root=None,
     topics=("ai",),
     keywords=("llm",),
+    llm_config=None,
 ) -> Settings:
     # Default to a UNIQUE per-call temp dir (never the old shared /tmp constant) so
     # delivered artifacts cannot bleed across tests or collide under xdist. Tests
@@ -76,6 +78,7 @@ def _settings(
             feed_dir=feed_dir,
         ),
         llm_base_url="https://gateway.example.com/v1",
+        llm_config=llm_config,
     )
 
 
@@ -216,6 +219,26 @@ def test_runtime_repr_does_not_leak_credentials():
     assert "smtp-secret-pw" not in text
     assert "ghp_faketokenvalue000000000000000000" not in text
     assert "sk-fakellmkey0000000000000000000000" not in text
+
+
+def test_build_runtime_preserves_llm_config_through_settings_rebuild():
+    """ADV-04: llm_config must survive the effective_delivery Settings rebuild."""
+    cfg = LLMConfig(api_key="sk-yaml-key", base_url="https://yaml.test")
+    store = StateStore(":memory:")
+    store.set_admin_delivery_preferences(digest_hour=17)
+    rt = build_runtime(
+        _settings(smtp_host="smtp.example.com"),
+        _creds(),
+        store=store,
+        client=_ok_client(),
+    )
+    # llm_config was None on input, should remain None after rebuild
+    assert rt.settings.llm_config is None
+    # Now with llm_config set
+    s = _settings(smtp_host="smtp.example.com", llm_config=cfg)
+    rt2 = build_runtime(s, _creds(), store=StateStore(":memory:"), client=_ok_client())
+    assert rt2.settings.llm_config is not None
+    assert rt2.settings.llm_config.api_key == "sk-yaml-key"
 
 
 # ===========================================================================

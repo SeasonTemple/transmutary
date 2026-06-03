@@ -7,11 +7,18 @@ import pytest
 from transmutary.config import (
     ConfigError,
     Credentials,
+    Delivery,
+    LLMConfig,
+    RepoEntry,
     Settings,
+    TrendScope,
+    Watchlist,
+    load_llm_config,
     load_settings,
     parse_delivery,
     parse_trend_scope,
     parse_watchlist,
+    save_llm_config,
 )
 
 _REQUIRED_DELIVERY = {
@@ -49,6 +56,8 @@ def test_missing_credentials_errors(config_dir):
     with pytest.raises(ConfigError) as exc:
         load_settings(config_dir, env={})  # no credentials
     assert "Missing required credential" in str(exc.value)
+    # LLM key is NOT required — only GitHub/SMTP/RSS tokens are.
+    assert "LLM" not in str(exc.value)
 
 
 def test_credentials_not_in_repr(fake_env):
@@ -76,6 +85,28 @@ def test_settings_repr_excludes_all_credentials(config_dir, fake_env):
         assert secret not in text
     # base_url is non-secret config and MAY appear.
     assert settings.credentials is not None
+
+
+def test_llm_config_api_key_not_in_repr():
+    """P0 fix: LLMConfig.api_key must not appear in repr (KTD4)."""
+    cfg = LLMConfig(api_key="sk-super-secret-key-12345")
+    text = repr(cfg) + str(cfg)
+    assert "sk-super-secret-key-12345" not in text
+
+
+def test_settings_llm_config_not_in_repr():
+    """P0 fix: Settings.llm_config must not appear in repr (KTD4)."""
+    cfg = LLMConfig(api_key="sk-secret", base_url="https://x")
+    s = Settings(
+        watchlist=Watchlist(repos=[RepoEntry(repo="a/b")], dependency_edges=[]),
+        trend_scope=TrendScope(topics=["ai"], keywords=[]),
+        delivery=Delivery(state_db_path=":memory:", artifact_root="/tmp/a",
+                          token_max_age_days=90, digest_hour=9),
+        llm_config=cfg,
+    )
+    text = repr(s) + str(s)
+    assert "sk-secret" not in text
+    assert "llm_config" not in text
 
 
 def test_credentials_accessors_return_raw(fake_env):
@@ -127,3 +158,116 @@ def test_delivery_example_yaml_still_loads(config_dir, fake_env):
     assert settings.delivery.email_recipients == []
     assert settings.delivery.smtp_host is None
     assert settings.delivery.feed_dir is None
+
+
+# --- U1: LLM config file (load / save / permissions) --------------------------
+
+def test_load_llm_config_file_not_found(config_dir):
+    assert load_llm_config(config_dir) is None
+
+
+def test_load_llm_config_happy(tmp_path):
+    import os
+
+    (tmp_path / "llm.yaml").write_text("api_key: sk-test123\nbase_url: https://llm.example.com\n")
+    os.chmod(str(tmp_path / "llm.yaml"), 0o600)
+    cfg = load_llm_config(str(tmp_path))
+    assert cfg is not None
+    assert cfg.api_key == "sk-test123"
+    assert cfg.base_url == "https://llm.example.com"
+
+
+def test_load_llm_config_no_base_url(tmp_path):
+    import os
+
+    (tmp_path / "llm.yaml").write_text("api_key: sk-key\n")
+    os.chmod(str(tmp_path / "llm.yaml"), 0o600)
+    cfg = load_llm_config(str(tmp_path))
+    assert cfg is not None
+    assert cfg.api_key == "sk-key"
+    assert cfg.base_url is None
+
+
+def test_load_llm_config_missing_api_key(tmp_path):
+    import os
+
+    (tmp_path / "llm.yaml").write_text("base_url: https://x\n")
+    os.chmod(str(tmp_path / "llm.yaml"), 0o600)
+    with pytest.raises(ConfigError, match="api_key"):
+        load_llm_config(str(tmp_path))
+
+
+def test_load_llm_config_overly_broad_permissions(tmp_path):
+    import os
+
+    p = tmp_path / "llm.yaml"
+    p.write_text("api_key: sk-key\n")
+    os.chmod(str(p), 0o644)
+    if os.name == "nt":
+        pytest.skip("POSIX permissions only")
+    with pytest.raises(ConfigError, match="permissions"):
+        load_llm_config(str(tmp_path))
+
+
+def test_save_llm_config_writes_0600(tmp_path):
+    import os
+    import stat
+
+    cfg = LLMConfig(api_key="sk-newkey", base_url="https://llm.test")
+    save_llm_config(str(tmp_path), cfg)
+    raw = (tmp_path / "llm.yaml").read_text()
+    assert "sk-newkey" in raw
+    assert "https://llm.test" in raw
+    if os.name != "nt":
+        mode = stat.S_IMODE(os.stat(str(tmp_path / "llm.yaml")).st_mode)
+        assert mode == 0o600
+
+
+def test_save_then_load_roundtrip(tmp_path):
+    cfg = LLMConfig(api_key="sk-rt", base_url="https://rt.test")
+    save_llm_config(str(tmp_path), cfg)
+    loaded = load_llm_config(str(tmp_path))
+    assert loaded == cfg
+
+
+def test_settings_llm_config_populated(config_dir, fake_env, tmp_path):
+    """load_settings picks up llm.yaml when present."""
+    import os
+
+    # Copy example yamls into tmp_path so load_settings finds them.
+    import shutil
+    for name in ("watchlist", "trend_scope", "delivery"):
+        src = os.path.join(config_dir, f"{name}.example.yaml")
+        shutil.copy2(src, str(tmp_path / f"{name}.example.yaml"))
+    save_llm_config(str(tmp_path), LLMConfig(api_key="sk-from-yaml"))
+    settings = load_settings(str(tmp_path), env=fake_env)
+    assert settings.llm_config is not None
+    assert settings.llm_config.api_key == "sk-from-yaml"
+
+
+def test_credentials_from_env_without_llm_key():
+    """Credentials.from_env succeeds without LLM key (returns empty string)."""
+    env = {
+        "TRANSMUTARY_GITHUB_TOKEN": "ghp_x",
+        "TRANSMUTARY_SMTP_USER": "u",
+        "TRANSMUTARY_SMTP_PASSWORD": "p",
+        "TRANSMUTARY_RSS_TOKEN": "r",
+    }
+    creds = Credentials.from_env(env)
+    assert creds.llm_api_key == ""
+
+
+def test_report_to_dict_excludes_llm_config():
+    """LLMConfig must never appear in serialized report output (ADV-09)."""
+    from transmutary.report.schema import Report, ReportKind, Severity
+
+    r = Report(
+        kind=ReportKind.DIAGNOSE,
+        repo="a/b",
+        title="t",
+        body_md="body",
+        severity=Severity.NORMAL,
+        created_at="2026-01-01T00:00:00Z",
+    )
+    d = r.to_dict()
+    assert "llm_config" not in d
