@@ -128,9 +128,16 @@
       result.style.color = "";
       testBtn.disabled = true;
       var csrf = (document.querySelector('input[name="csrf_token"]') || {}).value || "";
+      var keyEl = document.getElementById("llm-key");
+      var urlEl = document.getElementById("llm-url");
+      var sEl = document.getElementById("llm-strong");
+      var body = "api_key=" + encodeURIComponent(keyEl.value) +
+                 "&base_url=" + encodeURIComponent(urlEl.value) +
+                 "&model_strong=" + encodeURIComponent(sEl.value);
       fetch("/settings/llm/test", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRF-Token": csrf },
+        body: body,
       })
         .then(function (r) {
           console.log("[testLLM] status:", r.status);
