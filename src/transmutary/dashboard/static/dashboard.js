@@ -98,4 +98,10 @@
   } else {
     init();
   }
+
+  /* Auto-dismiss save-confirmation messages after 4 s. */
+  var msg = document.querySelector(".saved");
+  if (msg) {
+    setTimeout(function () { msg.remove(); }, 4000);
+  }
 })();

@@ -160,6 +160,13 @@ MESSAGES: dict[str, dict[str, str]] = {
         "error_invalid_email": "Invalid email recipient.",
         "error_invalid_digest_hour": "Digest hour must be between 0 and 23.",
         "error_invalid_edge": "Dependency edge endpoints must reference tracked repos.",
+        "saved_llm": "LLM configuration saved.",
+        "saved_repo": "Repository added.",
+        "saved_repo_removed": "Repository removed.",
+        "saved_edge": "Dependency edge added.",
+        "saved_edge_removed": "Dependency edge removed.",
+        "saved_trends": "Trend scope updated.",
+        "saved_delivery": "Delivery preferences updated.",
     },
     "zh": {
         "nav.overview": "总览",
@@ -292,6 +299,13 @@ MESSAGES: dict[str, dict[str, str]] = {
         "error_invalid_email": "邮件收件人无效。",
         "error_invalid_digest_hour": "摘要小时必须在 0 到 23 之间。",
         "error_invalid_edge": "依赖边两端必须引用已跟踪仓库。",
+        "saved_llm": "LLM 配置已保存。",
+        "saved_repo": "仓库已添加。",
+        "saved_repo_removed": "仓库已移除。",
+        "saved_edge": "依赖边已添加。",
+        "saved_edge_removed": "依赖边已移除。",
+        "saved_trends": "趋势范围已更新。",
+        "saved_delivery": "投递偏好已更新。",
     },
 }
 

@@ -16,6 +16,7 @@
 </header>
 
 {% if error_key %}<p class="empty">{{ t[error_key] }}</p>{% endif %}
+{% if success_key %}<p class="saved">{{ t[success_key] }}</p>{% endif %}
 
 <section class="status-strip" aria-label="settings summary">
   <div class="status-item">
