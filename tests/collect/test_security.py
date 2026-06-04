@@ -58,6 +58,8 @@ def test_osv_hit_builds_high_risk_alert():
     assert report.severity is Severity.HIGH
     assert report.severity.is_urgent  # → immediate route (F3)
     assert "lodash" in report.title
+    # title_zh always set (deterministic), localized vuln/malware label
+    assert report.title_zh.startswith("供应链漏洞：") and "lodash" in report.title_zh
 
 
 def test_malware_hit_is_critical():
@@ -65,6 +67,7 @@ def test_malware_hit_is_critical():
                       is_malware=True, summary="malware")
     report = build_alert(hit, repo="acme/cli", call_fn=lambda *a, **k: "Remove evil-pkg.")
     assert report.severity is Severity.CRITICAL
+    assert report.title_zh.startswith("供应链恶意软件：")  # malware label localized
 
 
 def test_osv_mal_id_is_classified_malware_and_critical():

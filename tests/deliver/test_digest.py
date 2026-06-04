@@ -94,6 +94,26 @@ def test_html_zh_renders_chinese_body():
     assert "body for Info note" not in html  # English body absent
 
 
+def test_html_zh_chrome_localized():
+    reports = [_report("a/b", "Crit", Severity.CRITICAL)]
+    html = render_digest_html(reports, date_label="2026-06-04", lang="zh")
+    assert "每日摘要 2026-06-04" in html  # daily_digest label
+    assert "过去 24 小时 1 份报告" in html  # overview
+    assert "Daily Digest" not in html
+
+
+def test_html_zh_no_reports_localized():
+    html = render_digest_html([], date_label="2026-06-04", lang="zh")
+    assert "过去 24 小时无报告。" in html
+
+
+def test_text_zh_chrome_localized():
+    reports = [_report("a/b", "T1", Severity.HIGH, body_zh="中文摘要正文")]
+    txt = render_digest_text(reports, date_label="2026-06-04", lang="zh")
+    assert txt.startswith("每日摘要 2026-06-04")
+    assert "过去 24 小时 1 份报告" in txt
+
+
 def test_html_escapes_untrusted_title():
     r = _report("a/b", "<script>alert(1)</script>", Severity.HIGH)
     html = render_digest_html([r], date_label="2026-06-04")

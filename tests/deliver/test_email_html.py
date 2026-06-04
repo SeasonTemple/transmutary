@@ -7,11 +7,12 @@ from transmutary.deliver.render_email import render_email_html, render_email_tex
 from transmutary.report.schema import Report, ReportKind, Severity, Source
 
 
-def _report(*, body_zh="中文正文：疑似上游发布。", sources=True):
+def _report(*, body_zh="中文正文：疑似上游发布。", title_zh="网关 504 故障", sources=True):
     return Report(
         kind=ReportKind.DIAGNOSE,
         repo="acme/cli",
         title="gateway 504 outage",
+        title_zh=title_zh,
         body_md="# Root cause\n\n- upstream **release**\n- [advisory](https://x.test)",
         severity=Severity.HIGH,
         created_at="2026-06-04T10:00:00+00:00",
@@ -19,6 +20,38 @@ def _report(*, body_zh="中文正文：疑似上游发布。", sources=True):
         sources=[Source(source_id="GHSA-x", url="https://github.com/advisories/GHSA-x",
                         fetched_at="2026-06-04T10:00:00+00:00")] if sources else [],
     )
+
+
+def test_html_chrome_and_lang_localized_zh():
+    html = render_email_html(_report(), lang="zh")
+    assert '<html lang="zh-CN">' in html
+    assert "来源" in html and ">Sources<" not in html  # localized Sources heading
+    assert "网关 504 故障" in html  # localized title
+
+
+def test_html_chrome_english_default():
+    html = render_email_html(_report())
+    assert '<html lang="en">' in html
+    assert ">Sources</h2>" in html
+    assert "gateway 504 outage" in html
+
+
+def test_html_title_falls_back_when_no_title_zh():
+    html = render_email_html(_report(title_zh=None), lang="zh")
+    assert "gateway 504 outage" in html  # falls back to en title, still zh body
+    assert '<html lang="zh-CN">' in html
+
+
+def test_subject_keeps_machine_severity_tag_localizes_title():
+    msg = _build_message(_report(), sender="a@b.test", recipients=["c@d.test"], lang="zh")
+    assert msg["Subject"] == "[transmutary/high] 网关 504 故障"
+    en = _build_message(_report(), sender="a@b.test", recipients=["c@d.test"])
+    assert en["Subject"] == "[transmutary/high] gateway 504 outage"
+
+
+def test_text_sources_label_localized():
+    txt = render_email_text(_report(), lang="zh")
+    assert "来源:" in txt
 
 
 def test_html_renders_markdown_body():

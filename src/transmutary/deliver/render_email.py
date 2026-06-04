@@ -19,12 +19,10 @@ from __future__ import annotations
 
 from html import escape
 
-from ..report.render import fmt_timestamp, localized_body, render_markdown
+from ..i18n import DEFAULT_LANG as _DEFAULT_LANG
+from ..i18n import HTML_LANG, delivery_strings
+from ..report.render import fmt_timestamp, localized_body, localized_title, render_markdown
 from ..report.schema import Report
-
-# Mirrors dashboard.i18n.DEFAULT_LANG. Kept as a literal so the delivery layer
-# does not import upward into the dashboard presentation layer.
-_DEFAULT_LANG = "en"
 
 _FONT = (
     "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',"
@@ -59,7 +57,8 @@ def render_email_html(report: Report, *, lang: str = _DEFAULT_LANG) -> str:
     """
     sev = report.severity.value
     sev_style = _SEV_STYLE.get(sev, _SEV_STYLE["normal"])
-    title = escape(report.title)
+    strings = delivery_strings(lang)
+    title = escape(localized_title(report, lang))
     repo = escape(report.repo)
     # Severity badge: word + colour (R9 — never colour alone).
     badge = (
@@ -77,11 +76,11 @@ def render_email_html(report: Report, *, lang: str = _DEFAULT_LANG) -> str:
             for s in report.sources
         )
         sources_html = (
-            '<h2 style="font-size:1.1rem;margin:1.5rem 0 .5rem;">Sources</h2>'
+            f'<h2 style="font-size:1.1rem;margin:1.5rem 0 .5rem;">{escape(strings["sources"])}</h2>'
             f'<ul style="padding-left:1.3rem;margin:0;">{items}</ul>'
         )
     return (
-        f'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
+        f'<!DOCTYPE html><html lang="{HTML_LANG.get(lang, "en")}"><head><meta charset="utf-8">'
         f'<meta name="viewport" content="width=device-width,initial-scale=1">'
         f"<title>{title}</title></head>"
         f'<body style="margin:0;padding:0;background:#f6f8fa;font-family:{_FONT};color:#1f2328;">'
@@ -103,7 +102,7 @@ def render_email_text(report: Report, *, lang: str = _DEFAULT_LANG) -> str:
     parts = [body_md or ""]
     if report.sources:
         parts.append(
-            "\n\nSources:\n"
+            f"\n\n{delivery_strings(lang)['sources']}:\n"
             + "\n".join(
                 f"- {s.source_id}: {s.url} (fetched {fmt_timestamp(s.fetched_at)})"
                 for s in report.sources

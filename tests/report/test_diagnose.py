@@ -52,6 +52,9 @@ def test_diagnosis_contains_required_sections_and_aggregates_related():
     out = diagnose(ctx, call_fn=_capture_call(cap))
     assert out.report.kind == ReportKind.DIAGNOSE
     assert out.report.severity.is_urgent  # urgent → immediate delivery route
+    # gate passes → external title kept verbatim, no zh-specific form
+    assert out.gated_to_unverified is False
+    assert out.report.title_zh is None
     body = out.report.body_md
     assert "root cause" in body.lower()
     assert "internal-gateway" in body
@@ -274,7 +277,8 @@ def test_diagnose_downgrades_to_unverified_when_gate_fails():
     )
     out = diagnose(ctx, call_fn=_capture_call(cap))
     assert out.gated_to_unverified is True
-    assert "待核实信号" in out.report.title
+    assert "Unverified" in out.report.title  # en prefix on title
+    assert "待核实信号" in out.report.title_zh  # zh prefix on title_zh
     # Downgraded urgent → not urgent.
     assert not out.report.severity.is_urgent
 
@@ -404,7 +408,8 @@ def test_refine_revised_draft_still_r18_downgraded_when_sources_weak():
     )
     # The R18 gate fires on the REVISED draft exactly as on a single-pass draft.
     assert out.gated_to_unverified is True
-    assert "待核实信号" in out.report.title
+    assert "Unverified" in out.report.title
+    assert "待核实信号" in out.report.title_zh
     assert not out.report.severity.is_urgent
     # Ordering proof (the load-bearing part): evaluate_source_gate is source-only,
     # so its boolean outcome can't depend on the text — what this asserts is that

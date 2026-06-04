@@ -2,16 +2,33 @@
 
 import pytest
 
-from transmutary.report.render import fmt_timestamp, localized_body, render_markdown
+from transmutary.report.render import (
+    fmt_timestamp,
+    localized_body,
+    localized_title,
+    render_markdown,
+)
 from transmutary.report.schema import Report, ReportKind, Severity
 
 
-def _report(body_zh=None):
+def _report(body_zh=None, title_zh=None):
     return Report(
-        kind=ReportKind.DIAGNOSE, repo="a/b", title="T",
+        kind=ReportKind.DIAGNOSE, repo="a/b", title="T", title_zh=title_zh,
         body_md="english body", severity=Severity.HIGH,
         created_at="2026-06-04T10:00:00+00:00", body_md_zh=body_zh,
     )
+
+
+def test_localized_title_zh_uses_translation():
+    assert localized_title(_report(title_zh="标题"), "zh") == "标题"
+
+
+def test_localized_title_zh_falls_back_when_none():
+    assert localized_title(_report(title_zh=None), "zh") == "T"
+
+
+def test_localized_title_default_english():
+    assert localized_title(_report(title_zh="标题"), "en") == "T"
 
 
 def test_localized_body_zh_uses_translation():

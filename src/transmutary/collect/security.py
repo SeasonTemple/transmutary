@@ -339,6 +339,7 @@ def build_alert(
         advice_zh = None
 
     kind_label = "MALWARE" if hit.is_malware else "vulnerability"
+    kind_label_zh = "恶意软件" if hit.is_malware else "漏洞"
     body = (
         f"## Supply-chain {kind_label} alert\n"
         f"- Package: `{hit.package}` ({hit.ecosystem})\n"
@@ -348,7 +349,6 @@ def build_alert(
     body_zh = None
     zh_remediation = advice_zh or ""
     if zh_remediation:
-        kind_label_zh = "恶意软件" if hit.is_malware else "漏洞"
         body_zh = (
             f"## 供应链{kind_label_zh}告警\n"
             f"- 包：`{hit.package}` ({hit.ecosystem})\n"
@@ -365,6 +365,7 @@ def build_alert(
         kind=ReportKind.DIAGNOSE,
         repo=repo,
         title=f"Supply-chain {kind_label}: {hit.package} ({', '.join(hit.ids)})",
+        title_zh=f"供应链{kind_label_zh}：{hit.package} ({', '.join(hit.ids)})",
         body_md=body,
         severity=severity,
         created_at=_now_iso(),

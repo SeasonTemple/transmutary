@@ -50,6 +50,18 @@ def localized_body(report: Report, lang: str) -> tuple[str, str]:
     return report.body_md, "en"
 
 
+def localized_title(report: Report, lang: str) -> str:
+    """Pick one language's title for single-language delivery (email/RSS).
+
+    ``lang == "zh"`` uses ``title_zh`` when present, else falls back to ``title``
+    (external/untranslatable titles leave ``title_zh`` None). Any other lang uses
+    ``title``. Mirrors :func:`localized_body`.
+    """
+    if lang == "zh" and report.title_zh:
+        return report.title_zh
+    return report.title
+
+
 def fmt_timestamp(value: str | float | int) -> str:
     """Human-readable ``YYYY-MM-DD HH:MM UTC`` from an ISO-8601 string or epoch.
 

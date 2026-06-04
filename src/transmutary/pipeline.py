@@ -644,6 +644,7 @@ def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
     """
     import os
 
+    from . import i18n as _i18n
     from .deliver import digest as digest_mod
     from .deliver import email as email_mod
     from .deliver import rss as rss_mod
@@ -674,7 +675,7 @@ def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
     # RSS digest feed (batch) — reuse the existing multi-report renderer.
     if rt.outbound.feed_dir is not None:
         os.makedirs(rt.outbound.feed_dir, exist_ok=True)
-        xml = rss_mod.render_feed(reports, feed_name="digest", title="transmutary digest")
+        xml = rss_mod.render_feed(reports, feed_name="digest", lang=lang)
         feed_path = os.path.join(rt.outbound.feed_dir, "digest.atom.xml")
         with open(feed_path, "w", encoding="utf-8") as fh:
             fh.write(xml)
@@ -685,7 +686,10 @@ def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
     if ob.email_recipients and ob.smtp_user:
         try:
             email_mod.send_html(
-                subject=f"[transmutary] Daily Digest {date_label}",
+                subject=(
+                    f"[transmutary] "
+                    f"{_i18n.delivery_strings(lang)['daily_digest']} {date_label}"
+                ),
                 text_body=text,
                 html_body=html,
                 recipients=list(ob.email_recipients),

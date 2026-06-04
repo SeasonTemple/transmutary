@@ -126,7 +126,7 @@ def _deliver_outbound(
     # RSS leg (both branches) — written first so it is never lost to an SMTP error.
     if outbound.feed_dir is not None:
         os.makedirs(outbound.feed_dir, exist_ok=True)
-        xml = rss_mod.render_single(report, feed_name=route.value)
+        xml = rss_mod.render_single(report, feed_name=route.value, lang=outbound.email_lang)
         feed_path = os.path.join(outbound.feed_dir, f"{route.value}.atom.xml")
         with open(feed_path, "w", encoding="utf-8") as fh:
             fh.write(xml)

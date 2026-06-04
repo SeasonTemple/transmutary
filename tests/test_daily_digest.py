@@ -97,6 +97,10 @@ def test_digest_renders_configured_email_lang_end_to_end():
             html = fh.read()
         assert 'lang="zh-CN"' in html and "中文" in html
         assert "<p>body</p>" not in html  # English body absent
+        # RSS leg of the digest path also follows the configured lang
+        with open(res.rss_path, encoding="utf-8") as fh:
+            xml = fh.read()
+        assert 'xml:lang="zh-CN"' in xml and "中文" in xml
 
 
 def test_digest_empty_window_is_noop():
@@ -120,6 +124,17 @@ def test_digest_sends_email_when_configured():
         msg = rec.sent[0]
         assert msg.get_content_type() == "multipart/alternative"
         assert "Daily Digest" in msg["Subject"]
+
+
+def test_digest_subject_localized_zh():
+    with tempfile.TemporaryDirectory() as tmp:
+        rt, artifacts, rec = _runtime(
+            tmp, recipients=["x@y.test"], smtp_host="smtp.test", email_lang="zh"
+        )
+        artifacts.write(_report("a/b", "Alert", Severity.CRITICAL), ts=10_000)
+        run_daily_digest(rt, now_ts=10_500)
+        assert "每日摘要" in rec.sent[0]["Subject"]
+        assert "Daily Digest" not in rec.sent[0]["Subject"]
 
 
 def test_digest_no_email_without_recipients():

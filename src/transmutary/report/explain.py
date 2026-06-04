@@ -546,9 +546,12 @@ def _build_report(
     sources: list[Source] = []
     if cand.url:
         sources.append(Source(source_id=cand.repo, url=cand.url, fetched_at=_now_iso()))
-    title = f"Trend: {cand.repo}"
+    from ..i18n import delivery_strings
+    title = delivery_strings("en")["trend_title"].format(repo=cand.repo)
+    title_zh = delivery_strings("zh")["trend_title"].format(repo=cand.repo)
     if not sources:
-        title = f"[待核实信号] {title}"
+        title = delivery_strings("en")["unverified_prefix"] + title
+        title_zh = delivery_strings("zh")["unverified_prefix"] + title_zh
         unverif_en = (
             "> 待核实信号 (UNVERIFIED): no corroborating source URL for this trend "
             "candidate; treat as a lead, not a confirmed conclusion (R18).\n\n"
@@ -564,6 +567,7 @@ def _build_report(
         kind=ReportKind.EXPLAIN,
         repo=cand.repo,
         title=title,
+        title_zh=title_zh,
         body_md=body,
         # Trend explanations are low-priority by nature → digest route (KTD3: never
         # inherit an injected high-risk severity).

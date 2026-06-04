@@ -15,6 +15,11 @@ from dataclasses import dataclass, field
 
 import yaml
 
+# Language whitelist for outbound email — single source of truth in core i18n
+# (shared with dashboard + delivery layers).
+from .i18n import DEFAULT_LANG as DEFAULT_EMAIL_LANG
+from .i18n import SUPPORTED_LANGS as SUPPORTED_EMAIL_LANGS
+
 # ---------------------------------------------------------------------------
 # Environment variable names for credentials. Values are read at load time and
 # held in a write-only secret container (see Credentials below).
@@ -297,13 +302,6 @@ def _parse_recipients(raw: object) -> list[str]:
     raise ConfigError(
         "delivery 'email_recipients' must be a string or a list of strings"
     )
-
-
-# Outbound-email language whitelist. Mirrors dashboard.i18n.SUPPORTED_LANGS /
-# DEFAULT_LANG but defined here (lowest layer) so config does not import upward
-# into the dashboard. Any value outside the set normalizes to the default.
-SUPPORTED_EMAIL_LANGS = ("en", "zh")
-DEFAULT_EMAIL_LANG = "en"
 
 
 def normalize_email_lang(value: object) -> str:
