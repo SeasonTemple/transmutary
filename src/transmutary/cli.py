@@ -153,6 +153,24 @@ def _cmd_config(config_dir: str, out) -> int:
         print(f"  model_cheap={model_cheap}", file=out)
     if model_embed:
         print(f"  model_embed={model_embed}", file=out)
+
+    # Optional per-tier overrides (advanced). Default: no, keeps the wizard light.
+    from .config import TierOverride
+    tier_overrides: dict[str, TierOverride] = {}
+    want_tiers = input("Configure per-tier overrides (advanced)? [y/N] ").strip().lower()
+    if want_tiers == "y":
+        for tier in ("strong", "cheap", "embed"):
+            print(f"\n-- {tier} tier override (blank = use shared above) --", file=out)
+            t_key = input(f"  {tier} API key: ").strip() or None
+            t_url = input(f"  {tier} base URL: ").strip() or None
+            t_tx = input(f"  {tier} transport: ").strip() or None
+            t_model = input(f"  {tier} model: ").strip() or None
+            if any((t_key, t_url, t_tx, t_model)):
+                tier_overrides[tier] = TierOverride(
+                    api_key=t_key, base_url=t_url, transport=t_tx, model=t_model
+                )
+                print(f"  → {tier} override set", file=out)
+
     confirm = input("Confirm? [y/N] ").strip().lower()
     if confirm != "y":
         print("Cancelled.", file=out)
@@ -161,6 +179,7 @@ def _cmd_config(config_dir: str, out) -> int:
     save_llm_config(config_dir, LLMConfig(
         api_key=api_key, base_url=base_url, transport=transport,
         model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
+        tier_overrides=tier_overrides,
     ))
     print("Saved to config/llm.yaml", file=out)
     return 0

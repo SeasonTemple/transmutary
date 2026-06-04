@@ -141,9 +141,15 @@ def test_config_saves_llm_yaml(cfg, monkeypatch):
 
     config_dir, _ = cfg
     monkeypatch.setattr("getpass.getpass", lambda prompt: "sk-test-key-123")
-    monkeypatch.setattr("builtins.input", lambda prompt: (
-        "" if "Base URL" in prompt else "y"
-    ))
+
+    def _input(prompt):
+        if "per-tier" in prompt:
+            return "n"  # decline per-tier overrides
+        if "Confirm" in prompt:
+            return "y"
+        return ""  # skip base_url / transport / models
+
+    monkeypatch.setattr("builtins.input", _input)
     code, out = _run(["--config-dir", config_dir, "config"])
     assert code == 0
     assert "Saved" in out
@@ -152,6 +158,39 @@ def test_config_saves_llm_yaml(cfg, monkeypatch):
     with open(llm_path) as f:
         data = yaml.safe_load(f)
     assert data["api_key"] == "sk-test-key-123"
+    assert "tiers" not in data  # no per-tier block when declined
+
+
+def test_config_saves_per_tier_embed_override(cfg, monkeypatch):
+    import os
+
+    import yaml
+
+    config_dir, _ = cfg
+    monkeypatch.setattr("getpass.getpass", lambda prompt: "sk-shared")
+
+    def _input(prompt):
+        if "per-tier" in prompt:
+            return "y"
+        if "Confirm" in prompt:
+            return "y"
+        # embed tier overrides; strong/cheap blank
+        if "embed base URL" in prompt:
+            return "https://embed.test"
+        if "embed transport" in prompt:
+            return "openai"
+        if "embed model" in prompt:
+            return "embo-01"
+        return ""  # everything else blank
+
+    monkeypatch.setattr("builtins.input", _input)
+    code, out = _run(["--config-dir", config_dir, "config"])
+    assert code == 0
+    data = yaml.safe_load(open(os.path.join(config_dir, "llm.yaml")))
+    assert data["tiers"]["embed"]["base_url"] == "https://embed.test"
+    assert data["tiers"]["embed"]["transport"] == "openai"
+    assert data["tiers"]["embed"]["model"] == "embo-01"
+    assert "strong" not in data.get("tiers", {})
 
 
 def test_config_cancel_empty_key(cfg, monkeypatch):

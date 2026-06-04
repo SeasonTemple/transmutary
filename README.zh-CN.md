@@ -133,6 +133,22 @@ API key 的存储方式与同类工具一致（opencode、`llm`、aider，以及
 - **daemon 的真正密钥管理在环境层** —— 用 systemd `EnvironmentFile=`（本身 `0600`）、Docker/Kubernetes secret 或 vault sidecar 注入 key，让 `config/llm.yaml` 留空。以专用非特权用户运行 transmutary。
 - **本仓纵深防御** —— `.env` 和 `config/llm.yaml` 已 gitignore；`pre-commit` hook 扫描暂存内容的 key 模式（`sk-…`、`ghp_…`、`github_pat_…`、PEM 私钥），在 secret 进入 git 历史前拦截提交。
 
+### Per-tier 模型
+
+管线用三个模型 tier，各自可独立配置：
+
+| Tier | 用途 | 默认 |
+|------|------|------|
+| **strong** | 诊断、issue 激增 L3 判定、critique/refine | `gpt-4o` |
+| **cheap** | 供应链建议、趋势摘要 | `gpt-4o-mini` |
+| **embed** | L2 语义分组（聚类 issue 激增 / 趋势候选，折叠 L3 调用） | `text-embedding-3-small` |
+
+默认三者共用一个 provider（上面的共享 `api_key`/`base_url`/`transport`）。某 tier 可走**不同 provider**——设 per-tier 覆盖，`api_key`/`base_url`/`transport`/`model` 各字段未填时回落共享值。配置入口：dashboard 的「Per-tier 覆盖（高级）」折叠区、`transmutary config`、或环境变量 `TRANSMUTARY_LLM_<TIER>_<FIELD>`（如 `TRANSMUTARY_LLM_EMBED_BASE_URL`）。
+
+**常见场景** —— chat 走一个 provider，embedding 走另一个（chat provider 无 embedding API）。设 embed tier 的 `base_url`/`transport`/`model`（key 不同则也设），其余继承共享 chat 配置。
+
+**embed 可选。** 未配可用 embedding 端点时，L2 分组降级为全 L3（每个候选单独判定）——结果正确，只是 LLM 调用更多。不配 embed 是合法部署。
+
 ### 验证
 
 ```bash
