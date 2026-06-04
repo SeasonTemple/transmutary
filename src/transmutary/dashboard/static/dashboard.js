@@ -148,8 +148,24 @@
         })
         .then(function (d) {
           console.log("[testLLM] response:", d);
-          result.textContent = d.ok ? "✓ OK (" + (d.model || "") + ")" : "✗ " + (d.error || "fail");
-          result.style.color = d.ok ? "#15803d" : "#dc2626";
+          result.style.color = "";
+          if (d.tiers) {
+            // Per-tier results: one line each, ✓/✗ + model + detail/error.
+            result.textContent = "";
+            d.tiers.forEach(function (t) {
+              var line = document.createElement("div");
+              var ok = t.ok;
+              var bits = (ok ? "✓ " : "✗ ") + t.tier + ": " + (t.model || "");
+              if (ok && t.detail) bits += " (" + t.detail + ")";
+              if (!ok) bits += " — " + (t.error || "fail");
+              line.textContent = bits;
+              line.style.color = ok ? "#15803d" : "#dc2626";
+              result.appendChild(line);
+            });
+          } else {
+            result.textContent = d.ok ? "✓ OK (" + (d.model || "") + ")" : "✗ " + (d.error || "fail");
+            result.style.color = d.ok ? "#15803d" : "#dc2626";
+          }
         })
         .catch(function (e) { result.textContent = "✗ " + e; result.style.color = "#dc2626"; })
         .finally(function () { testBtn.disabled = false; });

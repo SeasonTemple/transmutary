@@ -407,6 +407,7 @@ pre {
   margin: 0 0 .8rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem;
 }
 .tier-override legend { font-size: .8rem; font-weight: 600; padding: 0 .4rem; color: var(--text-secondary); }
+#llm form.settings-form .llm-test-result { grid-column: 1 / -1; font-size: .85rem; line-height: 1.6; }
 .area-form {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; gap: .75rem;
 }

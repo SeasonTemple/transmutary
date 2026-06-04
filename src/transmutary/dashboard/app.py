@@ -622,34 +622,41 @@ def make_dashboard_app(
         return _settings_redirect("llm")
 
     async def settings_llm_test(request: Request) -> Response:
-        """Test LLM connection using the saved config/llm.yaml."""
+        """Test each configured LLM tier (strong/cheap = chat, embed = embedding).
+
+        Returns a per-tier result list so the dashboard can show which tier works
+        — a per-tier override on a different provider is verified independently.
+        """
         if not admin_token or not _admin_ok(request):
             return JSONResponse({"ok": False, "error": "auth"}, status_code=403)
         llm_cfg = load_llm_config(config_dir)
         if llm_cfg is None:
             return JSONResponse({"ok": False, "error": "No LLM config saved"})
         from ..effective_config import effective_llm_config
-        # Test the STRONG tier (chat) — its key/url/model are what diagnose uses.
+
         resolved = effective_llm_config(settings, require=False)
-        api_key, base_url, model = resolved["strong"]
-        if not api_key:
-            return JSONResponse({"ok": False, "error": "No API key configured"})
-        # Display: show the actual LiteLLM model name the call will use.
-        # If the user wrote "minimax/MiniMax-M3" we show that; if they wrote
-        # bare "MiniMax-M3" with transport=anthropic, we show "anthropic/MiniMax-M3".
-        display_model = model
-        try:
-            from ..llm import call
-            call(
-                "Reply with exactly: OK",
-                "test",
-                api_key=api_key,
-                base_url=base_url,
-                model=model,
-            )
-            return JSONResponse({"ok": True, "model": display_model})
-        except Exception as exc:
-            return JSONResponse({"ok": False, "error": str(exc)[:200]})
+        results = []
+        for tier in ("strong", "cheap", "embed"):
+            api_key, base_url, model = resolved[tier]
+            if not api_key:
+                results.append({"tier": tier, "ok": False, "error": "no api_key", "model": model})
+                continue
+            try:
+                if tier == "embed":
+                    from ..llm import embed
+                    vecs = embed(["connection test"], api_key=api_key,
+                                 base_url=base_url, model=model, num_retries=0)
+                    detail = f"{len(vecs[0])}-dim" if vecs else "no vector"
+                    results.append({"tier": tier, "ok": True, "model": model, "detail": detail})
+                else:
+                    from ..llm import call
+                    call("Reply with exactly: OK", "test",
+                         api_key=api_key, base_url=base_url, model=model)
+                    results.append({"tier": tier, "ok": True, "model": model})
+            except Exception as exc:  # noqa: BLE001 - surface raw provider error per tier
+                results.append({"tier": tier, "ok": False, "error": str(exc)[:160], "model": model})
+        all_ok = all(r["ok"] for r in results)
+        return JSONResponse({"ok": all_ok, "tiers": results})
 
     async def llms_txt(request: Request) -> Response:
         # Endpoint self-description for agents — NO private data (R-G1/KTD-G2).
