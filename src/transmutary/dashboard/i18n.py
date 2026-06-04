@@ -11,10 +11,14 @@ asserts both sides carry the same key set so they cannot drift.
 
 from __future__ import annotations
 
-# Supported languages. A cookie value outside this set falls back to DEFAULT_LANG
-# (R-I4 — no arbitrary cookie value reaches the template / <html lang>).
-SUPPORTED_LANGS = ("en", "zh")
-DEFAULT_LANG = "en"
+# Language constants live in the core i18n module (lowest layer, shared with the
+# delivery layer and config); re-exported here so existing dashboard imports and
+# the R-I4 cookie whitelist keep working unchanged.
+from ..i18n import (  # noqa: F401  (HTML_LANG re-exported for app.py/templates)
+    DEFAULT_LANG,
+    HTML_LANG,
+    SUPPORTED_LANGS,
+)
 
 # UI chrome only. Keys are dotted namespaces. en and zh MUST have identical keys.
 MESSAGES: dict[str, dict[str, str]] = {
@@ -356,8 +360,6 @@ MESSAGES: dict[str, dict[str, str]] = {
 }
 
 LANG_COOKIE = "tmtry-lang"
-# Map internal lang code to the <html lang> attribute value.
-HTML_LANG = {"en": "en", "zh": "zh-CN"}
 
 
 def resolve_lang(cookie_value: str | None) -> str:
