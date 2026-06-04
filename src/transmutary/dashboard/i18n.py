@@ -147,6 +147,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "settings_llm_model_strong": "Model (strong)",
         "settings_llm_model_cheap": "Model (cheap)",
         "settings_llm_model_embed": "Model (embed)",
+        "settings_llm_advanced": "Per-tier overrides (advanced)",
+        "settings_llm_override_hint": (
+            "Leave blank to use the shared configuration above. Set these only to "
+            "run a tier on a different provider (e.g. embeddings elsewhere)."
+        ),
+        "settings_llm_tier_strong": "Strong (diagnose / judge)",
+        "settings_llm_tier_cheap": "Cheap (summaries / advice)",
+        "settings_llm_tier_embed": "Embed (semantic grouping)",
         "settings_secret_note": "Values are never accepted or rendered here.",
         "settings_runtime_note": "Filesystem ownership remains YAML/env controlled.",
         "empty_edges": "No admin dependency edges",
@@ -297,6 +305,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "settings_llm_model_strong": "模型（强）",
         "settings_llm_model_cheap": "模型（省）",
         "settings_llm_model_embed": "模型（向量）",
+        "settings_llm_advanced": "Per-tier 覆盖（高级）",
+        "settings_llm_override_hint": (
+            "留空则用上面的共享配置。仅当某 tier 需走不同 provider 时填写"
+            "（如 embedding 用别处）。"
+        ),
+        "settings_llm_tier_strong": "Strong（诊断 / 判定）",
+        "settings_llm_tier_cheap": "Cheap（摘要 / 建议）",
+        "settings_llm_tier_embed": "Embed（语义分组）",
         "settings_secret_note": "这里不会接收或渲染任何密钥值。",
         "settings_runtime_note": "文件系统归属仍由 YAML/env 控制。",
         "empty_edges": "暂无管理依赖边",

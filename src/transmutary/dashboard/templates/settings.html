@@ -189,6 +189,20 @@
       <label class="field"><span data-i18n="settings_llm_model_strong">{{ t['settings_llm_model_strong'] }}</span><input id="llm-strong" name="model_strong" placeholder="MiniMax-M3" value="{{ llm_config.model_strong or '' if llm_config else '' }}"></label>
       <label class="field"><span data-i18n="settings_llm_model_cheap">{{ t['settings_llm_model_cheap'] }}</span><input id="llm-cheap" name="model_cheap" placeholder="MiniMax-M2.7-highspeed" value="{{ llm_config.model_cheap or '' if llm_config else '' }}"></label>
       <label class="field"><span data-i18n="settings_llm_model_embed">{{ t['settings_llm_model_embed'] }}</span><input id="llm-embed" name="model_embed" placeholder="text-embedding-3-small" value="{{ llm_config.model_embed or '' if llm_config else '' }}"></label>
+      <details class="llm-advanced">
+        <summary data-i18n="settings_llm_advanced">{{ t['settings_llm_advanced'] }}</summary>
+        <p class="panel-note" data-i18n="settings_llm_override_hint">{{ t['settings_llm_override_hint'] }}</p>
+        {% for tier in ['strong', 'cheap', 'embed'] %}
+        {% set ov = (llm_config.tier_overrides.get(tier) if llm_config and llm_config.tier_overrides else None) %}
+        <fieldset class="tier-override">
+          <legend data-i18n="settings_llm_tier_{{ tier }}">{{ t['settings_llm_tier_' ~ tier] }}</legend>
+          <label class="field"><span>API Key</span><input name="{{ tier }}_api_key" type="password" placeholder="—" value="{{ (ov.api_key[:4] + '****') if ov and ov.api_key else '' }}" autocomplete="off"></label>
+          <label class="field"><span>Base URL</span><input name="{{ tier }}_base_url" placeholder="—" value="{{ ov.base_url or '' if ov else '' }}"></label>
+          <label class="field"><span>Transport</span><input name="{{ tier }}_transport" placeholder="openai / anthropic / azure" value="{{ ov.transport or '' if ov else '' }}"></label>
+          <label class="field"><span>Model</span><input name="{{ tier }}_model" placeholder="—" value="{{ ov.model or '' if ov else '' }}"></label>
+        </fieldset>
+        {% endfor %}
+      </details>
       <div class="form-actions">
         <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
         <button class="btn" type="button" id="llm-test-btn" data-i18n="settings_llm_test">{{ t['settings_llm_test'] }}</button>

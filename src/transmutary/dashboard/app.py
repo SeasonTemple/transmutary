@@ -560,13 +560,31 @@ def make_dashboard_app(
         denied = _require_post_auth(request, form)
         if denied is not None:
             return denied
-        from ..config import LLMConfig, save_llm_config
+        from ..config import LLMConfig, TierOverride, save_llm_config
+
+        def _real(v: str) -> str | None:
+            # A masked echo (contains "****") means the user didn't change it →
+            # treat as "keep existing", represented here as None (no override).
+            v = (v or "").strip()
+            return None if (not v or "****" in v) else v
+
         api_key = form.get("api_key", "").strip()
         base_url = form.get("base_url", "").strip() or None
         transport = form.get("transport", "").strip() or None
         model_strong = form.get("model_strong", "").strip() or None
         model_cheap = form.get("model_cheap", "").strip() or None
         model_embed = form.get("model_embed", "").strip() or None
+        # Per-tier overrides (advanced). Masked key echoes are treated as "unset".
+        tier_overrides: dict[str, TierOverride] = {}
+        for tier in ("strong", "cheap", "embed"):
+            ov = TierOverride(
+                api_key=_real(form.get(f"{tier}_api_key", "")),
+                base_url=(form.get(f"{tier}_base_url", "").strip() or None),
+                transport=(form.get(f"{tier}_transport", "").strip() or None),
+                model=(form.get(f"{tier}_model", "").strip() or None),
+            )
+            if any((ov.api_key, ov.base_url, ov.transport, ov.model)):
+                tier_overrides[tier] = ov
         if not api_key:
             return _render_settings(
                 request, error_key="error_empty_api_key", status_code=400
@@ -578,6 +596,7 @@ def make_dashboard_app(
         save_llm_config(config_dir, LLMConfig(
             api_key=api_key, base_url=base_url, transport=transport,
             model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
+            tier_overrides=tier_overrides,
         ))
         # ADV-11: warn when transmitted over plain HTTP (non-localhost, non-HTTPS).
         host = request.headers.get("host", "")
