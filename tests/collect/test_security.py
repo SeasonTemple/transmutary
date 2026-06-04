@@ -58,6 +58,8 @@ def test_osv_hit_builds_high_risk_alert():
     assert report.severity is Severity.HIGH
     assert report.severity.is_urgent  # → immediate route (F3)
     assert "lodash" in report.title
+    # title_zh always set (deterministic), localized vuln/malware label
+    assert report.title_zh.startswith("供应链漏洞：") and "lodash" in report.title_zh
 
 
 def test_malware_hit_is_critical():

@@ -464,9 +464,13 @@ def diagnose(
             f"KTD2): {', '.join(blocked)}."
         )
 
+    from ..i18n import delivery_strings
     gated = not passes
     if gated:
-        title = f"[待核实信号] {ctx.title}"
+        # ctx.title is the upstream event title (external; not translated). Only
+        # the unverified prefix is localized: en form on title, zh on title_zh.
+        title = delivery_strings("en")["unverified_prefix"] + ctx.title
+        title_zh = delivery_strings("zh")["unverified_prefix"] + ctx.title
         unverif_en = (
             "> 待核实信号 (UNVERIFIED): derived sources did not reach the required "
             f">= {MIN_INDEPENDENT_SOURCES} independent sources (found {indep}); "
@@ -476,6 +480,7 @@ def diagnose(
         severity = Severity.NORMAL if ctx.severity.is_urgent else ctx.severity
     else:
         title = ctx.title
+        title_zh = None  # external title, no zh-specific form → fall back to title
         severity = ctx.severity
 
     if en_annotations:
@@ -509,6 +514,7 @@ def diagnose(
         kind=ReportKind.DIAGNOSE,
         repo=ctx.repo,
         title=title,
+        title_zh=title_zh,
         body_md=body_en,
         severity=severity,
         created_at=_now_iso(),

@@ -218,7 +218,9 @@ def test_no_source_marked_unverified():
     out = explain_trends([_cand("a/r", url="")], store, call_fn=_summary_call(captured))
     assert len(out.reports) == 1
     rep = out.reports[0]
-    assert "待核实信号" in rep.title
+    # unverified marker is localized per title: en on title, zh on title_zh
+    assert "Unverified" in rep.title
+    assert "待核实信号" in rep.title_zh
     assert rep.sources == []
 
 
@@ -229,6 +231,8 @@ def test_with_source_not_unverified():
                          call_fn=_summary_call(captured))
     rep = out.reports[0]
     assert "待核实信号" not in rep.title
+    assert "Unverified" not in rep.title
+    assert rep.title_zh == "趋势：a/r"
     assert len(rep.sources) == 1
 
 
