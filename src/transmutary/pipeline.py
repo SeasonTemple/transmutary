@@ -355,6 +355,10 @@ def run_release_issue_tick(
     api_key = _llm_api_key(rt)
     base_url = _llm_base_url(rt)
     models = _llm_model(rt)
+    # Resolve the call_fn sentinel ONCE: _UNSET means "use the real llm.call".
+    # Passing the bare _UNSET object downstream to diagnose() would TypeError
+    # ('object' not callable) — diagnose has no sentinel handling of its own.
+    resolved_call_fn = _llm_call_default() if call_fn is _UNSET else call_fn
     result = ReleaseIssueTickResult(repo=repo)
 
     since = rt.store.get_cursor(repo)
@@ -381,7 +385,7 @@ def run_release_issue_tick(
         )
         outcome = diagnose(
             ctx, api_key=api_key, base_url=base_url, model=models["strong"],
-            call_fn=call_fn, refine=refine_reports,
+            call_fn=resolved_call_fn, refine=refine_reports,
         )
         _deliver_report(rt, outcome.report, outcome.report.severity)
         result.diagnosed += 1
@@ -401,7 +405,7 @@ def run_release_issue_tick(
                 api_key=api_key,
                 base_url=base_url,
                 model=models["strong"],
-                call_fn=_llm_call_default() if call_fn is _UNSET else call_fn,
+                call_fn=resolved_call_fn,
                 embed_fn=_embed_fn(rt) if embed_fn is _UNSET else embed_fn,
             )
         except ConservativeReview as exc:
@@ -429,7 +433,7 @@ def run_release_issue_tick(
             )
             outcome = diagnose(
                 ctx, api_key=api_key, base_url=base_url, model=models["strong"],
-                call_fn=call_fn, refine=refine_reports,
+                call_fn=resolved_call_fn, refine=refine_reports,
             )
             _deliver_report(rt, outcome.report, outcome.report.severity)
             result.diagnosed += 1
