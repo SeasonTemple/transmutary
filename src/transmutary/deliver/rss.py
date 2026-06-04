@@ -57,19 +57,17 @@ def render_feed(
     reports: list[Report],
     *,
     feed_name: str,
-    title: str | None = None,
     lang: str = DEFAULT_LANG,
 ) -> str:
     """Render a list of reports into an Atom feed XML string (R20-safe).
 
     ``feed_name`` selects the logical feed (``immediate`` / ``digest``); it becomes
     part of the feed's urn id but is never a token. ``lang`` selects the single
-    delivery language (entry bodies/titles + feed ``xml:lang``); a ``title`` of
-    None is built localized from ``feed_name``.
+    delivery language (entry bodies/titles + feed title + ``xml:lang``).
     """
     fg = FeedGenerator()
     fg.id(f"{_FEED_ID_BASE}:{feed_name}")
-    fg.title(title or delivery_strings(lang)["feed_title"].format(name=feed_name))
+    fg.title(delivery_strings(lang)["feed_title"].format(name=feed_name))
     fg.link(href=f"{_FEED_ID_BASE}:{feed_name}", rel="self")
     fg.language(HTML_LANG.get(lang, "en"))
     # feedgen requires at least one author at the feed level.

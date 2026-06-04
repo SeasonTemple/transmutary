@@ -644,6 +644,7 @@ def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
     """
     import os
 
+    from . import i18n as _i18n
     from .deliver import digest as digest_mod
     from .deliver import email as email_mod
     from .deliver import rss as rss_mod
@@ -687,7 +688,7 @@ def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
             email_mod.send_html(
                 subject=(
                     f"[transmutary] "
-                    f"{digest_mod.delivery_strings(lang)['daily_digest']} {date_label}"
+                    f"{_i18n.delivery_strings(lang)['daily_digest']} {date_label}"
                 ),
                 text_body=text,
                 html_body=html,

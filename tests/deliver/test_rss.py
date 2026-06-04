@@ -49,14 +49,22 @@ def test_feed_contains_no_token():
 
 
 def test_empty_feed_still_valid():
-    xml = render_feed([], feed_name="digest", title="digest")
+    xml = render_feed([], feed_name="digest")
     assert "<feed" in xml
 
 
 def test_digest_feed_multiple_entries():
     reports = [_report(Severity.NORMAL), _report(Severity.INFO)]
-    xml = render_feed(reports, feed_name="digest", title="daily digest")
+    xml = render_feed(reports, feed_name="digest")
     assert xml.count("<entry") == 2
+
+
+def test_feed_title_localized_from_feed_name():
+    # title is built from feed_name + lang (no caller-supplied title anymore)
+    en = render_feed([], feed_name="immediate")
+    assert "<title>transmutary immediate feed</title>" in en
+    zh = render_feed([], feed_name="digest", lang="zh")
+    assert "transmutary digest 订阅源" in zh
 
 
 # --- Single-language RSS entries (delivery localization) ---------------------

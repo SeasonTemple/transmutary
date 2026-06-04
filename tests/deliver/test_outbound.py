@@ -39,7 +39,7 @@ class _FakeSMTP:
         pass
 
 
-def _outbound(feed_dir, smtp_factory=None, recipients=("ops@example.com",)):
+def _outbound(feed_dir, smtp_factory=None, recipients=("ops@example.com",), email_lang="en"):
     return OutboundDelivery(
         feed_dir=str(feed_dir),
         email_recipients=list(recipients),
@@ -47,7 +47,24 @@ def _outbound(feed_dir, smtp_factory=None, recipients=("ops@example.com",)):
         smtp_password="pw",
         smtp_host="smtp.example.com",
         smtp_factory=smtp_factory,
+        email_lang=email_lang,
     )
+
+
+def test_immediate_feed_follows_email_lang(tmp_path):
+    # End-to-end: OutboundDelivery.email_lang threads through deliver →
+    # _deliver_outbound → render_single into the written feed (RSS leg).
+    r = Report(
+        kind=ReportKind.DIAGNOSE, repo="acme/cli", title="gateway down",
+        title_zh="网关故障", body_md="EN body", body_md_zh="中文正文",
+        severity=Severity.CRITICAL, created_at="2026-05-29T10:00:00+00:00",
+    )
+    res = deliver(r, artifact_root=str(tmp_path),
+                  outbound=_outbound(tmp_path / "feeds", email_lang="zh"))
+    xml = open(res.rss_path, encoding="utf-8").read()
+    assert 'xml:lang="zh-CN"' in xml
+    assert "网关故障" in xml and "中文正文" in xml
+    assert "EN body" not in xml
 
 
 def test_high_risk_immediate_rss_plus_email(tmp_path):

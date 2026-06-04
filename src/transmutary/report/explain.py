@@ -547,8 +547,8 @@ def _build_report(
     if cand.url:
         sources.append(Source(source_id=cand.repo, url=cand.url, fetched_at=_now_iso()))
     from ..i18n import delivery_strings
-    title = f"Trend: {cand.repo}"
-    title_zh = f"趋势：{cand.repo}"
+    title = delivery_strings("en")["trend_title"].format(repo=cand.repo)
+    title_zh = delivery_strings("zh")["trend_title"].format(repo=cand.repo)
     if not sources:
         title = delivery_strings("en")["unverified_prefix"] + title
         title_zh = delivery_strings("zh")["unverified_prefix"] + title_zh

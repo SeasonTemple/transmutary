@@ -97,6 +97,10 @@ def test_digest_renders_configured_email_lang_end_to_end():
             html = fh.read()
         assert 'lang="zh-CN"' in html and "中文" in html
         assert "<p>body</p>" not in html  # English body absent
+        # RSS leg of the digest path also follows the configured lang
+        with open(res.rss_path, encoding="utf-8") as fh:
+            xml = fh.read()
+        assert 'xml:lang="zh-CN"' in xml and "中文" in xml
 
 
 def test_digest_empty_window_is_noop():

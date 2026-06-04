@@ -52,6 +52,9 @@ def test_diagnosis_contains_required_sections_and_aggregates_related():
     out = diagnose(ctx, call_fn=_capture_call(cap))
     assert out.report.kind == ReportKind.DIAGNOSE
     assert out.report.severity.is_urgent  # urgent → immediate delivery route
+    # gate passes → external title kept verbatim, no zh-specific form
+    assert out.gated_to_unverified is False
+    assert out.report.title_zh is None
     body = out.report.body_md
     assert "root cause" in body.lower()
     assert "internal-gateway" in body

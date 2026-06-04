@@ -67,6 +67,7 @@ def test_malware_hit_is_critical():
                       is_malware=True, summary="malware")
     report = build_alert(hit, repo="acme/cli", call_fn=lambda *a, **k: "Remove evil-pkg.")
     assert report.severity is Severity.CRITICAL
+    assert report.title_zh.startswith("供应链恶意软件：")  # malware label localized
 
 
 def test_osv_mal_id_is_classified_malware_and_critical():
