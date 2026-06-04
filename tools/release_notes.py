@@ -51,6 +51,15 @@ def note_path_for(tag: str) -> Path:
     return RELEASE_NOTES_DIR / f"{normalize_tag(tag)}.md"
 
 
+def _rel(path: Path) -> Path | str:
+    """Repo-relative display path; falls back to the absolute path when the file
+    lives outside the repo (e.g. a monkeypatched dir under test)."""
+    try:
+        return path.relative_to(REPO_ROOT)
+    except ValueError:
+        return path
+
+
 def validate_bilingual_release_note(text: str) -> list[str]:
     failures: list[str] = []
     if not CHINESE_HEADING_RE.search(text):
@@ -143,12 +152,26 @@ def _cmd_prepare(args: argparse.Namespace) -> int:
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
+    path = note_path_for(args.tag)
+    # Missing file is tolerated under --allow-missing (CI keeps semantic-release's
+    # auto-generated notes); a present-but-invalid file always fails (quality gate).
+    if not path.exists():
+        rel = _rel(path)
+        if getattr(args, "allow_missing", False):
+            print(
+                f"release-notes: WARNING - no curated note for {args.tag} ({rel}); "
+                "keeping auto-generated release notes",
+                file=sys.stderr,
+            )
+            return 0
+        print(f"release-notes: ERROR - missing release-note file: {rel}", file=sys.stderr)
+        return 1
     failures = check(args.tag)
     if failures:
         for failure in failures:
             print(f"release-notes: ERROR - {failure}", file=sys.stderr)
         return 1
-    print(f"release-notes: OK - {note_path_for(args.tag).relative_to(REPO_ROOT)}")
+    print(f"release-notes: OK - {_rel(path)}")
     return 0
 
 
@@ -165,6 +188,12 @@ def main(argv: list[str] | None = None) -> int:
 
     check_parser = sub.add_parser("check", help="validate docs/release-notes/vX.Y.Z.md")
     check_parser.add_argument("tag", help="release tag or version, e.g. v0.13.0")
+    check_parser.add_argument(
+        "--allow-missing",
+        action="store_true",
+        help="treat a missing note file as a warning (exit 0), not an error; "
+        "a present-but-invalid file still fails",
+    )
     check_parser.set_defaults(func=_cmd_check)
 
     args = parser.parse_args(argv)
