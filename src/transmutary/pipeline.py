@@ -625,3 +625,83 @@ def run_trend_tick(
         result.delivered += 1
 
     return result
+
+
+@dataclass
+class DigestResult:
+    """Outcome of a daily-digest run (asserted by tests)."""
+
+    report_count: int = 0
+    html_path: str | None = None
+    rss_path: str | None = None
+    email_sent: bool = False
+    email_error: str | None = None
+    skipped_empty: bool = False
+
+
+def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
+    """Aggregate the last 24h of reports into one HTML digest (R10).
+
+    Collects across all repos (fixed window, idempotent), writes a designed HTML
+    artifact to ``<artifact_root>/_digest/``, refreshes the RSS digest feed (batch),
+    and emails the summary when recipients + SMTP are configured. An empty window
+    is a no-op (no email, no empty artifact) to avoid noise.
+    """
+    import os
+
+    from .deliver import digest as digest_mod
+    from .deliver import email as email_mod
+    from .deliver import rss as rss_mod
+
+    result = DigestResult()
+    reports = digest_mod.collect_digest_reports(rt.artifacts, now_ts)
+    result.report_count = len(reports)
+    if not reports:
+        result.skipped_empty = True
+        return result
+
+    # Date label derived from the caller-supplied ts (no wall-clock in pipeline).
+    import datetime
+
+    date_label = datetime.datetime.utcfromtimestamp(now_ts).strftime("%Y-%m-%d")
+    html = digest_mod.render_digest_html(reports, date_label=date_label)
+    text = digest_mod.render_digest_text(reports, date_label=date_label)
+
+    # HTML artifact under <artifact_root>/_digest/<date>.html.
+    digest_dir = os.path.join(rt.artifact_root, "_digest")
+    os.makedirs(digest_dir, exist_ok=True)
+    html_path = os.path.join(digest_dir, f"{date_label}.html")
+    with open(html_path, "w", encoding="utf-8") as fh:
+        fh.write(html)
+    result.html_path = html_path
+
+    # RSS digest feed (batch) — reuse the existing multi-report renderer.
+    if rt.outbound.feed_dir is not None:
+        os.makedirs(rt.outbound.feed_dir, exist_ok=True)
+        xml = rss_mod.render_feed(reports, feed_name="digest", title="transmutary digest")
+        feed_path = os.path.join(rt.outbound.feed_dir, "digest.atom.xml")
+        with open(feed_path, "w", encoding="utf-8") as fh:
+            fh.write(xml)
+        result.rss_path = feed_path
+
+    # Email — only when recipients + SMTP are configured (degrade, never abort RSS).
+    ob = rt.outbound
+    if ob.email_recipients and ob.smtp_user:
+        try:
+            email_mod.send_html(
+                subject=f"[transmutary] Daily Digest {date_label}",
+                text_body=text,
+                html_body=html,
+                recipients=list(ob.email_recipients),
+                smtp_user=ob.smtp_user,
+                smtp_password=ob.smtp_password or "",
+                host=ob.smtp_host or "localhost",
+                port=ob.smtp_port,
+                use_tls=ob.smtp_use_tls,
+                use_ssl=ob.smtp_use_ssl,
+                smtp_factory=ob.smtp_factory,
+            )
+            result.email_sent = True
+        except email_mod.EmailDeliveryError as exc:
+            result.email_error = str(exc)
+    return result

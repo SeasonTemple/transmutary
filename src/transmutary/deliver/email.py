@@ -15,6 +15,7 @@ import smtplib
 from email.message import EmailMessage
 
 from ..report.schema import Report
+from .render_email import render_email_html, render_email_text
 
 
 class EmailDeliveryError(Exception):
@@ -26,12 +27,9 @@ def _build_message(report: Report, *, sender: str, recipients: list[str]) -> Ema
     msg["Subject"] = f"[transmutary/{report.severity.value}] {report.title}"
     msg["From"] = sender
     msg["To"] = ", ".join(recipients)
-    body = report.body_md
-    if report.sources:
-        body += "\n\nSources:\n" + "\n".join(
-            f"- {s.source_id}: {s.url} (fetched {s.fetched_at})" for s in report.sources
-        )
-    msg.set_content(body)
+    # multipart/alternative (R5): plain-text fallback + rendered HTML body.
+    msg.set_content(render_email_text(report))
+    msg.add_alternative(render_email_html(report), subtype="html")
     return msg
 
 
@@ -67,8 +65,59 @@ def send_report(
     """
     if not recipients:
         raise EmailDeliveryError("no recipients configured")
-    smtp_password = smtp_password.replace(" ", "")  # Gmail app-password groups
     msg = _build_message(report, sender=smtp_user, recipients=recipients)
+    _send_message(
+        msg, smtp_user=smtp_user, smtp_password=smtp_password, host=host,
+        port=port, use_tls=use_tls, use_ssl=use_ssl, smtp_factory=smtp_factory,
+    )
+
+
+def send_html(
+    *,
+    subject: str,
+    text_body: str,
+    html_body: str,
+    recipients: list[str],
+    smtp_user: str,
+    smtp_password: str,
+    host: str,
+    port: int = 587,
+    use_tls: bool = True,
+    use_ssl: bool = False,
+    smtp_factory=None,
+) -> None:
+    """Send an arbitrary multipart/alternative email (used by the daily digest).
+
+    Same SMTP/credential contract as :func:`send_report`; the body is a pre-rendered
+    (subject, text, html) triple rather than a single Report.
+    """
+    if not recipients:
+        raise EmailDeliveryError("no recipients configured")
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = smtp_user
+    msg["To"] = ", ".join(recipients)
+    msg.set_content(text_body)
+    msg.add_alternative(html_body, subtype="html")
+    _send_message(
+        msg, smtp_user=smtp_user, smtp_password=smtp_password, host=host,
+        port=port, use_tls=use_tls, use_ssl=use_ssl, smtp_factory=smtp_factory,
+    )
+
+
+def _send_message(
+    msg: EmailMessage,
+    *,
+    smtp_user: str,
+    smtp_password: str,
+    host: str,
+    port: int,
+    use_tls: bool,
+    use_ssl: bool,
+    smtp_factory,
+) -> None:
+    """Low-level SMTP send (shared by send_report / send_html). Strips app-pw spaces."""
+    smtp_password = smtp_password.replace(" ", "")  # Gmail app-password groups
     if smtp_factory is not None:
         factory = smtp_factory
     elif use_ssl:

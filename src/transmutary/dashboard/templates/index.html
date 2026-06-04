@@ -61,7 +61,7 @@
 <details open>
 <summary class="sec"><span data-i18n="sec.reports">{{ t['sec.reports'] }}</span></summary>
 {% if overview.recent_reports %}
-<div class="card"><table class="tbl">
+<div class="card table-shell reports-scroll"><table class="tbl">
   <thead><tr><th scope="col" data-i18n="th.kind">{{ t['th.kind'] }}</th><th scope="col" data-i18n="th.severity">{{ t['th.severity'] }}</th><th scope="col" data-i18n="th.repo">{{ t['th.repo'] }}</th><th scope="col" data-i18n="th.title">{{ t['th.title'] }}</th></tr></thead>
   <tbody>
   {% for c in overview.recent_reports %}

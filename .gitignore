@@ -31,3 +31,4 @@ config/delivery.yaml
 .DS_Store
 .idea/
 .vscode/
+config/llm.yaml
