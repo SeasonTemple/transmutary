@@ -178,6 +178,12 @@ details > summary.sec { cursor: pointer; }
 .llm-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); display: inline-block; }
 .llm-status-dot.ok { background: #22c55e; }
 .form-actions { display: flex; align-items: center; gap: .5rem; }
+/* env-locked field: env var wins over yaml/UI, so the input is disabled and
+   this badge names the locking variable (never the secret value). */
+.env-lock { display: inline-flex; align-items: center; gap: .35rem; margin-left: .4rem;
+  font-size: .68rem; font-weight: 600; color: var(--sev-info); }
+.env-lock code { font-size: .68rem; padding: .05rem .35rem; }
+.field input:disabled { opacity: .6; cursor: not-allowed; background: var(--bg-surface); }
 
 /* feeds */
 .feeds { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }

@@ -188,10 +188,24 @@ def test_load_llm_config_no_base_url(tmp_path):
     assert cfg.base_url is None
 
 
-def test_load_llm_config_missing_api_key(tmp_path):
+def test_load_llm_config_missing_api_key_tolerated(tmp_path):
+    # A keyless yaml is now valid: env supplies the shared key (env wins, the
+    # dashboard locks the field) or only per-tier keys are set. The "no key
+    # anywhere" error is raised later by effective_llm_config(require=True).
     import os
 
     (tmp_path / "llm.yaml").write_text("base_url: https://x\n")
+    os.chmod(str(tmp_path / "llm.yaml"), 0o600)
+    cfg = load_llm_config(str(tmp_path))
+    assert cfg is not None
+    assert cfg.api_key == ""
+    assert cfg.base_url == "https://x"
+
+
+def test_load_llm_config_non_string_api_key_rejected(tmp_path):
+    import os
+
+    (tmp_path / "llm.yaml").write_text("api_key: 12345\n")
     os.chmod(str(tmp_path / "llm.yaml"), 0o600)
     with pytest.raises(ConfigError, match="api_key"):
         load_llm_config(str(tmp_path))
@@ -257,6 +271,23 @@ def test_per_tier_embed_override_roundtrip(tmp_path):
     assert ov.model == "embo-01"
     assert ov.api_key is None  # not set → falls back to shared
     assert "strong" not in loaded.tier_overrides
+
+
+def test_keyless_shared_with_per_tier_key_roundtrip(tmp_path):
+    from transmutary.config import TierOverride
+    # B+: shared key absent (env supplies it), embed carries its own per-tier key.
+    # save must OMIT the empty shared key; load must NOT raise and must return "".
+    cfg = LLMConfig(
+        api_key="",
+        tier_overrides={"embed": TierOverride(api_key="sk-embed-only")},
+    )
+    save_llm_config(str(tmp_path), cfg)
+    text = (tmp_path / "llm.yaml").read_text()
+    assert "api_key: ''" not in text and "api_key: \"\"" not in text  # omitted, not empty
+    loaded = load_llm_config(str(tmp_path))
+    assert loaded is not None
+    assert loaded.api_key == ""
+    assert loaded.tier_overrides["embed"].api_key == "sk-embed-only"
 
 
 def test_per_tier_api_key_excluded_from_repr():

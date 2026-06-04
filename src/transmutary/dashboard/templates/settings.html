@@ -6,6 +6,10 @@
 {% set missing_secrets = settings_view.secrets | rejectattr('configured') | list | length %}
 {% set admin_repos = settings_view.repos | selectattr('source', 'equalto', 'admin') | list | length %}
 {% set admin_rows = admin_repos + (settings_view.admin_dependency_edges | length) %}
+{% set locks = llm_env_locks or {} %}
+{# env-locked LLM fields: env wins (see effective_llm_config), so the UI input is
+   disabled and a badge names the env var. Never renders the secret value. #}
+{% macro lockbadge(field) %}{% if field in locks %} <span class="env-lock"><span data-i18n="settings_llm_env_locked">{{ t['settings_llm_env_locked'] }}</span> <code>{{ locks[field] }}</code></span>{% endif %}{% endmacro %}
 
 <header class="topbar settings-head">
   <div>
@@ -183,12 +187,12 @@
           <option value="anthropic_compat" {% if llm_config and llm_config.transport == 'anthropic' and llm_config.base_url %}selected{% endif %}>Anthropic Compatible</option>
         </select>
       </label>
-      <input type="hidden" id="llm-transport" name="transport" value="{{ llm_config.transport or '' if llm_config else '' }}">
-      <label class="field"><span data-i18n="settings_llm_api_key">{{ t['settings_llm_api_key'] }}</span><input id="llm-key" name="api_key" type="password" placeholder="sk-..." value="{{ llm_config.api_key[:4] + '****' if llm_config else '' }}" autocomplete="off"></label>
-      <label class="field"><span data-i18n="settings_llm_base_url">{{ t['settings_llm_base_url'] }}</span><input id="llm-url" name="base_url" placeholder="https://api.openai.com/v1" value="{{ llm_config.base_url or '' if llm_config else '' }}"></label>
-      <label class="field"><span data-i18n="settings_llm_model_strong">{{ t['settings_llm_model_strong'] }}</span><input id="llm-strong" name="model_strong" placeholder="MiniMax-M3" value="{{ llm_config.model_strong or '' if llm_config else '' }}"></label>
-      <label class="field"><span data-i18n="settings_llm_model_cheap">{{ t['settings_llm_model_cheap'] }}</span><input id="llm-cheap" name="model_cheap" placeholder="MiniMax-M2.7-highspeed" value="{{ llm_config.model_cheap or '' if llm_config else '' }}"></label>
-      <label class="field"><span data-i18n="settings_llm_model_embed">{{ t['settings_llm_model_embed'] }}</span><input id="llm-embed" name="model_embed" placeholder="text-embedding-3-small" value="{{ llm_config.model_embed or '' if llm_config else '' }}"></label>
+      <input type="hidden" id="llm-transport" name="transport" value="{{ llm_config.transport or '' if llm_config else '' }}"{% if 'transport' in locks %} data-env-locked="{{ locks['transport'] }}"{% endif %}>
+      <label class="field"><span data-i18n="settings_llm_api_key">{{ t['settings_llm_api_key'] }}</span>{{ lockbadge('api_key') }}<input id="llm-key" name="api_key" type="password" placeholder="sk-..." value="{{ llm_config.api_key[:4] + '****' if llm_config else '' }}" autocomplete="off"{% if 'api_key' in locks %} disabled{% endif %}></label>
+      <label class="field"><span data-i18n="settings_llm_base_url">{{ t['settings_llm_base_url'] }}</span>{{ lockbadge('base_url') }}<input id="llm-url" name="base_url" placeholder="https://api.openai.com/v1" value="{{ llm_config.base_url or '' if llm_config else '' }}"{% if 'base_url' in locks %} disabled{% endif %}></label>
+      <label class="field"><span data-i18n="settings_llm_model_strong">{{ t['settings_llm_model_strong'] }}</span>{{ lockbadge('model_strong') }}<input id="llm-strong" name="model_strong" placeholder="MiniMax-M3" value="{{ llm_config.model_strong or '' if llm_config else '' }}"{% if 'model_strong' in locks %} disabled{% endif %}></label>
+      <label class="field"><span data-i18n="settings_llm_model_cheap">{{ t['settings_llm_model_cheap'] }}</span>{{ lockbadge('model_cheap') }}<input id="llm-cheap" name="model_cheap" placeholder="MiniMax-M2.7-highspeed" value="{{ llm_config.model_cheap or '' if llm_config else '' }}"{% if 'model_cheap' in locks %} disabled{% endif %}></label>
+      <label class="field"><span data-i18n="settings_llm_model_embed">{{ t['settings_llm_model_embed'] }}</span>{{ lockbadge('model_embed') }}<input id="llm-embed" name="model_embed" placeholder="text-embedding-3-small" value="{{ llm_config.model_embed or '' if llm_config else '' }}"{% if 'model_embed' in locks %} disabled{% endif %}></label>
       <details class="llm-advanced">
         <summary data-i18n="settings_llm_advanced">{{ t['settings_llm_advanced'] }}</summary>
         <p class="panel-note" data-i18n="settings_llm_override_hint">{{ t['settings_llm_override_hint'] }}</p>
@@ -196,10 +200,10 @@
         {% set ov = (llm_config.tier_overrides.get(tier) if llm_config and llm_config.tier_overrides else None) %}
         <fieldset class="tier-override">
           <legend data-i18n="settings_llm_tier_{{ tier }}">{{ t['settings_llm_tier_' ~ tier] }}</legend>
-          <label class="field"><span>API Key</span><input name="{{ tier }}_api_key" type="password" placeholder="—" value="{{ (ov.api_key[:4] + '****') if ov and ov.api_key else '' }}" autocomplete="off"></label>
-          <label class="field"><span>Base URL</span><input name="{{ tier }}_base_url" placeholder="—" value="{{ ov.base_url or '' if ov else '' }}"></label>
-          <label class="field"><span>Transport</span><input name="{{ tier }}_transport" placeholder="openai / anthropic / azure" value="{{ ov.transport or '' if ov else '' }}"></label>
-          <label class="field"><span>Model</span><input name="{{ tier }}_model" placeholder="—" value="{{ ov.model or '' if ov else '' }}"></label>
+          <label class="field"><span>API Key</span>{{ lockbadge(tier ~ '_api_key') }}<input name="{{ tier }}_api_key" type="password" placeholder="—" value="{{ (ov.api_key[:4] + '****') if ov and ov.api_key else '' }}" autocomplete="off"{% if (tier ~ '_api_key') in locks %} disabled{% endif %}></label>
+          <label class="field"><span>Base URL</span>{{ lockbadge(tier ~ '_base_url') }}<input name="{{ tier }}_base_url" placeholder="—" value="{{ ov.base_url or '' if ov else '' }}"{% if (tier ~ '_base_url') in locks %} disabled{% endif %}></label>
+          <label class="field"><span>Transport</span>{{ lockbadge(tier ~ '_transport') }}<input name="{{ tier }}_transport" placeholder="openai / anthropic / azure" value="{{ ov.transport or '' if ov else '' }}"{% if (tier ~ '_transport') in locks %} disabled{% endif %}></label>
+          <label class="field"><span>Model</span>{{ lockbadge(tier ~ '_model') }}<input name="{{ tier }}_model" placeholder="—" value="{{ ov.model or '' if ov else '' }}"{% if (tier ~ '_model') in locks %} disabled{% endif %}></label>
         </fieldset>
         {% endfor %}
       </details>

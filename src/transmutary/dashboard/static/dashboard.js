@@ -114,15 +114,22 @@
       var p = LLM_PRESETS[llmPreset.value];
       var urlEl = document.getElementById("llm-url");
       var transportEl = document.getElementById("llm-transport");
+      // env-locked fields win at runtime (env > yaml); don't overwrite them.
+      var urlLocked = urlEl.disabled;
+      var transportLocked = transportEl.hasAttribute("data-env-locked");
       if (p) {
-        urlEl.value = p.url || "";
-        transportEl.value = p.transport || "";
-        urlEl.readOnly = !!p.lock;
-        if (!p.lock) urlEl.placeholder = "https://your-gateway.example.com/v1";
+        if (!urlLocked) {
+          urlEl.value = p.url || "";
+          urlEl.readOnly = !!p.lock;
+          if (!p.lock) urlEl.placeholder = "https://your-gateway.example.com/v1";
+        }
+        if (!transportLocked) transportEl.value = p.transport || "";
       } else {
-        urlEl.readOnly = false;
-        urlEl.placeholder = "https://your-gateway.example.com/v1";
-        transportEl.value = "";
+        if (!urlLocked) {
+          urlEl.readOnly = false;
+          urlEl.placeholder = "https://your-gateway.example.com/v1";
+        }
+        if (!transportLocked) transportEl.value = "";
       }
     });
   }

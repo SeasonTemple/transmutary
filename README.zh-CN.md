@@ -129,6 +129,7 @@ API key 的存储方式与同类工具一致（opencode、`llm`、aider，以及
 
 - **非 LLM 凭据**（GitHub token、SMTP、RSS）—— **仅环境变量**，transmutary 不落盘。
 - **LLM key** —— 环境变量 `TRANSMUTARY_LLM_API_KEY` 优先；否则 `config/llm.yaml`，创建为 `0600`（仅属主读写）且 **gitignored**。dashboard 掩码显示（仅末 4 位），不回显。
+- **env = 锁定层，dashboard/yaml = 可变运行时层。** 默认 LLM 配置经 dashboard / `transmutary config` 管理（写入 `config/llm.yaml`）。设置某个 `TRANSMUTARY_LLM_*` 环境变量会**锁定**该字段以供 ops 注入：env 始终胜出，且 dashboard 把该字段渲染为**只读**并标注变量名——UI 修改绝不会被静默忽略。自托管（以 dashboard 为配置入口）时让这些 env 变量留空即可。
 - **为何不用 OS keychain？** transmutary 是长驻 headless 服务。keychain 假定有解锁的交互式会话；无人值守的 daemon 要存"解锁密钥"才能开 keychain——把明文密钥下移一层而非消除，还多 D-Bus/keyring 维护负担和已知 keychain footgun。`0600` 已满足单租户主机的真实威胁模型（挡其他用户/进程；用户态没有任何方案能挡已拿到服务用户 code-exec 的攻击者——keychain 也挡不了）。
 - **daemon 的真正密钥管理在环境层** —— 用 systemd `EnvironmentFile=`（本身 `0600`）、Docker/Kubernetes secret 或 vault sidecar 注入 key，让 `config/llm.yaml` 留空。以专用非特权用户运行 transmutary。
 - **本仓纵深防御** —— `.env` 和 `config/llm.yaml` 已 gitignore；`pre-commit` hook 扫描暂存内容的 key 模式（`sk-…`、`ghp_…`、`github_pat_…`、PEM 私钥），在 secret 进入 git 历史前拦截提交。

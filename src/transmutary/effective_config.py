@@ -206,6 +206,57 @@ def effective_llm_config(
     return result
 
 
+# Per-UI-field env-var provenance. Each dashboard LLM input field maps to the
+# env var(s) that, when set, make that field's yaml/UI value INEFFECTIVE (env
+# wins by convention — see effective_llm_config precedence). Candidates are in
+# precedence order; the first non-empty one is the lock source reported to the UI.
+#
+# Mapping rationale (mirrors _resolve precedence):
+#   - shared key/url/transport: shadowed only by the matching shared env var.
+#   - shared model_<tier>: shadowed by env per-tier (LLM_<TIER>_MODEL) OR the
+#     legacy env alias (LLM_MODEL_<TIER>) — both rank above yaml shared model.
+#   - per-tier <tier>_model: shadowed only by env per-tier (LLM_<TIER>_MODEL);
+#     the legacy alias ranks BELOW yaml per-tier, so it does not lock it.
+_LLM_FIELD_ENV_CANDIDATES: dict[str, tuple[str, ...]] = {
+    "api_key": ("TRANSMUTARY_LLM_API_KEY",),
+    "base_url": ("TRANSMUTARY_LLM_BASE_URL",),
+    "transport": (
+        "TRANSMUTARY_LLM_TRANSPORT",
+        "TRANSMUTARY_LLM_PROVIDER",
+        "TRANSMUTARY_LLM_VENDOR",
+    ),
+    "model_strong": ("TRANSMUTARY_LLM_STRONG_MODEL", "TRANSMUTARY_LLM_MODEL_STRONG"),
+    "model_cheap": ("TRANSMUTARY_LLM_CHEAP_MODEL", "TRANSMUTARY_LLM_MODEL_CHEAP"),
+    "model_embed": ("TRANSMUTARY_LLM_EMBED_MODEL", "TRANSMUTARY_LLM_MODEL_EMBED"),
+    **{
+        f"{tier}_{field}": (f"TRANSMUTARY_LLM_{tier.upper()}_{field.upper()}",)
+        for tier in ("strong", "cheap", "embed")
+        for field in ("api_key", "base_url", "transport", "model")
+    },
+}
+
+
+def llm_env_locks(env: dict[str, str] | None = None) -> dict[str, str]:
+    """Return ``{ui_field_name: env_var_name}`` for LLM fields shadowed by env.
+
+    A field is present iff an env var that out-ranks its yaml/UI value is set
+    (non-empty). The value is the winning env var's NAME — safe to display; it
+    is never the secret itself. Dashboard uses this to render the field
+    read-only with a "locked by <VAR>" badge instead of silently ignoring the
+    UI edit (env wins; see ``effective_llm_config``).
+    """
+    import os
+
+    env = os.environ if env is None else env
+    locks: dict[str, str] = {}
+    for field, candidates in _LLM_FIELD_ENV_CANDIDATES.items():
+        for var in candidates:
+            if (env.get(var) or "").strip():
+                locks[field] = var
+                break
+    return locks
+
+
 __all__ = (
     "effective_delivery",
     "effective_dependency_edges",
@@ -213,4 +264,5 @@ __all__ = (
     "effective_repo_sources",
     "effective_repos",
     "effective_trend_scope",
+    "llm_env_locks",
 )
