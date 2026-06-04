@@ -273,6 +273,23 @@ def test_per_tier_embed_override_roundtrip(tmp_path):
     assert "strong" not in loaded.tier_overrides
 
 
+def test_keyless_shared_with_per_tier_key_roundtrip(tmp_path):
+    from transmutary.config import TierOverride
+    # B+: shared key absent (env supplies it), embed carries its own per-tier key.
+    # save must OMIT the empty shared key; load must NOT raise and must return "".
+    cfg = LLMConfig(
+        api_key="",
+        tier_overrides={"embed": TierOverride(api_key="sk-embed-only")},
+    )
+    save_llm_config(str(tmp_path), cfg)
+    text = (tmp_path / "llm.yaml").read_text()
+    assert "api_key: ''" not in text and "api_key: \"\"" not in text  # omitted, not empty
+    loaded = load_llm_config(str(tmp_path))
+    assert loaded is not None
+    assert loaded.api_key == ""
+    assert loaded.tier_overrides["embed"].api_key == "sk-embed-only"
+
+
 def test_per_tier_api_key_excluded_from_repr():
     from transmutary.config import TierOverride
     ov = TierOverride(api_key="sk-embed-secret", base_url="https://e.test")

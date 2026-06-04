@@ -1473,9 +1473,13 @@ def test_settings_llm_field_disabled_when_env_locks_key(monkeypatch):
 
         m = re.search(r'<input[^>]*name="api_key"[^>]*>', resp.text)
         assert m and "disabled" in m.group(0)
-        # the env-lock badge (not the unrelated runtime secrets table) names the var
-        assert '<span class="env-lock">' in resp.text
-        assert "<code>TRANSMUTARY_LLM_API_KEY</code>" in resp.text
+        # the var name must sit INSIDE the env-lock badge — not merely anywhere on
+        # the page (the runtime secrets table also lists env var names).
+        badge = re.search(
+            r'<span class="env-lock">.*?<code>TRANSMUTARY_LLM_API_KEY</code>.*?</span>',
+            resp.text,
+        )
+        assert badge
         assert "sk-env-locked-000" not in resp.text  # secret value never rendered
 
 
@@ -1585,3 +1589,69 @@ def test_settings_llm_post_ignores_env_locked_field_value(monkeypatch):
         saved = load_llm_config(config_dir)
         # base_url is env-locked → the crafted form value is discarded.
         assert saved.base_url != "https://attacker.example.com/v1"
+
+
+def test_settings_llm_post_preserves_stored_key_when_env_locked(monkeypatch):
+    # A yaml key already exists, THEN env locks the field. The disabled input
+    # submits nothing — the save must PRESERVE the stored key, never wipe it.
+    from transmutary.config import LLMConfig, load_llm_config, save_llm_config
+
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        config_dir = os.path.join(d, "cfg")
+        save_llm_config(config_dir, LLMConfig(api_key="sk-stored-real-key"))
+        monkeypatch.setenv("TRANSMUTARY_LLM_API_KEY", "sk-env-locked-000")
+        client, *_ = _client(
+            d, write_store=write_store, admin_token="secret-admin-token",
+            config_dir=config_dir,
+        )
+        csrf = _login(client)
+        resp = client.post(
+            "/settings/llm",
+            data={"csrf_token": csrf, "model_strong": "x"},
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert load_llm_config(config_dir).api_key == "sk-stored-real-key"
+
+
+def test_settings_llm_post_discards_crafted_per_tier_locked_key(monkeypatch):
+    from transmutary.config import (
+        LLMConfig,
+        TierOverride,
+        load_llm_config,
+        save_llm_config,
+    )
+
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        config_dir = os.path.join(d, "cfg")
+        save_llm_config(config_dir, LLMConfig(
+            api_key="sk-shared",
+            tier_overrides={"embed": TierOverride(api_key="sk-embed-stored")},
+        ))
+        monkeypatch.setenv("TRANSMUTARY_LLM_EMBED_API_KEY", "sk-embed-env")
+        client, *_ = _client(
+            d, write_store=write_store, admin_token="secret-admin-token",
+            config_dir=config_dir,
+        )
+        csrf = _login(client)
+        resp = client.post(
+            "/settings/llm",
+            data={
+                "csrf_token": csrf,
+                # shared key field is editable here → browser resends the masked
+                # echo, which _real_or_keep resolves back to the stored key.
+                "api_key": "sk-s****",
+                "embed_api_key": "sk-attacker-embed",
+                "model_strong": "x",
+            },
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        # per-tier embed key is env-locked → crafted value discarded, stored kept.
+        saved = load_llm_config(config_dir)
+        assert saved.api_key == "sk-shared"
+        assert saved.tier_overrides["embed"].api_key == "sk-embed-stored"

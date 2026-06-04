@@ -343,3 +343,46 @@ def test_llm_env_locks_shared_model_both_aliases():
 
 def test_llm_env_locks_empty_string_is_not_set():
     assert llm_env_locks(env={"TRANSMUTARY_LLM_API_KEY": "   "}) == {}
+
+
+@pytest.mark.parametrize("tier", ["strong", "cheap", "embed"])
+@pytest.mark.parametrize("field", ["api_key", "base_url", "transport"])
+def test_llm_env_locks_every_per_tier_field(tier, field):
+    # api_key/base_url/transport per-tier env vars lock ONLY their own field.
+    var = f"TRANSMUTARY_LLM_{tier.upper()}_{field.upper()}"
+    locks = llm_env_locks(env={var: "v"})
+    assert locks == {f"{tier}_{field}": var}
+
+
+@pytest.mark.parametrize("tier", ["strong", "cheap", "embed"])
+def test_llm_env_locks_per_tier_model_locks_both_model_fields(tier):
+    # TRANSMUTARY_LLM_<TIER>_MODEL out-ranks both yaml per-tier ov.model and yaml
+    # shared model_<tier>, so it locks the per-tier AND the shared model field.
+    var = f"TRANSMUTARY_LLM_{tier.upper()}_MODEL"
+    locks = llm_env_locks(env={var: "v"})
+    assert locks == {f"{tier}_model": var, f"model_{tier}": var}
+
+
+def test_llm_env_locks_legacy_alias_does_not_lock_per_tier_model():
+    # TRANSMUTARY_LLM_MODEL_<TIER> (legacy) ranks BELOW yaml per-tier ov.model in
+    # _resolve, so it must lock the SHARED model_<tier> field but NOT the per-tier
+    # <tier>_model field. The per-tier env var TRANSMUTARY_LLM_<TIER>_MODEL is the
+    # only thing that out-ranks ov.model.
+    locks = llm_env_locks(env={"TRANSMUTARY_LLM_MODEL_STRONG": "m"})
+    assert "model_strong" in locks
+    assert "strong_model" not in locks
+    # The per-tier env var locks BOTH (it beats ov.model and yaml shared).
+    locks2 = llm_env_locks(env={"TRANSMUTARY_LLM_STRONG_MODEL": "m"})
+    assert locks2["model_strong"] == "TRANSMUTARY_LLM_STRONG_MODEL"
+    assert locks2["strong_model"] == "TRANSMUTARY_LLM_STRONG_MODEL"
+
+
+def test_llm_env_locks_shared_and_per_tier_independent():
+    # The headline deployment: shared key in env + a per-tier override in env →
+    # both lock independently.
+    locks = llm_env_locks(env={
+        "TRANSMUTARY_LLM_API_KEY": "sk-shared",
+        "TRANSMUTARY_LLM_EMBED_API_KEY": "sk-embed",
+    })
+    assert locks["api_key"] == "TRANSMUTARY_LLM_API_KEY"
+    assert locks["embed_api_key"] == "TRANSMUTARY_LLM_EMBED_API_KEY"
