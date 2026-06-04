@@ -43,6 +43,7 @@ from starlette.responses import (
 from starlette.routing import Route
 
 from ..config import Settings, load_llm_config
+from ..effective_config import llm_env_locks
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
 from . import auth as admin_auth
@@ -287,6 +288,7 @@ def make_dashboard_app(
                     "success_key": success_key,
                     "form_repo": form_repo,
                     "llm_config": llm_cfg,
+                    "llm_env_locks": llm_env_locks(),
                 },
             ),
             status_code=status_code,
@@ -575,29 +577,56 @@ def make_dashboard_app(
                 return existing_val
             return v
 
+        # env-locked fields win at runtime (env > yaml). A disabled input is not
+        # submitted by the browser, but a crafted POST could still carry one — so
+        # for every locked field we keep the stored yaml value, never the form's.
+        locks = llm_env_locks()
+
+        def _field(name: str, existing_val: str | None) -> str | None:
+            if name in locks:
+                return existing_val
+            return form.get(name, "").strip() or None
+
         existing_shared_key = existing.api_key if existing else None
-        api_key = _real_or_keep(form.get("api_key", ""), existing_shared_key) or ""
-        base_url = form.get("base_url", "").strip() or None
-        transport = form.get("transport", "").strip() or None
-        model_strong = form.get("model_strong", "").strip() or None
-        model_cheap = form.get("model_cheap", "").strip() or None
-        model_embed = form.get("model_embed", "").strip() or None
-        # Per-tier overrides (advanced). Masked key echo → keep stored per-tier key.
+        if "api_key" in locks:
+            api_key = existing_shared_key or ""
+        else:
+            api_key = _real_or_keep(form.get("api_key", ""), existing_shared_key) or ""
+        existing_base_url = existing.base_url if existing else None
+        existing_transport = existing.transport if existing else None
+        existing_models = {
+            "strong": existing.model_strong if existing else None,
+            "cheap": existing.model_cheap if existing else None,
+            "embed": existing.model_embed if existing else None,
+        }
+        base_url = _field("base_url", existing_base_url)
+        transport = _field("transport", existing_transport)
+        model_strong = _field("model_strong", existing_models["strong"])
+        model_cheap = _field("model_cheap", existing_models["cheap"])
+        model_embed = _field("model_embed", existing_models["embed"])
+        # Per-tier overrides (advanced). Masked key echo → keep stored per-tier key;
+        # env-locked per-tier fields also keep the stored value.
         existing_overrides = existing.tier_overrides if existing else {}
         tier_overrides: dict[str, TierOverride] = {}
         for tier in ("strong", "cheap", "embed"):
             ex = existing_overrides.get(tier)
-            ov = TierOverride(
-                api_key=_real_or_keep(
+            if f"{tier}_api_key" in locks:
+                t_key = ex.api_key if ex else None
+            else:
+                t_key = _real_or_keep(
                     form.get(f"{tier}_api_key", ""), ex.api_key if ex else None
-                ),
-                base_url=(form.get(f"{tier}_base_url", "").strip() or None),
-                transport=(form.get(f"{tier}_transport", "").strip() or None),
-                model=(form.get(f"{tier}_model", "").strip() or None),
+                )
+            ov = TierOverride(
+                api_key=t_key,
+                base_url=_field(f"{tier}_base_url", ex.base_url if ex else None),
+                transport=_field(f"{tier}_transport", ex.transport if ex else None),
+                model=_field(f"{tier}_model", ex.model if ex else None),
             )
             if any((ov.api_key, ov.base_url, ov.transport, ov.model)):
                 tier_overrides[tier] = ov
-        if not api_key:
+        # A shared key supplied by env (locked) satisfies the requirement even
+        # when the disabled input sends nothing — do not 400 in that case.
+        if not api_key and "api_key" not in locks:
             return _render_settings(
                 request, error_key="error_empty_api_key", status_code=400
             )

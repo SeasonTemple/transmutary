@@ -336,8 +336,14 @@ def load_llm_config(config_dir: str) -> LLMConfig | None:
             raise ConfigError(str(exc)) from exc
     data = _load_yaml(path)
     api_key = data.get("api_key")
-    if not api_key or not isinstance(api_key, str):
-        raise ConfigError("llm.yaml must contain a non-empty 'api_key' string")
+    # A shared key may be absent: env supplies it (env > yaml; the dashboard
+    # locks the field) or only per-tier keys are configured. The single gate for
+    # "no key from any source" is effective_llm_config(require=True), so here we
+    # only reject a wrong TYPE, treating missing/empty as "" (env/per-tier fills).
+    if api_key is None:
+        api_key = ""
+    elif not isinstance(api_key, str):
+        raise ConfigError("llm.yaml 'api_key' must be a string")
     base_url = data.get("base_url")
     if base_url is not None:
         base_url = str(base_url)
@@ -384,7 +390,12 @@ def save_llm_config(config_dir: str, config: LLMConfig) -> None:
     """
     os.makedirs(config_dir, exist_ok=True)
     path = os.path.join(config_dir, "llm.yaml")
-    payload = {"api_key": config.api_key}
+    payload: dict = {}
+    # A shared key may legitimately be absent: env supplies it (env wins; the
+    # dashboard locks the field), or only per-tier keys are set. Omit empty keys
+    # rather than persisting api_key: '' (which load would otherwise reject).
+    if config.api_key:
+        payload["api_key"] = config.api_key
     if config.base_url is not None:
         payload["base_url"] = config.base_url
     if config.transport is not None:

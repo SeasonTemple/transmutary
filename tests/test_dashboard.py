@@ -274,6 +274,7 @@ def _client(
     raise_server_exceptions=True,
     write_store=None,
     admin_token=None,
+    config_dir=None,
 ):
     """Dashboard app + TestClient over in-memory store + tmp artifacts."""
     from starlette.testclient import TestClient
@@ -286,12 +287,15 @@ def _client(
     if seed:
         artifacts.write(_report("acme/cli", severity=Severity.CRITICAL), ts=1000.0)
     settings = _settings(artifact_root=root)
+    # Default to a tmp config dir so llm.yaml writes never touch the real repo
+    # config/ (test isolation; the real file holds live secrets).
     app = make_dashboard_app(
         settings,
         store,
         artifacts,
         write_store=write_store,
         admin_token=admin_token,
+        config_dir=config_dir if config_dir is not None else os.path.join(d, "config"),
     )
     client = TestClient(
         app,
@@ -1449,3 +1453,135 @@ def test_json_report_marks_external_trust():
         )
         assert resp.status_code == 200
         assert resp.json()["_content_trust"] == "external"
+
+
+# --- LLM env-lock provenance (B+: env = locked layer, UI = mutable layer) ----
+
+
+def test_settings_llm_field_disabled_when_env_locks_key(monkeypatch):
+    # env wins at runtime; the UI must show the field read-only + name the var,
+    # not silently accept an edit that won't take effect.
+    monkeypatch.setenv("TRANSMUTARY_LLM_API_KEY", "sk-env-locked-000")
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        _login(client)
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        # the api_key input is disabled and the locking var is named (not the value)
+        import re
+
+        m = re.search(r'<input[^>]*name="api_key"[^>]*>', resp.text)
+        assert m and "disabled" in m.group(0)
+        # the env-lock badge (not the unrelated runtime secrets table) names the var
+        assert '<span class="env-lock">' in resp.text
+        assert "<code>TRANSMUTARY_LLM_API_KEY</code>" in resp.text
+        assert "sk-env-locked-000" not in resp.text  # secret value never rendered
+
+
+def test_settings_llm_field_editable_when_no_env(monkeypatch):
+    for var in (
+        "TRANSMUTARY_LLM_API_KEY",
+        "TRANSMUTARY_LLM_BASE_URL",
+        "TRANSMUTARY_LLM_TRANSPORT",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        _login(client)
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        import re
+
+        m = re.search(r'<input[^>]*name="api_key"[^>]*>', resp.text)
+        assert m and "disabled" not in m.group(0)
+
+
+def test_settings_llm_per_tier_field_disabled_when_env_locks(monkeypatch):
+    monkeypatch.setenv("TRANSMUTARY_LLM_EMBED_API_KEY", "sk-embed-env-000")
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        _login(client)
+        resp = client.get("/settings")
+        assert resp.status_code == 200
+        import re
+
+        m = re.search(r'<input[^>]*name="embed_api_key"[^>]*>', resp.text)
+        assert m and "disabled" in m.group(0)
+        assert "sk-embed-env-000" not in resp.text
+
+
+def test_settings_llm_post_no_400_when_key_env_locked(monkeypatch):
+    # Shared key disabled (env-locked) → browser sends no api_key. The save must
+    # succeed (env supplies the key), persisting the other fields — not 400.
+    monkeypatch.setenv("TRANSMUTARY_LLM_API_KEY", "sk-env-locked-000")
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        config_dir = os.path.join(d, "cfg")
+        client, *_ = _client(
+            d, write_store=write_store, admin_token="secret-admin-token",
+            config_dir=config_dir,
+        )
+        csrf = _login(client)
+        resp = client.post(
+            "/settings/llm",
+            data={"csrf_token": csrf, "model_strong": "minimax/MiniMax-M3"},
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        from transmutary.config import load_llm_config
+
+        saved = load_llm_config(config_dir)
+        assert saved is not None
+        assert saved.model_strong == "minimax/MiniMax-M3"
+
+
+def test_settings_llm_post_still_400_when_no_key_and_no_env(monkeypatch):
+    monkeypatch.delenv("TRANSMUTARY_LLM_API_KEY", raising=False)
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(
+            d, write_store=write_store, admin_token="secret-admin-token",
+            config_dir=os.path.join(d, "cfg"),
+        )
+        csrf = _login(client)
+        resp = client.post(
+            "/settings/llm",
+            data={"csrf_token": csrf, "model_strong": "x"},
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 400
+
+
+def test_settings_llm_post_ignores_env_locked_field_value(monkeypatch):
+    # A crafted POST carrying a locked field must not write that value to yaml.
+    monkeypatch.setenv("TRANSMUTARY_LLM_API_KEY", "sk-env-locked-000")
+    monkeypatch.setenv("TRANSMUTARY_LLM_BASE_URL", "https://env.example.com/v1")
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        config_dir = os.path.join(d, "cfg")
+        client, *_ = _client(
+            d, write_store=write_store, admin_token="secret-admin-token",
+            config_dir=config_dir,
+        )
+        csrf = _login(client)
+        resp = client.post(
+            "/settings/llm",
+            data={
+                "csrf_token": csrf,
+                "base_url": "https://attacker.example.com/v1",
+                "model_strong": "x",
+            },
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        from transmutary.config import load_llm_config
+
+        saved = load_llm_config(config_dir)
+        # base_url is env-locked → the crafted form value is discarded.
+        assert saved.base_url != "https://attacker.example.com/v1"

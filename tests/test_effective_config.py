@@ -21,6 +21,7 @@ from transmutary.effective_config import (
     effective_repo_sources,
     effective_repos,
     effective_trend_scope,
+    llm_env_locks,
 )
 from transmutary.store.state import StateStore
 
@@ -304,3 +305,41 @@ def test_yaml_per_tier_key_not_overridden_by_env_shared_key():
     # embed keeps its yaml per-tier key — env shared does NOT win over it
     assert r["embed"][0] == "glm-embed-key"
     assert r["embed"][1] == "https://glm.test"
+
+
+# --- llm_env_locks: per-UI-field env provenance (B+ env=lock layer) ---------
+def test_llm_env_locks_empty_when_no_env():
+    assert llm_env_locks(env={}) == {}
+
+
+def test_llm_env_locks_shared_key():
+    assert llm_env_locks(env={"TRANSMUTARY_LLM_API_KEY": "sk-x"}) == {
+        "api_key": "TRANSMUTARY_LLM_API_KEY"
+    }
+
+
+def test_llm_env_locks_per_tier_base_url():
+    locks = llm_env_locks(env={"TRANSMUTARY_LLM_EMBED_BASE_URL": "https://glm.test"})
+    assert locks == {"embed_base_url": "TRANSMUTARY_LLM_EMBED_BASE_URL"}
+
+
+def test_llm_env_locks_transport_alias_reports_actual_var():
+    # transport has three aliases; the lock reports whichever is actually set.
+    locks = llm_env_locks(env={"TRANSMUTARY_LLM_PROVIDER": "minimax"})
+    assert locks == {"transport": "TRANSMUTARY_LLM_PROVIDER"}
+
+
+def test_llm_env_locks_shared_model_both_aliases():
+    # shared model_<tier> field is shadowed by EITHER env per-tier OR legacy alias.
+    assert llm_env_locks(env={"TRANSMUTARY_LLM_MODEL_STRONG": "m"}) == {
+        "model_strong": "TRANSMUTARY_LLM_MODEL_STRONG"
+    }
+    # per-tier env var takes precedence as the reported source.
+    assert (
+        llm_env_locks(env={"TRANSMUTARY_LLM_STRONG_MODEL": "m"})["model_strong"]
+        == "TRANSMUTARY_LLM_STRONG_MODEL"
+    )
+
+
+def test_llm_env_locks_empty_string_is_not_set():
+    assert llm_env_locks(env={"TRANSMUTARY_LLM_API_KEY": "   "}) == {}
