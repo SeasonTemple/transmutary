@@ -155,7 +155,11 @@ def build_runtime(
             credentials=settings.credentials,
         )
     client = client if client is not None else make_client()
-    artifacts = artifacts if artifacts is not None else ArtifactStore(delivery.artifact_root)
+    artifacts = (
+        artifacts
+        if artifacts is not None
+        else ArtifactStore(delivery.artifact_root, render_lang=delivery.email_lang)
+    )
 
     feed_dir = delivery.feed_dir or os.path.join(delivery.artifact_root, "_feed")
 
@@ -170,6 +174,7 @@ def build_runtime(
         smtp_use_tls=not delivery.smtp_use_ssl,
         smtp_user=(creds.smtp_user if creds is not None else None),
         smtp_password=(creds.smtp_password if creds is not None else None),
+        email_lang=delivery.email_lang,
     )
     return PipelineRuntime(
         store=store,
@@ -654,8 +659,9 @@ def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
     import datetime
 
     date_label = datetime.datetime.utcfromtimestamp(now_ts).strftime("%Y-%m-%d")
-    html = digest_mod.render_digest_html(reports, date_label=date_label)
-    text = digest_mod.render_digest_text(reports, date_label=date_label)
+    lang = rt.outbound.email_lang
+    html = digest_mod.render_digest_html(reports, date_label=date_label, lang=lang)
+    text = digest_mod.render_digest_text(reports, date_label=date_label, lang=lang)
 
     # HTML artifact under <artifact_root>/_digest/<date>.html.
     digest_dir = os.path.join(rt.artifact_root, "_digest")

@@ -83,7 +83,15 @@ def test_html_renders_reports_grouped():
     assert "Daily Digest 2026-06-04" in html
     assert "Critical issue" in html and "Info note" in html
     assert "2 report(s)" in html and "1 high-risk" in html
+    # default lang = en → no Chinese body even when a translation exists
+    assert 'lang="zh-CN"' not in html and "中文摘要" not in html
+
+
+def test_html_zh_renders_chinese_body():
+    reports = [_report("c/d", "Info note", Severity.INFO, body_zh="中文摘要")]
+    html = render_digest_html(reports, date_label="2026-06-04", lang="zh")
     assert 'lang="zh-CN"' in html and "中文摘要" in html
+    assert "body for Info note" not in html  # English body absent
 
 
 def test_html_escapes_untrusted_title():
@@ -103,8 +111,16 @@ def test_html_cjk_font_stack():
 
 
 def test_text_fallback_lists_reports():
-    reports = [_report("a/b", "T1", Severity.HIGH, body_zh="中文")]
+    reports = [_report("a/b", "T1", Severity.HIGH, body_zh="中文摘要正文")]
     txt = render_digest_text(reports, date_label="2026-06-04")
     assert "Daily Digest 2026-06-04" in txt
     assert "[HIGH] a/b — T1" in txt
-    assert "中文" in txt
+    # default en → English body only
+    assert "body for T1" in txt
+    assert "中文摘要正文" not in txt
+
+
+def test_text_fallback_zh():
+    reports = [_report("a/b", "T1", Severity.HIGH, body_zh="中文摘要正文")]
+    txt = render_digest_text(reports, date_label="2026-06-04", lang="zh")
+    assert "中文摘要正文" in txt

@@ -20,7 +20,11 @@ inline style/script anyway) and for email HTML (which renders the same output).
 
 from __future__ import annotations
 
+import datetime
+
 from markdown_it import MarkdownIt
+
+from .schema import Report
 
 # A single shared parser instance: stateless across renders, cheap to reuse.
 # html=False is the load-bearing security switch (raw HTML → escaped text).
@@ -32,3 +36,33 @@ def render_markdown(text: str | None) -> str:
     if not text:
         return ""
     return _MD.render(text)
+
+
+def localized_body(report: Report, lang: str) -> tuple[str, str]:
+    """Pick one language's body for single-language delivery (email).
+
+    Returns ``(markdown_body, html_lang_attr)``. ``lang == "zh"`` uses the Chinese
+    body, falling back to English when no translation exists; any other value uses
+    English. Email is a single-language push (the dashboard/RSS keep both).
+    """
+    if lang == "zh" and report.body_md_zh:
+        return report.body_md_zh, "zh-CN"
+    return report.body_md, "en"
+
+
+def fmt_timestamp(value: str | float | int) -> str:
+    """Human-readable ``YYYY-MM-DD HH:MM UTC`` from an ISO-8601 string or epoch.
+
+    Unparseable input is returned as ``str(value)`` (never raises) so a delivery
+    render can't crash on a malformed timestamp.
+    """
+    try:
+        if isinstance(value, (int, float)):
+            dt = datetime.datetime.utcfromtimestamp(value)
+        else:
+            dt = datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        return dt.strftime("%Y-%m-%d %H:%M UTC")
+    except (ValueError, OSError, OverflowError):
+        return str(value)

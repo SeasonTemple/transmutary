@@ -231,6 +231,29 @@ def test_render_markdown_no_zh_body_backward_compat(tmp_path):
     assert "EN only" in rendered
 
 
+def _read_html_artifact(store, md_path):
+    return (md_path[: -len(".md")] + ".html") and open(
+        md_path[: -len(".md")] + ".html", encoding="utf-8"
+    ).read()
+
+
+def test_html_artifact_follows_render_lang(tmp_path):
+    # The .md stays bilingual (dashboard source), but the designed .html artifact
+    # is single-language and follows render_lang (mirrors the deployment email_lang).
+    store = ArtifactStore(str(tmp_path / "art"), render_lang="zh")
+    md_path = store.write(_r(body_md="EN body", body_md_zh="ZH 正文"), ts=1700000000.0)
+    html = _read_html_artifact(store, md_path)
+    assert "ZH 正文" in html and 'lang="zh-CN"' in html
+    assert "EN body" not in html
+
+
+def test_html_artifact_defaults_to_english(tmp_path):
+    store = ArtifactStore(str(tmp_path / "art"))  # default render_lang="en"
+    md_path = store.write(_r(body_md="EN body", body_md_zh="ZH 正文"), ts=1700000000.0)
+    html = _read_html_artifact(store, md_path)
+    assert "EN body" in html and "ZH 正文" not in html
+
+
 def test_json_sidecar_contains_body_md_zh(tmp_path):
     store = ArtifactStore(str(tmp_path / "art"))
     report = _r(body_md="EN", body_md_zh="ZH")

@@ -35,7 +35,7 @@ class _RecordingEmail:
     def quit(self): pass
 
 
-def _settings(tmp, *, recipients=(), smtp_host=None):
+def _settings(tmp, *, recipients=(), smtp_host=None, email_lang="en"):
     return Settings(
         watchlist=Watchlist(repos=[], dependency_edges=[]),
         trend_scope=TrendScope(topics=["ai"], keywords=[]),
@@ -47,6 +47,7 @@ def _settings(tmp, *, recipients=(), smtp_host=None):
             email_recipients=list(recipients),
             smtp_host=smtp_host,
             feed_dir=tmp + "/_feed",
+            email_lang=email_lang,
         ),
     )
 
@@ -58,9 +59,9 @@ def _creds():
     )
 
 
-def _runtime(tmp, *, recipients=(), smtp_host=None):
+def _runtime(tmp, *, recipients=(), smtp_host=None, email_lang="en"):
     rec = _RecordingEmail()
-    settings = _settings(tmp, recipients=recipients, smtp_host=smtp_host)
+    settings = _settings(tmp, recipients=recipients, smtp_host=smtp_host, email_lang=email_lang)
     rt = build_runtime(
         settings, _creds(), store=StateStore(":memory:"),
         client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200))),
@@ -81,6 +82,21 @@ def test_digest_writes_html_and_rss():
         with open(res.html_path, encoding="utf-8") as fh:
             html = fh.read()
         assert "High one" in html and "Info one" in html
+
+
+def test_digest_renders_configured_email_lang_end_to_end():
+    # Plumbing guard: Delivery.email_lang → build_runtime → OutboundDelivery →
+    # run_daily_digest render. A revert of `lang=lang` in run_daily_digest would
+    # fail this (the digest would default back to English).
+    with tempfile.TemporaryDirectory() as tmp:
+        rt, artifacts, _ = _runtime(tmp, email_lang="zh")
+        assert rt.outbound.email_lang == "zh"
+        artifacts.write(_report("a/b", "High one", Severity.HIGH), ts=10_000)
+        res = run_daily_digest(rt, now_ts=10_500)
+        with open(res.html_path, encoding="utf-8") as fh:
+            html = fh.read()
+        assert 'lang="zh-CN"' in html and "中文" in html
+        assert "<p>body</p>" not in html  # English body absent
 
 
 def test_digest_empty_window_is_noop():

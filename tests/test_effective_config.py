@@ -127,6 +127,28 @@ def test_effective_delivery_partial_admin_values(store):
     assert delivery.digest_hour == 6
 
 
+def test_effective_delivery_email_lang_admin_override(store):
+    store.set_admin_delivery_preferences(
+        email_recipients=["a@b.com"], digest_hour=8, email_lang="zh"
+    )
+    delivery = effective_delivery(_settings(), store)
+    assert delivery.email_lang == "zh"
+
+
+def test_effective_delivery_email_lang_defaults_when_unset(store):
+    # no admin pref, no yaml override → default (en, whitelisted)
+    delivery = effective_delivery(_settings(), store)
+    assert delivery.email_lang == "en"
+
+
+def test_effective_delivery_email_lang_invalid_normalizes(store):
+    store.set_admin_delivery_preferences(
+        email_recipients=["a@b.com"], digest_hour=8, email_lang="fr"
+    )
+    delivery = effective_delivery(_settings(), store)
+    assert delivery.email_lang == "en"  # unsupported → default
+
+
 # --- effective_llm_config ---------------------------------------------------
 
 def _llm_settings(**overrides) -> Settings:
