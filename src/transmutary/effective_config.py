@@ -159,33 +159,34 @@ def effective_llm_config(
     def _resolve(tier: str) -> tuple[str, str | None, str]:
         ov = overrides.get(tier)
         up = tier.upper()
-        # api_key: env per-tier > env shared > yaml per-tier > yaml shared.
+        # Precedence: a per-tier value (env OR yaml) is more specific than any
+        # shared value, so it ALWAYS wins. Within each scope, env beats yaml.
+        #   env per-tier > yaml per-tier > env shared > yaml shared > default
+        # (A shared TRANSMUTARY_LLM_API_KEY must NOT override a yaml per-tier key —
+        #  that would force e.g. a GLM-embed tier back onto the shared chat key.)
         key = (
             (env.get(f"TRANSMUTARY_LLM_{up}_API_KEY") or None)
-            or env_key_shared
             or (ov.api_key if ov else None)
+            or env_key_shared
             or yaml_key_shared
             or ""
         )
-        # base_url: env per-tier > env shared > yaml per-tier > yaml shared.
         url = (
             (env.get(f"TRANSMUTARY_LLM_{up}_BASE_URL") or None)
-            or env_url_shared
             or (ov.base_url if ov else None)
+            or env_url_shared
             or yaml_url_shared
         )
-        # transport: env per-tier > env shared > yaml per-tier > yaml shared.
         transport = (
             (env.get(f"TRANSMUTARY_LLM_{up}_TRANSPORT") or None)
-            or env_tx_shared
             or (ov.transport if ov else None)
+            or env_tx_shared
             or yaml_tx_shared
         )
-        # model: env per-tier > env legacy > yaml per-tier > yaml shared > default.
         model = (
             (env.get(f"TRANSMUTARY_LLM_{up}_MODEL") or None)
-            or _env_model_legacy[tier]
             or (ov.model if ov else None)
+            or _env_model_legacy[tier]
             or _yaml_model_shared[tier]
             or _model_default[tier]
         )

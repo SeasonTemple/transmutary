@@ -286,3 +286,21 @@ def test_embed_empty_does_not_error_when_strong_present():
     r = effective_llm_config(s, require=True, env={})
     assert r["strong"][0] == "strong-only"
     assert r["embed"][0] == "strong-only"  # falls back to shared
+
+
+def test_yaml_per_tier_key_not_overridden_by_env_shared_key():
+    # Regression: a shared env key must NOT clobber a yaml per-tier key, else a
+    # GLM-embed tier gets forced onto the shared (MiniMax) chat key → auth error.
+    from transmutary.config import TierOverride
+    s = _llm_settings(llm_config=LLMConfig(
+        api_key="yaml-shared",
+        tier_overrides={"embed": TierOverride(
+            api_key="glm-embed-key", base_url="https://glm.test", transport="openai",
+        )},
+    ))
+    r = effective_llm_config(s, env={"TRANSMUTARY_LLM_API_KEY": "env-shared-minimax"})
+    # strong falls back to the env shared key (no per-tier override)
+    assert r["strong"][0] == "env-shared-minimax"
+    # embed keeps its yaml per-tier key — env shared does NOT win over it
+    assert r["embed"][0] == "glm-embed-key"
+    assert r["embed"][1] == "https://glm.test"
