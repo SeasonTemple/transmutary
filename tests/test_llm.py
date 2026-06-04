@@ -301,7 +301,10 @@ def test_embed_threads_credentials():
     with mock.patch.object(llm.litellm, "embedding", side_effect=_capture):
         embed(["a"], api_key="sk-x", base_url="https://gw.example.com/v1")
     assert captured["api_key"] == "sk-x"
-    assert captured["base_url"] == "https://gw.example.com/v1"
+    # litellm.embedding honors api_base (NOT base_url) — a base_url here is silently
+    # ignored and falls back to the default OpenAI endpoint. Regression guard.
+    assert captured["api_base"] == "https://gw.example.com/v1"
+    assert "base_url" not in captured
 
 
 def test_embed_provider_failure_normalized_to_llmerror():
