@@ -88,7 +88,7 @@ collect → clean → dedup → filter → report → deliver
 - **L1 → L2 → L3 funnel** — cheap keyword/rule gating (L1), then embedding-cosine *semantic grouping* of survivors (L2, representative-linkage, zero-miss), then the expensive LLM-as-judge once per group (L3). Authoritative supply-chain / release signals bypass L2; if embedding is unavailable the funnel degrades to full L3 so nothing is dropped.
 - **Deterministic API, LLM only for semantics** — external APIs run through deterministic code; the LLM only does diagnosis / relevance / summarization. Security verdicts are cross-validated against deterministic OSV/GHSA hits.
 - **Tiered scheduling** — a single resident service with internal cadences: supply-chain (minutes), releases/issues (~10 min), trends (daily).
-- **Security baseline** — untrusted external content is structurally isolated from instructions (prompt-injection defense); credentials live only in env, never persisted; SSRF allowlist with no redirects; private access-controlled artifacts.
+- **Security baseline** — untrusted external content is structurally isolated from instructions (prompt-injection defense); non-LLM credentials live only in env, the LLM key is env-or-`0600`-file (see [Credential security model](#credential-security-model)); SSRF allowlist with no redirects; private access-controlled artifacts.
 
 ## Getting started
 
@@ -123,6 +123,16 @@ export TRANSMUTARY_LLM_BASE_URL=...      # optional: OpenAI/Anthropic-compatible
 # Option 3: Dashboard Settings panel → LLM Configuration
 #           (available after starting the dashboard)
 ```
+
+### Credential security model
+
+API keys are stored the same way every comparable tool stores them (opencode, `llm`, aider, and the headless fallback of `gh` / Claude Code all do this): a **`0600` file plus an environment-variable override**, not an OS keychain.
+
+- **Non-LLM credentials** (GitHub token, SMTP, RSS) — **environment variables only**, never written to disk by transmutary.
+- **LLM key** — env var (`TRANSMUTARY_LLM_API_KEY`) takes precedence; otherwise `config/llm.yaml`, created `0600` (owner read/write only) and **gitignored**. The dashboard masks it (shows last-4) and never echoes it back.
+- **Why not an OS keychain?** transmutary is a long-lived headless service. Keychains assume an unlocked interactive session; an unattended daemon would have to store an unlock secret to open the keychain — moving the plaintext secret down a layer, not removing it, while adding D-Bus/keyring babysitting and known keychain footguns. `0600` already meets the realistic single-tenant-host threat model (it stops other users/processes; nothing in user space stops an attacker who already has code-exec as the service user — a keychain wouldn't either).
+- **Real secret management for a daemon belongs in the environment** — inject the key via systemd `EnvironmentFile=` (itself `0600`), Docker/Kubernetes secrets, or a vault sidecar, and leave `config/llm.yaml` empty. Run transmutary as a dedicated unprivileged user.
+- **Defense-in-depth in this repo** — `.env` and `config/llm.yaml` are gitignored; a `pre-commit` hook scans staged content for key patterns (`sk-…`, `ghp_…`, `github_pat_…`, PEM private keys) and blocks the commit before a secret can ever enter git history.
 
 ### Verify
 
@@ -186,7 +196,7 @@ transmutary demote owner/repo             # remove
 transmutary list-watchlist                # config repos + promoted repos, with source
 ```
 
-The effective watchlist is `config watchlist ∪ promoted_repo`. The CLI runs in a separate process and only writes the shared `promoted_repo` table; a running service's periodic **reconcile** job (every 60s) full-syncs its per-repo jobs to the effective watchlist, so a promote/demote takes effect **without restarting** the service. Promotion never touches credentials.
+The effective watchlist is `config watchlist ∪ promoted_repo`. The CLI runs in a separate process and only writes the shared `promoted_repo` table; a running service's periodic **reconcile** job (every 10 min) full-syncs its per-repo jobs to the effective watchlist, so a promote/demote takes effect **without restarting** the service. Promotion never touches credentials.
 
 ## Deployment
 

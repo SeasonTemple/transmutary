@@ -87,7 +87,7 @@ vhs assets/demo.tape
 - **清洗先于 LLM** —— 先做结构化检查（URL/内容指纹、staleness、可达性），过关内容才进 LLM 做 chunk 级相关性过滤。
 - **确定性 API、语义才 LLM** —— 外部 API 走确定性代码，LLM 只做诊断/相关性/摘要；安全裁决与确定性 OSV/GHSA 命中交叉校验。
 - **分级调度** —— 单常驻服务 + 内部分级周期：供应链分钟级、release/issue ~10 分钟、趋势日级。
-- **安全基线** —— 不可信外部内容与指令结构隔离（防 prompt injection）、凭据只走 env 不入库、SSRF allowlist 禁重定向、产物私有访问受控。
+- **安全基线** —— 不可信外部内容与指令结构隔离（防 prompt injection）、非 LLM 凭据只走 env、LLM key 走 env 或 `0600` 文件（见[凭据安全模型](#凭据安全模型)）、SSRF allowlist 禁重定向、产物私有访问受控。
 
 ## 快速开始
 
@@ -122,6 +122,16 @@ export TRANSMUTARY_LLM_BASE_URL=...      # 可选：OpenAI/Anthropic-compatible 
 # 方式 3：Dashboard Settings 面板 → LLM Configuration
 #           （启动 dashboard 后可用）
 ```
+
+### 凭据安全模型
+
+API key 的存储方式与同类工具一致（opencode、`llm`、aider，以及 `gh` / Claude Code 的 headless 降级路径都这么做）：**`0600` 文件 + 环境变量覆盖**，而非 OS keychain。
+
+- **非 LLM 凭据**（GitHub token、SMTP、RSS）—— **仅环境变量**，transmutary 不落盘。
+- **LLM key** —— 环境变量 `TRANSMUTARY_LLM_API_KEY` 优先；否则 `config/llm.yaml`，创建为 `0600`（仅属主读写）且 **gitignored**。dashboard 掩码显示（仅末 4 位），不回显。
+- **为何不用 OS keychain？** transmutary 是长驻 headless 服务。keychain 假定有解锁的交互式会话；无人值守的 daemon 要存"解锁密钥"才能开 keychain——把明文密钥下移一层而非消除，还多 D-Bus/keyring 维护负担和已知 keychain footgun。`0600` 已满足单租户主机的真实威胁模型（挡其他用户/进程；用户态没有任何方案能挡已拿到服务用户 code-exec 的攻击者——keychain 也挡不了）。
+- **daemon 的真正密钥管理在环境层** —— 用 systemd `EnvironmentFile=`（本身 `0600`）、Docker/Kubernetes secret 或 vault sidecar 注入 key，让 `config/llm.yaml` 留空。以专用非特权用户运行 transmutary。
+- **本仓纵深防御** —— `.env` 和 `config/llm.yaml` 已 gitignore；`pre-commit` hook 扫描暂存内容的 key 模式（`sk-…`、`ghp_…`、`github_pat_…`、PEM 私钥），在 secret 进入 git 历史前拦截提交。
 
 ### 验证
 
@@ -185,7 +195,7 @@ transmutary demote owner/repo             # 移除
 transmutary list-watchlist                # config 仓 + 晋升仓，标注来源
 ```
 
-有效关注清单 = `config 关注清单 ∪ promoted_repo`。CLI 是独立进程，只写共享的 `promoted_repo` 表；运行中的 service 由周期性 **reconcile** job（每 60 秒）把逐仓 job 全量同步到有效清单，因此 promote/demote **无需重启** service 即生效。晋升不碰任何凭据。
+有效关注清单 = `config 关注清单 ∪ promoted_repo`。CLI 是独立进程，只写共享的 `promoted_repo` 表；运行中的 service 由周期性 **reconcile** job（每 10 分钟）把逐仓 job 全量同步到有效清单，因此 promote/demote **无需重启** service 即生效。晋升不碰任何凭据。
 
 ## 部署
 
