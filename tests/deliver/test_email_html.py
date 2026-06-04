@@ -28,11 +28,31 @@ def test_html_renders_markdown_body():
     assert '<a href="https://x.test">advisory</a>' in html
 
 
-def test_html_has_bilingual_sections_with_lang():
+def test_html_default_is_english_only():
+    # Single-language push: default (en) renders English, NOT the Chinese body.
     html = render_email_html(_report())
     assert 'lang="en"' in html
+    assert 'lang="zh-CN"' not in html
+    assert "中文正文" not in html
+
+
+def test_html_zh_renders_chinese_only():
+    html = render_email_html(_report(), lang="zh")
     assert 'lang="zh-CN"' in html
     assert "中文正文" in html
+    assert "Root cause" not in html  # English body absent
+
+
+def test_html_zh_falls_back_to_english_when_no_translation():
+    html = render_email_html(_report(body_zh=None), lang="zh")
+    assert "Root cause" in html  # no zh body → English fallback, never blank
+    assert 'lang="en"' in html
+
+
+def test_html_timestamp_is_human_readable_not_raw_iso():
+    html = render_email_html(_report())
+    assert "2026-06-04 10:00 UTC" in html
+    assert "2026-06-04T10:00:00+00:00" not in html
 
 
 def test_html_severity_is_text_not_color_only():
@@ -55,11 +75,20 @@ def test_html_cjk_font_stack_present():
     assert "PingFang SC" in html or "Noto Sans CJK" in html
 
 
-def test_text_fallback_has_both_languages_and_sources():
+def test_text_fallback_single_language_and_sources():
+    # Default (en): English body + sources, NOT the Chinese body.
     txt = render_email_text(_report())
     assert "Root cause" in txt
-    assert "中文正文" in txt
+    assert "中文正文" not in txt
     assert "GHSA-x" in txt
+    # source timestamp formatted, not a raw float/ISO
+    assert "2026-06-04 10:00 UTC" in txt
+
+
+def test_text_fallback_zh_renders_chinese():
+    txt = render_email_text(_report(), lang="zh")
+    assert "中文正文" in txt
+    assert "Root cause" not in txt
 
 
 def test_build_message_is_multipart_alternative():

@@ -22,14 +22,16 @@ class EmailDeliveryError(Exception):
     """Raised when the SMTP send fails. Caught by the router (RSS still delivered)."""
 
 
-def _build_message(report: Report, *, sender: str, recipients: list[str]) -> EmailMessage:
+def _build_message(
+    report: Report, *, sender: str, recipients: list[str], lang: str = "en"
+) -> EmailMessage:
     msg = EmailMessage()
     msg["Subject"] = f"[transmutary/{report.severity.value}] {report.title}"
     msg["From"] = sender
     msg["To"] = ", ".join(recipients)
     # multipart/alternative (R5): plain-text fallback + rendered HTML body.
-    msg.set_content(render_email_text(report))
-    msg.add_alternative(render_email_html(report), subtype="html")
+    msg.set_content(render_email_text(report, lang=lang))
+    msg.add_alternative(render_email_html(report, lang=lang), subtype="html")
     return msg
 
 
@@ -44,6 +46,7 @@ def send_report(
     use_tls: bool = True,
     use_ssl: bool = False,
     smtp_factory=None,
+    lang: str = "en",
 ) -> None:
     """Send ``report`` to ``recipients`` over SMTP.
 
@@ -65,7 +68,7 @@ def send_report(
     """
     if not recipients:
         raise EmailDeliveryError("no recipients configured")
-    msg = _build_message(report, sender=smtp_user, recipients=recipients)
+    msg = _build_message(report, sender=smtp_user, recipients=recipients, lang=lang)
     _send_message(
         msg, smtp_user=smtp_user, smtp_password=smtp_password, host=host,
         port=port, use_tls=use_tls, use_ssl=use_ssl, smtp_factory=smtp_factory,

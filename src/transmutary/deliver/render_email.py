@@ -19,8 +19,12 @@ from __future__ import annotations
 
 from html import escape
 
-from ..report.render import render_markdown
+from ..report.render import fmt_timestamp, localized_body, render_markdown
 from ..report.schema import Report
+
+# Mirrors dashboard.i18n.DEFAULT_LANG. Kept as a literal so the delivery layer
+# does not import upward into the dashboard presentation layer.
+_DEFAULT_LANG = "en"
 
 _FONT = (
     "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',"
@@ -35,19 +39,24 @@ _SEV_STYLE = {
 }
 
 
-def _section(title: str, body_md: str | None, lang: str) -> str:
+def _section(body_md: str | None, lang_attr: str) -> str:
     if not body_md:
         return ""
     inner = render_markdown(body_md)
     return (
-        f'<article lang="{lang}" style="margin:0 0 1.5rem;line-height:1.75;'
+        f'<article lang="{lang_attr}" style="margin:0 0 1.5rem;line-height:1.75;'
         f'word-break:break-word;overflow-wrap:anywhere;">'
         f'<div>{inner}</div></article>'
     )
 
 
-def render_email_html(report: Report) -> str:
-    """Render a Report into a standalone HTML email body (R5/R8/R9)."""
+def render_email_html(report: Report, *, lang: str = _DEFAULT_LANG) -> str:
+    """Render a Report into a standalone HTML email body (R5/R8/R9).
+
+    Single-language (``lang``): email is a push, so it carries ONE language (the
+    dashboard report view and RSS keep both). ``lang="zh"`` falls back to English
+    when no translation exists.
+    """
     sev = report.severity.value
     sev_style = _SEV_STYLE.get(sev, _SEV_STYLE["normal"])
     title = escape(report.title)
@@ -58,8 +67,8 @@ def render_email_html(report: Report) -> str:
         f'font-size:.78rem;font-weight:600;{sev_style}">'
         f'{escape(sev.upper())}</span>'
     )
-    en = _section("English", report.body_md, "en")
-    zh = _section("中文", report.body_md_zh, "zh-CN")
+    body_md, lang_attr = localized_body(report, lang)
+    body_html = _section(body_md, lang_attr)
     sources_html = ""
     if report.sources:
         items = "".join(
@@ -82,22 +91,22 @@ def render_email_html(report: Report) -> str:
         f'<div style="margin:0 0 .75rem;">{badge}</div>'
         f'<h1 style="font-size:1.4rem;line-height:1.3;margin:0 0 .35rem;">{title}</h1>'
         f'<p style="margin:0 0 1.25rem;color:#636c76;font-size:.9rem;">'
-        f'<code>{repo}</code> &middot; {escape(report.created_at)}</p>'
-        f"{en}{zh}{sources_html}"
+        f'<code>{repo}</code> &middot; {escape(fmt_timestamp(report.created_at))}</p>'
+        f"{body_html}{sources_html}"
         f"</div></main></body></html>"
     )
 
 
-def render_email_text(report: Report) -> str:
-    """Plain-text email fallback: English MD + Chinese MD + sources."""
-    parts = [report.body_md or ""]
-    if report.body_md_zh:
-        parts.append("\n\n## 中文\n\n" + report.body_md_zh)
+def render_email_text(report: Report, *, lang: str = _DEFAULT_LANG) -> str:
+    """Plain-text email fallback: single-language body + sources."""
+    body_md, _ = localized_body(report, lang)
+    parts = [body_md or ""]
     if report.sources:
         parts.append(
             "\n\nSources:\n"
             + "\n".join(
-                f"- {s.source_id}: {s.url} (fetched {s.fetched_at})" for s in report.sources
+                f"- {s.source_id}: {s.url} (fetched {fmt_timestamp(s.fetched_at)})"
+                for s in report.sources
             )
         )
     return "".join(parts)

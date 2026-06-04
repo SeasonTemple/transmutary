@@ -44,6 +44,7 @@ class OutboundDelivery:
     smtp_use_tls: bool = True
     smtp_use_ssl: bool = False
     smtp_factory: object | None = None  # test seam
+    email_lang: str = "en"  # single-language outbound email (mirrors DEFAULT_LANG)
 
 
 @dataclass
@@ -144,6 +145,7 @@ def _deliver_outbound(
                 use_tls=outbound.smtp_use_tls,
                 use_ssl=outbound.smtp_use_ssl,
                 smtp_factory=outbound.smtp_factory,
+                lang=outbound.email_lang,
             )
             result.email_sent = True
         except email_mod.EmailDeliveryError as exc:

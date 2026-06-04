@@ -147,6 +147,12 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="field recipients-field"><span data-i18n="email_recipients">{{ t['email_recipients'] }}</span><textarea name="email_recipients">{{ settings_view.email_recipients | join('\n') }}</textarea></label>
       <label class="field hour-field"><span data-i18n="digest_hour">{{ t['digest_hour'] }}</span><input name="digest_hour" inputmode="numeric" value="{{ settings_view.digest_hour }}"></label>
+      <label class="field"><span data-i18n="email_lang">{{ t['email_lang'] }}</span>
+        <select name="email_lang">
+          <option value="en" {% if email_lang_selected == 'en' %}selected{% endif %} data-i18n="email_lang_en">{{ t['email_lang_en'] }}</option>
+          <option value="zh" {% if email_lang_selected == 'zh' %}selected{% endif %} data-i18n="email_lang_zh">{{ t['email_lang_zh'] }}</option>
+        </select>
+      </label>
       <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
     </form>
   </section>

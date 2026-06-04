@@ -140,6 +140,14 @@ def test_delivery_optional_fields_default_when_absent():
     assert d.artifact_root == "./var/artifacts"
     assert d.token_max_age_days == 90
     assert d.digest_hour == 9
+    assert d.email_lang == "en"  # default
+
+
+def test_delivery_email_lang_parsed_and_whitelisted():
+    assert parse_delivery({**_REQUIRED_DELIVERY, "email_lang": "zh"}).email_lang == "zh"
+    # unsupported value normalizes to the default, never raises
+    assert parse_delivery({**_REQUIRED_DELIVERY, "email_lang": "fr"}).email_lang == "en"
+    assert parse_delivery({**_REQUIRED_DELIVERY, "email_lang": 42}).email_lang == "en"
 
 
 def test_delivery_email_recipients_single_string_normalized():

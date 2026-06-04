@@ -84,6 +84,7 @@ class AdminDependencyEdge:
 class AdminDeliveryPreferences:
     email_recipients: list[str] | None = None
     digest_hour: int | None = None
+    email_lang: str | None = None
 
 
 _SCHEMA = """
@@ -576,6 +577,7 @@ class StateStore:
         *,
         email_recipients: list[str] | None = None,
         digest_hour: int | None = None,
+        email_lang: str | None = None,
     ) -> None:
         now = time.time()
         rows: list[tuple[str, str, float]] = []
@@ -586,8 +588,10 @@ class StateStore:
             rows.append(("email_recipients", "\n".join(clean_recipients), now))
         if digest_hour is not None:
             rows.append(("digest_hour", str(int(digest_hour)), now))
+        if email_lang is not None:
+            rows.append(("email_lang", str(email_lang), now))
         with self._lock:
-            for key in ("email_recipients", "digest_hour"):
+            for key in ("email_recipients", "digest_hour", "email_lang"):
                 self._conn.execute(
                     "DELETE FROM admin_delivery_preference WHERE key=?", (key,)
                 )
@@ -602,7 +606,7 @@ class StateStore:
         with self._lock:
             cur = self._conn.execute(
                 "SELECT key, value FROM admin_delivery_preference "
-                "WHERE key IN ('email_recipients', 'digest_hour')"
+                "WHERE key IN ('email_recipients', 'digest_hour', 'email_lang')"
             )
             values = {r["key"]: r["value"] for r in cur.fetchall()}
         recipients = None
@@ -616,6 +620,7 @@ class StateStore:
         return AdminDeliveryPreferences(
             email_recipients=recipients,
             digest_hour=digest_hour,
+            email_lang=values.get("email_lang"),
         )
 
     # ------------------------------------------------------------------

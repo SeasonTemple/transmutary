@@ -177,6 +177,9 @@ class Delivery:
     # Where the Atom feed is written; when None, the pipeline derives
     # ``<artifact_root>/_feed`` (U2). Kept optional so config stays minimal.
     feed_dir: str | None = None
+    # Language for outbound email (single-language push; the dashboard/RSS keep
+    # both). One of SUPPORTED_EMAIL_LANGS; admin override > yaml > default.
+    email_lang: str = "en"
 
 
 @dataclass(frozen=True)
@@ -296,6 +299,20 @@ def _parse_recipients(raw: object) -> list[str]:
     )
 
 
+# Outbound-email language whitelist. Mirrors dashboard.i18n.SUPPORTED_LANGS /
+# DEFAULT_LANG but defined here (lowest layer) so config does not import upward
+# into the dashboard. Any value outside the set normalizes to the default.
+SUPPORTED_EMAIL_LANGS = ("en", "zh")
+DEFAULT_EMAIL_LANG = "en"
+
+
+def normalize_email_lang(value: object) -> str:
+    """Whitelist an email-language value; anything unsupported → default."""
+    if isinstance(value, str) and value in SUPPORTED_EMAIL_LANGS:
+        return value
+    return DEFAULT_EMAIL_LANG
+
+
 def parse_delivery(data: dict) -> Delivery:
     try:
         return Delivery(
@@ -308,6 +325,7 @@ def parse_delivery(data: dict) -> Delivery:
             smtp_port=int(data.get("smtp_port", 587)),
             smtp_use_ssl=bool(data.get("smtp_use_ssl", False)),
             feed_dir=(str(data["feed_dir"]) if data.get("feed_dir") else None),
+            email_lang=normalize_email_lang(data.get("email_lang")),
         )
     except KeyError as exc:
         raise ConfigError(f"delivery config missing required key: {exc}") from exc

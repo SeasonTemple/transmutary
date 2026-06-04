@@ -1655,3 +1655,50 @@ def test_settings_llm_post_discards_crafted_per_tier_locked_key(monkeypatch):
         saved = load_llm_config(config_dir)
         assert saved.api_key == "sk-shared"
         assert saved.tier_overrides["embed"].api_key == "sk-embed-stored"
+
+
+# --- email language selector (single-language delivery) ----------------------
+
+
+def test_settings_delivery_email_lang_persisted():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        csrf = _login(client)
+        resp = client.post(
+            "/settings/delivery",
+            data={"csrf_token": csrf, "digest_hour": "8", "email_lang": "zh"},
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert write_store.get_admin_delivery_preferences().email_lang == "zh"
+        # selector reflects the stored choice on reload
+        page = client.get("/settings").text
+        assert '<option value="zh" selected' in page
+
+
+def test_settings_delivery_email_lang_defaults_to_dashboard_lang():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        _login(client)
+        # no stored pref → pre-select the viewer's dashboard language (zh cookie)
+        client.cookies.set("tmtry-lang", "zh")
+        page = client.get("/settings").text
+        assert '<option value="zh" selected' in page
+
+
+def test_settings_delivery_invalid_email_lang_normalized():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        csrf = _login(client)
+        resp = client.post(
+            "/settings/delivery",
+            data={"csrf_token": csrf, "digest_hour": "8", "email_lang": "fr"},
+            headers={"origin": "http://localhost"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303  # not a 400; normalized
+        assert write_store.get_admin_delivery_preferences().email_lang == "en"

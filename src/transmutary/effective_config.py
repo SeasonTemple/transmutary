@@ -16,6 +16,7 @@ from .config import (
     DependencyEdge,
     Settings,
     TrendScope,
+    normalize_email_lang,
 )
 from .store.state import StateStore
 
@@ -92,6 +93,10 @@ def effective_delivery(settings: Settings, store: StateStore | None) -> Delivery
         ),
         smtp_host=base.smtp_host,
         feed_dir=base.feed_dir,
+        # admin override > yaml > default (whitelisted).
+        email_lang=normalize_email_lang(
+            prefs.email_lang if prefs.email_lang is not None else base.email_lang
+        ),
     )
 
 

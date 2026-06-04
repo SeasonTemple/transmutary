@@ -42,7 +42,7 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 
-from ..config import Settings, load_llm_config
+from ..config import Settings, load_llm_config, normalize_email_lang
 from ..effective_config import llm_env_locks
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
@@ -276,6 +276,10 @@ def make_dashboard_app(
             return _write_disabled()
         view = data.build_admin_settings(settings, write_store, secret_env=_secret_env())
         llm_cfg = load_llm_config(config_dir)
+        # Email-language selector: stored admin pref if set, else "follow the
+        # dashboard" — pre-select the viewer's current dashboard language.
+        stored_lang = write_store.get_admin_delivery_preferences().email_lang
+        email_lang_selected = stored_lang or _lang(request)
         return templates.TemplateResponse(
             request=request,
             name="settings.html",
@@ -289,6 +293,7 @@ def make_dashboard_app(
                     "form_repo": form_repo,
                     "llm_config": llm_cfg,
                     "llm_env_locks": llm_env_locks(),
+                    "email_lang_selected": email_lang_selected,
                 },
             ),
             status_code=status_code,
@@ -551,9 +556,12 @@ def make_dashboard_app(
             return _render_settings(
                 request, error_key="error_invalid_email", status_code=400
             )
+        # email_lang: whitelist (unsupported values normalize to the default).
+        email_lang = normalize_email_lang(form.get("email_lang", ""))
         write_store.set_admin_delivery_preferences(
             email_recipients=recipients,
             digest_hour=digest_hour,
+            email_lang=email_lang,
         )
         return _settings_redirect("delivery")
 
