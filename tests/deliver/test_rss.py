@@ -59,19 +59,34 @@ def test_digest_feed_multiple_entries():
     assert xml.count("<entry") == 2
 
 
-# --- Bilingual RSS entries (R8) ----------------------------------------------
+# --- Single-language RSS entries (delivery localization) ---------------------
 
-def test_rss_entry_includes_zh_body():
+def test_rss_entry_zh_renders_chinese_only():
     r = _report()
     r.body_md_zh = "疑似根因：上游发布。"
-    xml = render_single(r)
+    r.title_zh = "中文标题"
+    xml = render_single(r, lang="zh")
     assert "疑似根因" in xml
-    assert "## 中文" in xml
+    assert "## 中文" not in xml  # no bilingual stacking
+    assert "Suspected root cause" not in xml  # English body absent
+    assert "中文标题" in xml  # localized title
+    assert 'xml:lang="zh-CN"' in xml  # feed language follows
+    assert "来源:" in xml  # localized Sources label
 
 
-def test_rss_entry_without_zh_body_unchanged():
+def test_rss_entry_default_english_single_language():
     r = _report()
-    assert r.body_md_zh is None
-    xml = render_single(r)
-    assert "## 中文" not in xml
+    r.body_md_zh = "疑似根因：上游发布。"
+    xml = render_single(r)  # default en
     assert "Suspected root cause" in xml
+    assert "疑似根因" not in xml  # zh body absent in en feed
+    assert 'xml:lang="en"' in xml
+
+
+def test_rss_fetched_at_formatted_not_raw():
+    import re
+    xml = render_single(_report())
+    content = re.search(r"<content[^>]*>(.*?)</content>", xml, re.S).group(1)
+    # the source line carries a human date, not the old "(fetched <iso/float>)"
+    assert "(2026-05-29 10:00 UTC)" in content
+    assert "fetched " not in content

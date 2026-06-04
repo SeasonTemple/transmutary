@@ -674,7 +674,7 @@ def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
     # RSS digest feed (batch) — reuse the existing multi-report renderer.
     if rt.outbound.feed_dir is not None:
         os.makedirs(rt.outbound.feed_dir, exist_ok=True)
-        xml = rss_mod.render_feed(reports, feed_name="digest", title="transmutary digest")
+        xml = rss_mod.render_feed(reports, feed_name="digest", lang=lang)
         feed_path = os.path.join(rt.outbound.feed_dir, "digest.atom.xml")
         with open(feed_path, "w", encoding="utf-8") as fh:
             fh.write(xml)
