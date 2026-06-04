@@ -117,7 +117,7 @@ a:focus-visible, summary:focus-visible, button:focus-visible {
 details > summary.sec { cursor: pointer; }
 
 /* severity stream */
-.stream { display: flex; flex-direction: column; gap: .5rem; }
+.stream { display: flex; flex-direction: column; gap: .5rem; max-height: 30rem; overflow-y: auto; }
 .row {
   display: grid; grid-template-columns: auto auto auto 1fr auto auto;
   grid-template-areas: "bar ic pill title repo action";
@@ -407,6 +407,18 @@ pre {
   overflow: auto;
 }
 .table-shell .tbl thead th { background: var(--bg-surface); }
+/* Scroll-bounded recent-reports table (R6): cap height, sticky header. */
+.reports-scroll { max-height: 30rem; overflow-y: auto; }
+.reports-scroll .tbl thead th { position: sticky; top: 0; z-index: 1; }
+/* Scrollbar styling, theme-aware (R6 polish). */
+.stream, .reports-scroll { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.stream::-webkit-scrollbar, .reports-scroll::-webkit-scrollbar { width: 8px; }
+.stream::-webkit-scrollbar-thumb, .reports-scroll::-webkit-scrollbar-thumb {
+  background: var(--border); border-radius: 4px;
+}
+.stream::-webkit-scrollbar-thumb:hover, .reports-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
 .runtime-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: .9rem; }
 .runtime-grid code { white-space: normal; word-break: break-word; }
 
