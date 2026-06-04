@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+# pre-commit secret gate — block obvious credential leaks before they enter a
+# commit. Defence-in-depth behind .gitignore: a gitignore miss (the 2026-06
+# config/llm.yaml leak) should still be caught here. Skip: git commit --no-verify
+
+set -e
+
+# Scan only what is STAGED (added/changed), diff against the index.
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+# Secret patterns: provider key prefixes + PEM private keys. Tuned to be
+# specific (low false-positive) — extend as new providers appear.
+pattern='sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|gho_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+
+hits=""
+for f in $staged; do
+  # Skip example/template files (placeholders, not real secrets).
+  case "$f" in
+    *.example|*.example.*|*.sample|.env.example) continue ;;
+  esac
+  [ -f "$f" ] || continue
+  if git show ":$f" 2>/dev/null | grep -nE "$pattern" >/dev/null 2>&1; then
+    hits="$hits $f"
+  fi
+done
+
+if [ -n "$hits" ]; then
+  echo "✗ pre-commit: possible secret(s) in staged files:" >&2
+  for f in $hits; do echo "    $f" >&2; done
+  echo "  If this is a real credential, DO NOT commit — store it in an" >&2
+  echo "  untracked file (.env / config/llm.yaml are gitignored) or env var." >&2
+  echo "  False positive? Re-run with: git commit --no-verify" >&2
+  exit 1
+fi
+
+exit 0
