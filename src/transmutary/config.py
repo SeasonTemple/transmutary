@@ -172,6 +172,8 @@ class Delivery:
     # an RSS-only deployment (the email leg is simply not activated downstream).
     email_recipients: list[str] = field(default_factory=list)
     smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_use_ssl: bool = False
     # Where the Atom feed is written; when None, the pipeline derives
     # ``<artifact_root>/_feed`` (U2). Kept optional so config stays minimal.
     feed_dir: str | None = None
@@ -286,6 +288,8 @@ def parse_delivery(data: dict) -> Delivery:
             digest_hour=int(data.get("digest_hour", 9)),
             email_recipients=_parse_recipients(data.get("email_recipients")),
             smtp_host=(str(data["smtp_host"]) if data.get("smtp_host") else None),
+            smtp_port=int(data.get("smtp_port", 587)),
+            smtp_use_ssl=bool(data.get("smtp_use_ssl", False)),
             feed_dir=(str(data["feed_dir"]) if data.get("feed_dir") else None),
         )
     except KeyError as exc:

@@ -165,6 +165,9 @@ def build_runtime(
         feed_dir=feed_dir,
         email_recipients=list(delivery.email_recipients) if email_configured else [],
         smtp_host=delivery.smtp_host,
+        smtp_port=delivery.smtp_port,
+        smtp_use_ssl=delivery.smtp_use_ssl,
+        smtp_use_tls=not delivery.smtp_use_ssl,
         smtp_user=(creds.smtp_user if creds is not None else None),
         smtp_password=(creds.smtp_password if creds is not None else None),
     )

@@ -42,6 +42,7 @@ class OutboundDelivery:
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_use_tls: bool = True
+    smtp_use_ssl: bool = False
     smtp_factory: object | None = None  # test seam
 
 
@@ -141,6 +142,7 @@ def _deliver_outbound(
                 host=outbound.smtp_host or "localhost",
                 port=outbound.smtp_port,
                 use_tls=outbound.smtp_use_tls,
+                use_ssl=outbound.smtp_use_ssl,
                 smtp_factory=outbound.smtp_factory,
             )
             result.email_sent = True

@@ -44,15 +44,22 @@ def send_report(
     host: str,
     port: int = 587,
     use_tls: bool = True,
+    use_ssl: bool = False,
     smtp_factory=None,
 ) -> None:
     """Send ``report`` to ``recipients`` over SMTP.
+
+    Two connection modes (R14/KTD-D):
+      * ``use_ssl=True`` → implicit TLS via ``SMTP_SSL`` (port 465).
+      * else ``use_tls=True`` → STARTTLS upgrade on a plain ``SMTP`` (port 587).
+    Gmail app passwords are shown in 4-space-separated groups; we strip
+    whitespace so a pasted "xxxx xxxx xxxx xxxx" still authenticates.
 
     Args:
         smtp_user / smtp_password: credentials sourced from env (R21). Passed in by
             the caller (which reads them from ``Credentials``); never read from
             disk here, never logged.
-        host / port / use_tls: SMTP server connection settings (non-secret config).
+        host / port / use_tls / use_ssl: SMTP connection settings (non-secret).
         smtp_factory: test seam returning an object with the smtplib.SMTP API.
 
     Raises:
@@ -60,12 +67,18 @@ def send_report(
     """
     if not recipients:
         raise EmailDeliveryError("no recipients configured")
+    smtp_password = smtp_password.replace(" ", "")  # Gmail app-password groups
     msg = _build_message(report, sender=smtp_user, recipients=recipients)
-    factory = smtp_factory if smtp_factory is not None else (lambda: smtplib.SMTP(host, port))
+    if smtp_factory is not None:
+        factory = smtp_factory
+    elif use_ssl:
+        factory = lambda: smtplib.SMTP_SSL(host, port)  # noqa: E731
+    else:
+        factory = lambda: smtplib.SMTP(host, port)  # noqa: E731
     try:
         smtp = factory()
         try:
-            if use_tls:
+            if use_tls and not use_ssl:
                 smtp.starttls()
             smtp.login(smtp_user, smtp_password)
             smtp.send_message(msg)
