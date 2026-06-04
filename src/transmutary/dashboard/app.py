@@ -562,23 +562,35 @@ def make_dashboard_app(
             return denied
         from ..config import LLMConfig, TierOverride, save_llm_config
 
-        def _real(v: str) -> str | None:
-            # A masked echo (contains "****") means the user didn't change it →
-            # treat as "keep existing", represented here as None (no override).
-            v = (v or "").strip()
-            return None if (not v or "****" in v) else v
+        # Existing config: a masked "****" echo means "keep the stored value"
+        # (we never round-trip the real key to the browser, so the form can't
+        # send it back). Resolve masked → existing real value here.
+        existing = load_llm_config(config_dir)
 
-        api_key = form.get("api_key", "").strip()
+        def _real_or_keep(v: str, existing_val: str | None) -> str | None:
+            v = (v or "").strip()
+            if not v:
+                return None
+            if "****" in v:  # unchanged masked echo → keep stored value
+                return existing_val
+            return v
+
+        existing_shared_key = existing.api_key if existing else None
+        api_key = _real_or_keep(form.get("api_key", ""), existing_shared_key) or ""
         base_url = form.get("base_url", "").strip() or None
         transport = form.get("transport", "").strip() or None
         model_strong = form.get("model_strong", "").strip() or None
         model_cheap = form.get("model_cheap", "").strip() or None
         model_embed = form.get("model_embed", "").strip() or None
-        # Per-tier overrides (advanced). Masked key echoes are treated as "unset".
+        # Per-tier overrides (advanced). Masked key echo → keep stored per-tier key.
+        existing_overrides = existing.tier_overrides if existing else {}
         tier_overrides: dict[str, TierOverride] = {}
         for tier in ("strong", "cheap", "embed"):
+            ex = existing_overrides.get(tier)
             ov = TierOverride(
-                api_key=_real(form.get(f"{tier}_api_key", "")),
+                api_key=_real_or_keep(
+                    form.get(f"{tier}_api_key", ""), ex.api_key if ex else None
+                ),
                 base_url=(form.get(f"{tier}_base_url", "").strip() or None),
                 transport=(form.get(f"{tier}_transport", "").strip() or None),
                 model=(form.get(f"{tier}_model", "").strip() or None),
