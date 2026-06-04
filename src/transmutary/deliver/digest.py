@@ -15,12 +15,11 @@ from __future__ import annotations
 
 from html import escape
 
-from ..report.render import localized_body, render_markdown
+from ..i18n import DEFAULT_LANG as _DEFAULT_LANG
+from ..i18n import HTML_LANG, delivery_strings
+from ..report.render import localized_body, localized_title, render_markdown
 from ..report.schema import Report, Severity
 from ..store.artifacts import ArtifactStore
-
-# Mirrors dashboard.i18n.DEFAULT_LANG (kept literal — no upward import).
-_DEFAULT_LANG = "en"
 
 WINDOW_SECONDS = 24 * 60 * 60
 
@@ -78,7 +77,7 @@ def _report_block(report: Report, lang: str) -> str:
         f'<div style="margin:0 0 .5rem;">{badge} '
         f'<code style="color:#636c76;font-size:.82rem;">{escape(report.repo)}</code></div>'
         f'<h2 style="font-size:1.15rem;line-height:1.3;margin:0 0 .5rem;">'
-        f"{escape(report.title)}</h2>"
+        f"{escape(localized_title(report, lang))}</h2>"
         f'<article lang="{lang_attr}" style="line-height:1.7;word-break:break-word;">'
         f"{body}</article></article>"
     )
@@ -92,21 +91,23 @@ def render_digest_html(
     Single-language (``lang``): one language per report (the dashboard/RSS keep
     both). ``lang="zh"`` falls back to English where no translation exists.
     """
+    strings = delivery_strings(lang)
     urgent = sum(1 for r in reports if r.severity.is_urgent)
-    overview = (
-        f"{len(reports)} report(s) in the last 24h"
-        f"{f' — {urgent} high-risk' if urgent else ''}"
+    overview = strings["digest_overview"].format(n=len(reports)) + (
+        strings["digest_high_risk"].format(n=urgent) if urgent else ""
     )
+    title_label = strings["daily_digest"]
     blocks = "".join(_report_block(r, lang) for r in reports) or (
-        '<p style="color:#636c76;">No reports in the last 24h.</p>'
+        f'<p style="color:#636c76;">{escape(strings["no_reports"])}</p>'
     )
     return (
-        f'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
+        f'<!DOCTYPE html><html lang="{HTML_LANG.get(lang, "en")}"><head><meta charset="utf-8">'
         f'<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f"<title>Daily Digest {escape(date_label)}</title></head>"
+        f"<title>{escape(title_label)} {escape(date_label)}</title></head>"
         f'<body style="margin:0;padding:0;background:#f6f8fa;font-family:{_FONT};color:#1f2328;">'
         f'<main style="max-width:720px;margin:0 auto;padding:1.5rem;">'
-        f'<h1 style="font-size:1.5rem;margin:0 0 .25rem;">Daily Digest {escape(date_label)}</h1>'
+        f'<h1 style="font-size:1.5rem;margin:0 0 .25rem;">'
+        f"{escape(title_label)} {escape(date_label)}</h1>"
         f'<p style="color:#636c76;margin:0 0 1.5rem;font-size:.9rem;">{escape(overview)}</p>'
         f"{blocks}</main></body></html>"
     )
@@ -116,10 +117,15 @@ def render_digest_text(
     reports: list[Report], *, date_label: str, lang: str = _DEFAULT_LANG
 ) -> str:
     """Plain-text digest fallback (single-language body per report)."""
-    lines = [f"Daily Digest {date_label}", f"{len(reports)} report(s) in the last 24h", ""]
+    strings = delivery_strings(lang)
+    lines = [
+        f"{strings['daily_digest']} {date_label}",
+        strings["digest_overview"].format(n=len(reports)),
+        "",
+    ]
     for r in reports:
         body_md, _ = localized_body(r, lang)
-        lines.append(f"[{r.severity.value.upper()}] {r.repo} — {r.title}")
+        lines.append(f"[{r.severity.value.upper()}] {r.repo} — {localized_title(r, lang)}")
         lines.append(body_md)
         lines.append("\n---\n")
     return "\n".join(lines)

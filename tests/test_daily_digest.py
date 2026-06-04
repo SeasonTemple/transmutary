@@ -122,6 +122,17 @@ def test_digest_sends_email_when_configured():
         assert "Daily Digest" in msg["Subject"]
 
 
+def test_digest_subject_localized_zh():
+    with tempfile.TemporaryDirectory() as tmp:
+        rt, artifacts, rec = _runtime(
+            tmp, recipients=["x@y.test"], smtp_host="smtp.test", email_lang="zh"
+        )
+        artifacts.write(_report("a/b", "Alert", Severity.CRITICAL), ts=10_000)
+        run_daily_digest(rt, now_ts=10_500)
+        assert "每日摘要" in rec.sent[0]["Subject"]
+        assert "Daily Digest" not in rec.sent[0]["Subject"]
+
+
 def test_digest_no_email_without_recipients():
     with tempfile.TemporaryDirectory() as tmp:
         rt, artifacts, rec = _runtime(tmp, recipients=())

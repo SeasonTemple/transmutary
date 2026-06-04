@@ -685,7 +685,10 @@ def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
     if ob.email_recipients and ob.smtp_user:
         try:
             email_mod.send_html(
-                subject=f"[transmutary] Daily Digest {date_label}",
+                subject=(
+                    f"[transmutary] "
+                    f"{digest_mod.delivery_strings(lang)['daily_digest']} {date_label}"
+                ),
                 text_body=text,
                 html_body=html,
                 recipients=list(ob.email_recipients),
