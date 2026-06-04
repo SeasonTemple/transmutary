@@ -57,14 +57,22 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ steps.release.outputs.tag }}
 
-      - name: Publish | Apply curated bilingual release notes
+      - name: Publish | Apply curated bilingual release notes (graceful)
         if: steps.release.outputs.released == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          python tools/release_notes.py check "$RELEASE_TAG"
-          gh release edit "$RELEASE_TAG" --notes-file "docs/release-notes/$RELEASE_TAG.md"
+          # Missing curated note → warn + keep semantic-release's auto notes (exit 0);
+          # present-but-invalid note → fail (quality gate). Either way this step must
+          # not block the Docker steps below.
+          python tools/release_notes.py check "$RELEASE_TAG" --allow-missing
+          NOTE_FILE="docs/release-notes/$RELEASE_TAG.md"
+          if [ -f "$NOTE_FILE" ]; then
+            gh release edit "$RELEASE_TAG" --notes-file "$NOTE_FILE"
+          else
+            echo "No curated note for $RELEASE_TAG; leaving auto-generated release notes."
+          fi
 
       - name: Docker | Checkout released tag
         id: released_ref
