@@ -33,6 +33,7 @@ from .effective_config import effective_delivery
 from .pipeline import (
     PipelineRuntime,
     build_runtime,
+    run_daily_digest,
     run_release_issue_tick,
     run_security_tick,
     run_trend_tick,
@@ -247,6 +248,17 @@ def register_pipeline_jobs(
         trigger="cron",
         hour=delivery.digest_hour,
         id="trend",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+
+    # --- daily-digest: aggregate last 24h reports → HTML + RSS + email (R10) ---
+    scheduler.add_job(
+        _isolated("daily-digest", lambda: run_daily_digest(runtime, now_ts=time.time())),
+        trigger="cron",
+        hour=delivery.digest_hour,
+        id="daily-digest",
         max_instances=1,
         coalesce=True,
         replace_existing=True,
