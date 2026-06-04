@@ -134,6 +134,22 @@ API keys are stored the same way every comparable tool stores them (opencode, `l
 - **Real secret management for a daemon belongs in the environment** — inject the key via systemd `EnvironmentFile=` (itself `0600`), Docker/Kubernetes secrets, or a vault sidecar, and leave `config/llm.yaml` empty. Run transmutary as a dedicated unprivileged user.
 - **Defense-in-depth in this repo** — `.env` and `config/llm.yaml` are gitignored; a `pre-commit` hook scans staged content for key patterns (`sk-…`, `ghp_…`, `github_pat_…`, PEM private keys) and blocks the commit before a secret can ever enter git history.
 
+### Per-tier models
+
+The pipeline uses three model tiers, each independently configurable:
+
+| Tier | Used for | Default |
+|------|----------|---------|
+| **strong** | diagnosis, issue-surge L3 judge, critique/refine | `gpt-4o` |
+| **cheap** | supply-chain advice, trend summaries | `gpt-4o-mini` |
+| **embed** | L2 semantic grouping (clusters issue-surge / trend candidates to collapse L3 calls) | `text-embedding-3-small` |
+
+By default all three share one provider (the shared `api_key`/`base_url`/`transport` above). A tier can run on a **different provider** by setting a per-tier override — each of `api_key`/`base_url`/`transport`/`model` falls back to the shared value when left unset. Configure overrides via the dashboard's "Per-tier overrides (advanced)" disclosure, `transmutary config`, or env vars `TRANSMUTARY_LLM_<TIER>_<FIELD>` (e.g. `TRANSMUTARY_LLM_EMBED_BASE_URL`).
+
+**Common case** — chat on one provider, embeddings on another (the chat provider has no embedding API). Set the embed tier's `base_url`/`transport`/`model` (and `api_key` if different); the rest inherits the shared chat config.
+
+**Embed is optional.** If no working embedding endpoint is configured, the L2 grouping step degrades to full L3 (every candidate judged individually) — correct results, just more LLM calls. Leaving embed unset is a valid deployment.
+
 ### Verify
 
 ```bash

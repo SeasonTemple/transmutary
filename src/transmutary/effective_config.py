@@ -100,73 +100,109 @@ def effective_llm_config(
     *,
     env: dict[str, str] | None = None,
     require: bool = True,
-) -> tuple[str, str | None, dict[str, str]]:
-    """Return ``(api_key, base_url, models)`` for LLM calls.
+) -> dict[str, tuple[str, str | None, str]]:
+    """Return per-tier ``{tier: (api_key, base_url, model)}`` for LLM calls.
 
-    ``models`` maps tier name to resolved model string:
-    ``{"strong": "gpt-4o", "cheap": "gpt-4o-mini", "embed": "text-embedding-3-small"}``.
+    Tiers are ``strong`` / ``cheap`` / ``embed``. Each field resolves independently
+    by precedence (most specific wins):
 
-    Precedence per field: ``TRANSMUTARY_LLM_*`` env > ``config/llm.yaml`` > defaults.
-    When ``require=False`` and both sources are empty, returns
-    ``("", None, {})`` — used by the dashboard where LLM may be unconfigured.
+        env per-tier   (TRANSMUTARY_LLM_<TIER>_<FIELD>)
+      > env shared     (TRANSMUTARY_LLM_<FIELD>)
+      > yaml per-tier  (tiers.<tier>.<field>)
+      > yaml shared    (top-level <field>)
+      > built-in default (model only)
+
+    ``model`` has the transport prefix applied (bare name → ``<transport>/<name>``;
+    a name already containing ``/`` passes through). ``require=True`` only requires
+    the STRONG tier to have an api_key — embed may be empty (pipeline degrades to
+    full L3). When ``require=False`` an empty strong key yields ``""`` (dashboard
+    may be unconfigured).
     """
     import os
 
     from .llm import DEFAULT_TIER_MODELS, ModelTier
 
     env = os.environ if env is None else env
-    env_key = env.get(ENV_LLM_API_KEY, "")
-    env_url = env.get(ENV_LLM_BASE_URL) or None
-
     yaml_cfg = settings.llm_config
-    yaml_key = yaml_cfg.api_key if yaml_cfg is not None else ""
-    yaml_url = yaml_cfg.base_url if yaml_cfg is not None else None
+    overrides = yaml_cfg.tier_overrides if yaml_cfg is not None else {}
 
-    api_key = env_key or yaml_key
-    base_url = env_url if env_url is not None else yaml_url
-
-    if require and not api_key:
-        raise ConfigError(
-            "LLM API key not configured: set TRANSMUTARY_LLM_API_KEY or "
-            "configure via `transmutary config` / dashboard settings"
-        )
-
-    # Per-tier model resolution: env > yaml > DEFAULT_TIER_MODELS.
-    tiers = {
-        "strong": (env.get("TRANSMUTARY_LLM_MODEL_STRONG") or None,
-                   yaml_cfg.model_strong if yaml_cfg is not None else None,
-                   DEFAULT_TIER_MODELS[ModelTier.STRONG]),
-        "cheap": (env.get("TRANSMUTARY_LLM_MODEL_CHEAP") or None,
-                  yaml_cfg.model_cheap if yaml_cfg is not None else None,
-                  DEFAULT_TIER_MODELS[ModelTier.CHEAP]),
-        "embed": (env.get("TRANSMUTARY_LLM_MODEL_EMBED") or None,
-                  yaml_cfg.model_embed if yaml_cfg is not None else None,
-                  DEFAULT_TIER_MODELS[ModelTier.EMBED]),
-    }
-    models = {
-        tier: (env_m or yaml_m or default)
-        for tier, (env_m, yaml_m, default) in tiers.items()
-    }
-
-    # Apply LiteLLM transport prefix to bare model names (no "/" present).
-    # Models written with a vendor prefix (e.g. "minimax/MiniMax-M3") pass through
-    # unchanged — LiteLLM routes by prefix.
-    env_transport = (
+    # Shared (non-tier) sources.
+    env_key_shared = env.get(ENV_LLM_API_KEY) or None
+    env_url_shared = env.get(ENV_LLM_BASE_URL) or None
+    env_tx_shared = (
         env.get("TRANSMUTARY_LLM_TRANSPORT")
         or env.get("TRANSMUTARY_LLM_PROVIDER")
         or env.get("TRANSMUTARY_LLM_VENDOR")
         or None
     )
-    yaml_transport = yaml_cfg.transport if yaml_cfg is not None else None
-    transport = env_transport or yaml_transport
-    if transport:
-        prefix = transport if transport.endswith("/") else transport + "/"
-        models = {
-            tier: (prefix + m) if "/" not in m else m
-            for tier, m in models.items()
-        }
+    yaml_key_shared = yaml_cfg.api_key if yaml_cfg is not None else None
+    yaml_url_shared = yaml_cfg.base_url if yaml_cfg is not None else None
+    yaml_tx_shared = yaml_cfg.transport if yaml_cfg is not None else None
 
-    return (api_key, base_url, models)
+    _model_default = {
+        "strong": DEFAULT_TIER_MODELS[ModelTier.STRONG],
+        "cheap": DEFAULT_TIER_MODELS[ModelTier.CHEAP],
+        "embed": DEFAULT_TIER_MODELS[ModelTier.EMBED],
+    }
+    _yaml_model_shared = {
+        "strong": yaml_cfg.model_strong if yaml_cfg is not None else None,
+        "cheap": yaml_cfg.model_cheap if yaml_cfg is not None else None,
+        "embed": yaml_cfg.model_embed if yaml_cfg is not None else None,
+    }
+    # Back-compat env aliases: TRANSMUTARY_LLM_MODEL_<TIER> (old MODEL-first form).
+    _env_model_legacy = {
+        "strong": env.get("TRANSMUTARY_LLM_MODEL_STRONG") or None,
+        "cheap": env.get("TRANSMUTARY_LLM_MODEL_CHEAP") or None,
+        "embed": env.get("TRANSMUTARY_LLM_MODEL_EMBED") or None,
+    }
+
+    def _resolve(tier: str) -> tuple[str, str | None, str]:
+        ov = overrides.get(tier)
+        up = tier.upper()
+        # api_key: env per-tier > env shared > yaml per-tier > yaml shared.
+        key = (
+            (env.get(f"TRANSMUTARY_LLM_{up}_API_KEY") or None)
+            or env_key_shared
+            or (ov.api_key if ov else None)
+            or yaml_key_shared
+            or ""
+        )
+        # base_url: env per-tier > env shared > yaml per-tier > yaml shared.
+        url = (
+            (env.get(f"TRANSMUTARY_LLM_{up}_BASE_URL") or None)
+            or env_url_shared
+            or (ov.base_url if ov else None)
+            or yaml_url_shared
+        )
+        # transport: env per-tier > env shared > yaml per-tier > yaml shared.
+        transport = (
+            (env.get(f"TRANSMUTARY_LLM_{up}_TRANSPORT") or None)
+            or env_tx_shared
+            or (ov.transport if ov else None)
+            or yaml_tx_shared
+        )
+        # model: env per-tier > env legacy > yaml per-tier > yaml shared > default.
+        model = (
+            (env.get(f"TRANSMUTARY_LLM_{up}_MODEL") or None)
+            or _env_model_legacy[tier]
+            or (ov.model if ov else None)
+            or _yaml_model_shared[tier]
+            or _model_default[tier]
+        )
+        # Apply transport prefix to bare model names.
+        if transport and "/" not in model:
+            prefix = transport if transport.endswith("/") else transport + "/"
+            model = prefix + model
+        return (key, url, model)
+
+    result = {tier: _resolve(tier) for tier in ("strong", "cheap", "embed")}
+
+    if require and not result["strong"][0]:
+        raise ConfigError(
+            "LLM API key not configured: set TRANSMUTARY_LLM_API_KEY or "
+            "configure via `transmutary config` / dashboard settings"
+        )
+    return result
 
 
 __all__ = (

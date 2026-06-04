@@ -188,27 +188,21 @@ def _github_token(rt: PipelineRuntime) -> str | None:
     return rt.creds.github_token if rt.creds is not None else None
 
 
-def _llm_api_key(rt: PipelineRuntime) -> str | None:
-    """Return the effective LLM API key: env > yaml > creds fallback."""
-    key, _, _models = effective_llm_config(rt.settings, require=False)
-    if key:
-        return key
-    # Fallback to creds (populated from env at Credentials.from_env time).
-    return rt.creds.llm_api_key if rt.creds is not None else None
+def _tier_creds(rt: PipelineRuntime, tier: str) -> tuple[str | None, str | None, str]:
+    """Return ``(api_key, base_url, model)`` for one tier (strong/cheap/embed).
 
-
-def _llm_base_url(rt: PipelineRuntime) -> str | None:
-    """Return the effective LLM base URL: env > yaml > settings fallback."""
-    _, url, _ = effective_llm_config(rt.settings, require=False)
-    if url is not None:
-        return url
-    return rt.settings.llm_base_url
-
-
-def _llm_model(rt: PipelineRuntime) -> dict[str, str]:
-    """Return the effective per-tier LLM models: env > yaml > defaults."""
-    _, _, models = effective_llm_config(rt.settings, require=False)
-    return models
+    Resolves via effective_llm_config (env/yaml, per-tier override aware). The
+    api_key falls back to creds (populated from env at Credentials.from_env time)
+    only when the tier resolves to an empty key — preserving the prior single-key
+    behavior for flat configs.
+    """
+    resolved = effective_llm_config(rt.settings, require=False)
+    key, url, model = resolved[tier]
+    if not key and rt.creds is not None:
+        key = rt.creds.llm_api_key or ""
+    if url is None:
+        url = rt.settings.llm_base_url
+    return (key or None, url, model)
 
 
 def _embed_fn(rt: PipelineRuntime):
@@ -225,8 +219,7 @@ def _embed_fn(rt: PipelineRuntime):
     # Local import: keep litellm out of the service -> pipeline import path.
     from . import llm
 
-    api_key = _llm_api_key(rt)
-    base_url = _llm_base_url(rt)
+    api_key, base_url, embed_model = _tier_creds(rt, "embed")
 
     def embed_fn(texts: list[str]) -> list[list[float]]:
         # num_retries=0 makes the embedding call fail fast and DETERMINISTICALLY
@@ -234,7 +227,7 @@ def _embed_fn(rt: PipelineRuntime):
         # to full L3 on any embedding error (zero-miss, KTD-B), so a flaky/slow embed
         # endpoint must never stall or perturb the tick.
         return llm.embed(
-            texts, api_key=api_key, base_url=base_url, num_retries=0
+            texts, api_key=api_key, base_url=base_url, model=embed_model, num_retries=0
         )
 
     return embed_fn
@@ -352,9 +345,8 @@ def run_release_issue_tick(
     sanitize / R18 gate, KTD-C). Default False keeps the prior behavior exactly.
     """
     token = _github_token(rt)
-    api_key = _llm_api_key(rt)
-    base_url = _llm_base_url(rt)
-    models = _llm_model(rt)
+    # release + issue both run STRONG-tier (diagnose, L3 judge).
+    api_key, base_url, strong_model = _tier_creds(rt, "strong")
     # Resolve the call_fn sentinel ONCE: _UNSET means "use the real llm.call".
     # Passing the bare _UNSET object downstream to diagnose() would TypeError
     # ('object' not callable) — diagnose has no sentinel handling of its own.
@@ -384,7 +376,7 @@ def run_release_issue_tick(
             anchor_ts=ev.ts,
         )
         outcome = diagnose(
-            ctx, api_key=api_key, base_url=base_url, model=models["strong"],
+            ctx, api_key=api_key, base_url=base_url, model=strong_model,
             call_fn=resolved_call_fn, refine=refine_reports,
         )
         _deliver_report(rt, outcome.report, outcome.report.severity)
@@ -404,7 +396,7 @@ def run_release_issue_tick(
                 baseline_rate=baseline_rate,
                 api_key=api_key,
                 base_url=base_url,
-                model=models["strong"],
+                model=strong_model,
                 call_fn=resolved_call_fn,
                 embed_fn=_embed_fn(rt) if embed_fn is _UNSET else embed_fn,
             )
@@ -432,7 +424,7 @@ def run_release_issue_tick(
                 anchor_ts=anchor,
             )
             outcome = diagnose(
-                ctx, api_key=api_key, base_url=base_url, model=models["strong"],
+                ctx, api_key=api_key, base_url=base_url, model=strong_model,
                 call_fn=resolved_call_fn, refine=refine_reports,
             )
             _deliver_report(rt, outcome.report, outcome.report.severity)
@@ -497,9 +489,8 @@ def run_security_tick(
     (F3 high-risk, never a digest wait).
     """
     token = _github_token(rt)
-    api_key = _llm_api_key(rt)
-    base_url = _llm_base_url(rt)
-    models = _llm_model(rt)
+    # supply-chain alert advice runs CHEAP tier.
+    api_key, base_url, cheap_model = _tier_creds(rt, "cheap")
     result = SecurityTickResult()
 
     manual_edges = [
@@ -538,7 +529,7 @@ def run_security_tick(
             repo=repo,
             api_key=api_key,
             base_url=base_url,
-            model=models["cheap"],
+            model=cheap_model,
             call_fn=_llm_call_default() if call_fn is _UNSET else call_fn,
         )
         # Force the immediate (high-risk) route regardless of report severity (F3).
@@ -588,9 +579,8 @@ def run_trend_tick(
     critique→refine pass (CHEAP tier) before reports are built. Default False keeps
     the prior behavior exactly.
     """
-    api_key = _llm_api_key(rt)
-    base_url = _llm_base_url(rt)
-    models = _llm_model(rt)
+    # trend explain summaries run CHEAP tier (embed_fn handles its own embed tier).
+    api_key, base_url, cheap_model = _tier_creds(rt, "cheap")
     result = TrendTickResult()
 
     scope = effective_trend_scope(rt.settings, rt.store)
@@ -611,7 +601,7 @@ def run_trend_tick(
         rt.store,
         api_key=api_key,
         base_url=base_url,
-        model=models["cheap"],
+        model=cheap_model,
         call_fn=_llm_call_default() if call_fn is _UNSET else call_fn,
         embed_fn=_embed_fn(rt) if embed_fn is _UNSET else embed_fn,
         refine=refine_reports,

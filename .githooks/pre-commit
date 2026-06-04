@@ -15,9 +15,10 @@ pattern='sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}
 
 hits=""
 for f in $staged; do
-  # Skip example/template files (placeholders, not real secrets).
+  # Skip example/template files + test fixtures (placeholders, not real secrets).
   case "$f" in
     *.example|*.example.*|*.sample|.env.example) continue ;;
+    tests/*|*/tests/*|test_*|*_test.*|*/conftest.py) continue ;;
   esac
   [ -f "$f" ] || continue
   if git show ":$f" 2>/dev/null | grep -nE "$pattern" >/dev/null 2>&1; then

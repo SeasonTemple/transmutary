@@ -180,6 +180,17 @@ class Delivery:
 
 
 @dataclass(frozen=True)
+class TierOverride:
+    """Optional per-tier LLM override. Any field left None falls back to the
+    shared LLMConfig default. ``api_key`` is excluded from repr (KTD4 secrecy)."""
+
+    api_key: str | None = field(default=None, repr=False)
+    base_url: str | None = None
+    transport: str | None = None
+    model: str | None = None
+
+
+@dataclass(frozen=True)
 class LLMConfig:
     """LLM credentials stored in ``config/llm.yaml`` (0600, never in SQLite).
 
@@ -188,7 +199,12 @@ class LLMConfig:
     vendor prefix themselves, e.g. ``minimax/MiniMax-M3`` or
     ``anthropic/claude-3.5-sonnet``). For bare names without a ``/``,
     ``transport`` is prepended at call time.
-    api_key is excluded from repr to preserve KTD4 credential secrecy.
+
+    Top-level fields are the SHARED default for every tier. ``tier_overrides``
+    (keys: ``strong`` / ``cheap`` / ``embed``) optionally override per-tier,
+    field-by-field — e.g. embeddings on a different provider than chat. Any
+    override field left None falls back to the shared default.
+    api_key (shared and per-tier) is excluded from repr to preserve KTD4.
     """
 
     api_key: str = field(repr=False)
@@ -197,6 +213,7 @@ class LLMConfig:
     model_strong: str | None = None
     model_cheap: str | None = None
     model_embed: str | None = None
+    tier_overrides: dict[str, TierOverride] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -335,9 +352,27 @@ def load_llm_config(config_dir: str) -> LLMConfig | None:
         transport = _optional_str(data, "provider")
     if model_strong is None:
         model_strong = _optional_str(data, "model")
+    # Optional per-tier overrides (tiers: {strong/cheap/embed: {api_key,...}}).
+    tier_overrides: dict[str, TierOverride] = {}
+    tiers_raw = data.get("tiers")
+    if isinstance(tiers_raw, dict):
+        for tier in ("strong", "cheap", "embed"):
+            t = tiers_raw.get(tier)
+            if not isinstance(t, dict):
+                continue
+            ov = TierOverride(
+                api_key=_optional_str(t, "api_key"),
+                base_url=_optional_str(t, "base_url"),
+                transport=_optional_str(t, "transport"),
+                model=_optional_str(t, "model"),
+            )
+            # Keep only non-empty overrides.
+            if any((ov.api_key, ov.base_url, ov.transport, ov.model)):
+                tier_overrides[tier] = ov
     return LLMConfig(
         api_key=api_key, base_url=base_url, transport=transport,
         model_strong=model_strong, model_cheap=model_cheap, model_embed=model_embed,
+        tier_overrides=tier_overrides,
     )
 
 
@@ -360,6 +395,22 @@ def save_llm_config(config_dir: str, config: LLMConfig) -> None:
         payload["model_cheap"] = config.model_cheap
     if config.model_embed is not None:
         payload["model_embed"] = config.model_embed
+    # Per-tier overrides (only non-empty fields per tier).
+    tiers_out: dict[str, dict] = {}
+    for tier, ov in config.tier_overrides.items():
+        fields = {}
+        if ov.api_key is not None:
+            fields["api_key"] = ov.api_key
+        if ov.base_url is not None:
+            fields["base_url"] = ov.base_url
+        if ov.transport is not None:
+            fields["transport"] = ov.transport
+        if ov.model is not None:
+            fields["model"] = ov.model
+        if fields:
+            tiers_out[tier] = fields
+    if tiers_out:
+        payload["tiers"] = tiers_out
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         yaml.dump(payload, fh, default_flow_style=False)
