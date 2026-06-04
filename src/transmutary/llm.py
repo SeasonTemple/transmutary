@@ -326,7 +326,10 @@ def embed(
     if api_key is not None:
         kwargs["api_key"] = api_key
     if base_url is not None:
-        kwargs["base_url"] = base_url
+        # litellm.embedding honors `api_base`, NOT `base_url` (the latter is
+        # silently ignored → falls back to the default OpenAI endpoint). Pass
+        # api_base so a custom embedding endpoint (GLM/MiniMax/self-hosted) works.
+        kwargs["api_base"] = base_url
 
     try:
         response = litellm.embedding(model=resolved_model, input=safe_texts, **kwargs)
