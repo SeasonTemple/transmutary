@@ -29,10 +29,10 @@
   <button class="lang-btn active" data-lang="en" data-i18n="report.lang.en">{{ t['report.lang.en'] }}</button>
   <button class="lang-btn" data-lang="zh" data-i18n="report.lang.zh">{{ t['report.lang.zh'] }}</button>
 </div>
-<pre class="report-body" data-lang-body="en">{{ view.body }}</pre>
-<pre class="report-body hidden" data-lang-body="zh">{{ view.body_zh }}</pre>
+<article class="report-body md-rendered" data-lang-body="en" lang="en">{{ view.body_html | safe }}</article>
+<article class="report-body md-rendered hidden" data-lang-body="zh" lang="zh-CN">{{ view.body_zh_html | safe }}</article>
 {% else %}
-<pre class="report-body">{{ view.body }}</pre>
+<article class="report-body md-rendered" lang="en">{{ view.body_html | safe }}</article>
 {% endif %}
 
 {% endblock %}

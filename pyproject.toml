@@ -30,6 +30,7 @@ dependencies = [
     "litellm",
     "pyyaml",
     "python-dotenv",
+    "markdown-it-py",
 ]
 
 [project.scripts]

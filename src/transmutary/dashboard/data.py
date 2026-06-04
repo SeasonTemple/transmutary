@@ -26,6 +26,7 @@ from ..effective_config import (
 )
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
+from .render import render_markdown
 
 # Severities that route to the urgent / supply-chain bucket on the overview.
 # Mirrors Severity.is_urgent (critical + high → immediate route).
@@ -106,13 +107,17 @@ class SourceLink:
 @dataclass(frozen=True)
 class ReportView:
     card: ReportCard
-    body: str  # raw markdown, rendered as escaped <pre> by the template (KTD-Dash-3)
-    body_zh: str | None  # Chinese markdown, None when unavailable
+    body: str  # raw markdown (untrusted) — kept for the JSON contract
+    body_zh: str | None  # Chinese markdown (untrusted), None when unavailable
     sources: tuple[SourceLink, ...]
+    body_html: str = ""  # rendered HTML (R2) — WebUI template only, NOT in to_dict
+    body_zh_html: str = ""  # rendered Chinese HTML — WebUI template only
 
     def to_dict(self) -> dict:
         # `body` / `body_zh` are untrusted external markdown — a JSON consumer MUST
         # escape them before any HTML rendering. The trust marker documents that contract.
+        # body_html / body_zh_html are deliberately NOT exposed here: pre-rendered HTML
+        # over the JSON API would invite consumers to emit it without their own checks.
         d: dict = {
             "card": self.card.to_dict(),
             "body": self.body,
@@ -405,15 +410,22 @@ def build_report_view(
 ) -> ReportView | None:
     """Single report view: raw body + trusted card/sources. None if not found.
 
-    The body is the raw markdown (rendered as escaped ``<pre>``); the card fields
-    and sources come from the trusted sidecar JSON (R-D15), never re-parsed from
-    the untrusted body. ``body_md_zh`` is read from the sidecar (ADV-10).
+    The English body comes from the sidecar ``body_md`` (English-only); the Chinese
+    body from ``body_md_zh`` (ADV-10). Both are UNTRUSTED markdown and are rendered
+    to safe HTML via :func:`render_markdown`. Card fields and sources come from the
+    trusted sidecar JSON (R-D15). The bilingual ``.md`` file on disk concatenates both
+    languages for human reading; the WebUI must NOT use it for the English tab (it
+    would leak Chinese into the English view).
     """
-    body = artifacts.read_report(repo, filename)
-    if body is None:
-        return None
     meta = artifacts.read_meta(repo, filename)
     if meta is None:
+        return None
+    # English body: sidecar body_md (English-only). Fall back to the .md file for
+    # pre-bilingual reports that predate the body_md sidecar field.
+    body = meta.get("body_md")
+    if body is None:
+        body = artifacts.read_report(repo, filename)
+    if body is None:
         return None
     ts = int(filename.split("-", 1)[0])
     card = ReportCard(
@@ -426,4 +438,11 @@ def build_report_view(
     )
     # Read bilingual body from sidecar (ADV-10), not from .md parsing.
     body_zh = meta.get("body_md_zh")
-    return ReportView(card=card, body=body, body_zh=body_zh, sources=_sources_from_meta(meta))
+    return ReportView(
+        card=card,
+        body=body,
+        body_zh=body_zh,
+        sources=_sources_from_meta(meta),
+        body_html=render_markdown(body),
+        body_zh_html=render_markdown(body_zh),
+    )
