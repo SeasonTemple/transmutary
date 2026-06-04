@@ -25,8 +25,12 @@ class EmailDeliveryError(Exception):
 def _build_message(
     report: Report, *, sender: str, recipients: list[str], lang: str = "en"
 ) -> EmailMessage:
+    from ..report.render import localized_title
+
     msg = EmailMessage()
-    msg["Subject"] = f"[transmutary/{report.severity.value}] {report.title}"
+    # Keep the machine-readable [transmutary/<severity>] tag (operators filter on
+    # it); localize only the human title.
+    msg["Subject"] = f"[transmutary/{report.severity.value}] {localized_title(report, lang)}"
     msg["From"] = sender
     msg["To"] = ", ".join(recipients)
     # multipart/alternative (R5): plain-text fallback + rendered HTML body.
