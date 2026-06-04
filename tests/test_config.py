@@ -230,6 +230,52 @@ def test_save_then_load_roundtrip(tmp_path):
     assert loaded == cfg
 
 
+def test_flat_yaml_has_no_tier_overrides(tmp_path):
+    cfg = LLMConfig(api_key="sk-x", base_url="https://x.test", model_strong="gpt-4o")
+    save_llm_config(str(tmp_path), cfg)
+    loaded = load_llm_config(str(tmp_path))
+    assert loaded.tier_overrides == {}
+
+
+def test_per_tier_embed_override_roundtrip(tmp_path):
+    from transmutary.config import TierOverride
+    cfg = LLMConfig(
+        api_key="sk-shared", base_url="https://chat.test", transport="anthropic",
+        model_strong="MiniMax-M3",
+        tier_overrides={
+            "embed": TierOverride(
+                base_url="https://embed.test", transport="openai", model="embo-01"
+            )
+        },
+    )
+    save_llm_config(str(tmp_path), cfg)
+    loaded = load_llm_config(str(tmp_path))
+    assert "embed" in loaded.tier_overrides
+    ov = loaded.tier_overrides["embed"]
+    assert ov.base_url == "https://embed.test"
+    assert ov.transport == "openai"
+    assert ov.model == "embo-01"
+    assert ov.api_key is None  # not set → falls back to shared
+    assert "strong" not in loaded.tier_overrides
+
+
+def test_per_tier_api_key_excluded_from_repr():
+    from transmutary.config import TierOverride
+    ov = TierOverride(api_key="sk-embed-secret", base_url="https://e.test")
+    assert "sk-embed-secret" not in repr(ov)
+    cfg = LLMConfig(api_key="sk-shared", tier_overrides={"embed": ov})
+    assert "sk-embed-secret" not in repr(cfg)
+    assert "sk-shared" not in repr(cfg)
+
+
+def test_empty_tier_override_dropped(tmp_path):
+    from transmutary.config import TierOverride
+    cfg = LLMConfig(api_key="sk-x", tier_overrides={"embed": TierOverride()})
+    save_llm_config(str(tmp_path), cfg)
+    loaded = load_llm_config(str(tmp_path))
+    assert loaded.tier_overrides == {}  # all-None override not persisted
+
+
 def test_settings_llm_config_populated(config_dir, fake_env, tmp_path):
     """load_settings picks up llm.yaml when present."""
     import os

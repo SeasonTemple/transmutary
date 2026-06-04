@@ -598,10 +598,11 @@ def make_dashboard_app(
         if llm_cfg is None:
             return JSONResponse({"ok": False, "error": "No LLM config saved"})
         from ..effective_config import effective_llm_config
-        api_key, base_url, models = effective_llm_config(settings, require=False)
+        # Test the STRONG tier (chat) — its key/url/model are what diagnose uses.
+        resolved = effective_llm_config(settings, require=False)
+        api_key, base_url, model = resolved["strong"]
         if not api_key:
             return JSONResponse({"ok": False, "error": "No API key configured"})
-        model = models.get("strong") or "gpt-4o"
         # Display: show the actual LiteLLM model name the call will use.
         # If the user wrote "minimax/MiniMax-M3" we show that; if they wrote
         # bare "MiniMax-M3" with transport=anthropic, we show "anthropic/MiniMax-M3".

@@ -147,17 +147,18 @@ def _llm_settings(**overrides) -> Settings:
 
 def test_llm_env_wins_over_yaml():
     s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
-    key, url, models = effective_llm_config(
+    r = effective_llm_config(
         s,
         env={"TRANSMUTARY_LLM_API_KEY": "env-key", "TRANSMUTARY_LLM_BASE_URL": "https://env"},
     )
+    key, url, _ = r["strong"]
     assert key == "env-key"
     assert url == "https://env"
 
 
 def test_llm_yaml_used_when_env_missing():
     s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
-    key, url, models = effective_llm_config(s, env={})
+    key, url, _ = effective_llm_config(s, env={})["strong"]
     assert key == "yaml-key"
     assert url == "https://yaml"
 
@@ -170,17 +171,16 @@ def test_llm_both_missing_require_true_errors():
 
 def test_llm_both_missing_require_false_returns_empty():
     s = _llm_settings()
-    key, url, models = effective_llm_config(s, env={}, require=False)
+    r = effective_llm_config(s, env={}, require=False)
+    key, url, _ = r["strong"]
     assert key == ""
     assert url is None
-    assert isinstance(models, dict)
+    assert set(r.keys()) == {"strong", "cheap", "embed"}
 
 
 def test_llm_env_key_only_yaml_url_used():
     s = _llm_settings(llm_config=LLMConfig(api_key="yaml-key", base_url="https://yaml"))
-    key, url, models = effective_llm_config(
-        s, env={"TRANSMUTARY_LLM_API_KEY": "env-key"}
-    )
+    key, url, _ = effective_llm_config(s, env={"TRANSMUTARY_LLM_API_KEY": "env-key"})["strong"]
     assert key == "env-key"
     assert url == "https://yaml"
 
@@ -189,51 +189,100 @@ def test_llm_per_tier_model_env_overrides():
     s = _llm_settings(llm_config=LLMConfig(
         api_key="k", model_strong="yaml-strong", model_cheap="yaml-cheap",
     ))
-    key, url, models = effective_llm_config(
-        s, env={"TRANSMUTARY_LLM_MODEL_STRONG": "env-strong"},
-    )
-    assert models["strong"] == "env-strong"
-    assert models["cheap"] == "yaml-cheap"
+    r = effective_llm_config(s, env={"TRANSMUTARY_LLM_STRONG_MODEL": "env-strong"})
+    assert r["strong"][2] == "env-strong"
+    assert r["cheap"][2] == "yaml-cheap"
+
+
+def test_llm_legacy_model_env_alias_still_works():
+    # Back-compat: old TRANSMUTARY_LLM_MODEL_STRONG keeps working.
+    s = _llm_settings(llm_config=LLMConfig(api_key="k"))
+    r = effective_llm_config(s, env={"TRANSMUTARY_LLM_MODEL_STRONG": "legacy-strong"})
+    assert r["strong"][2] == "legacy-strong"
 
 
 def test_llm_per_tier_model_defaults():
     s = _llm_settings(llm_config=LLMConfig(api_key="k"))
-    key, url, models = effective_llm_config(s, env={})
-    assert models["strong"] == "gpt-4o"
-    assert models["cheap"] == "gpt-4o-mini"
-    assert models["embed"] == "text-embedding-3-small"
+    r = effective_llm_config(s, env={})
+    assert r["strong"][2] == "gpt-4o"
+    assert r["cheap"][2] == "gpt-4o-mini"
+    assert r["embed"][2] == "text-embedding-3-small"
 
 
 def test_llm_transport_prefixes_bare_yaml_model():
     s = _llm_settings(llm_config=LLMConfig(
         api_key="k", transport="openai", model_strong="MiniMax-M3",
     ))
-    key, url, models = effective_llm_config(s, env={})
-    assert models["strong"] == "openai/MiniMax-M3"
+    assert effective_llm_config(s, env={})["strong"][2] == "openai/MiniMax-M3"
 
 
 def test_llm_passes_through_user_written_vendor_prefix():
-    # User writes the full LiteLLM model name — no auto-prefixing.
     s = _llm_settings(llm_config=LLMConfig(
         api_key="k", transport="openai", model_strong="minimax/MiniMax-M3",
     ))
-    key, url, models = effective_llm_config(s, env={})
-    assert models["strong"] == "minimax/MiniMax-M3"
+    assert effective_llm_config(s, env={})["strong"][2] == "minimax/MiniMax-M3"
 
 
 def test_llm_transport_does_not_double_prefix_already_prefixed():
     s = _llm_settings(llm_config=LLMConfig(
         api_key="k", transport="openai", model_strong="openai/MiniMax-M3",
     ))
-    key, url, models = effective_llm_config(s, env={})
-    assert models["strong"] == "openai/MiniMax-M3"
+    assert effective_llm_config(s, env={})["strong"][2] == "openai/MiniMax-M3"
 
 
 def test_llm_transport_env_over_yaml():
     s = _llm_settings(llm_config=LLMConfig(
         api_key="k", transport="openai", model_strong="MiniMax-M3",
     ))
-    key, url, models = effective_llm_config(
-        s, env={"TRANSMUTARY_LLM_TRANSPORT": "anthropic"},
-    )
-    assert models["strong"] == "anthropic/MiniMax-M3"
+    r = effective_llm_config(s, env={"TRANSMUTARY_LLM_TRANSPORT": "anthropic"})
+    assert r["strong"][2] == "anthropic/MiniMax-M3"
+
+
+# --- per-tier overrides (the new capability) --------------------------------
+
+def test_embed_tier_yaml_override_independent_provider():
+    from transmutary.config import TierOverride
+    s = _llm_settings(llm_config=LLMConfig(
+        api_key="shared-key", base_url="https://chat.test", transport="anthropic",
+        model_strong="MiniMax-M3", model_embed="ignored",
+        tier_overrides={"embed": TierOverride(
+            base_url="https://embed.test", transport="openai", model="embo-01",
+        )},
+    ))
+    r = effective_llm_config(s, env={})
+    # strong: shared key/url + anthropic prefix
+    assert r["strong"] == ("shared-key", "https://chat.test", "anthropic/MiniMax-M3")
+    # embed: key falls back to shared, url+transport+model from override
+    ekey, eurl, emodel = r["embed"]
+    assert ekey == "shared-key"
+    assert eurl == "https://embed.test"
+    assert emodel == "openai/embo-01"
+
+
+def test_embed_tier_separate_key():
+    from transmutary.config import TierOverride
+    s = _llm_settings(llm_config=LLMConfig(
+        api_key="shared-key", base_url="https://chat.test",
+        tier_overrides={"embed": TierOverride(api_key="embed-key", base_url="https://e.test")},
+    ))
+    assert effective_llm_config(s, env={})["embed"][0] == "embed-key"
+    assert effective_llm_config(s, env={})["strong"][0] == "shared-key"
+
+
+def test_env_per_tier_beats_yaml_per_tier():
+    from transmutary.config import TierOverride
+    s = _llm_settings(llm_config=LLMConfig(
+        api_key="k", tier_overrides={"embed": TierOverride(base_url="https://yaml-embed.test")},
+    ))
+    r = effective_llm_config(s, env={"TRANSMUTARY_LLM_EMBED_BASE_URL": "https://env-embed.test"})
+    assert r["embed"][1] == "https://env-embed.test"
+
+
+def test_embed_empty_does_not_error_when_strong_present():
+    # require=True with strong key but no embed-specific creds → no error (embed
+    # falls back to shared/strong; pipeline degrades to full L3 only if embed call
+    # actually fails at runtime).
+    s = _llm_settings(llm_config=LLMConfig(api_key="strong-only"))
+    r = effective_llm_config(s, require=True, env={})
+    assert r["strong"][0] == "strong-only"
+    assert r["embed"][0] == "strong-only"  # falls back to shared
