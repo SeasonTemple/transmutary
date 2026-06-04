@@ -15,6 +15,7 @@ import smtplib
 from email.message import EmailMessage
 
 from ..report.schema import Report
+from .render_email import render_email_html, render_email_text
 
 
 class EmailDeliveryError(Exception):
@@ -26,12 +27,9 @@ def _build_message(report: Report, *, sender: str, recipients: list[str]) -> Ema
     msg["Subject"] = f"[transmutary/{report.severity.value}] {report.title}"
     msg["From"] = sender
     msg["To"] = ", ".join(recipients)
-    body = report.body_md
-    if report.sources:
-        body += "\n\nSources:\n" + "\n".join(
-            f"- {s.source_id}: {s.url} (fetched {s.fetched_at})" for s in report.sources
-        )
-    msg.set_content(body)
+    # multipart/alternative (R5): plain-text fallback + rendered HTML body.
+    msg.set_content(render_email_text(report))
+    msg.add_alternative(render_email_html(report), subtype="html")
     return msg
 
 

@@ -1,6 +1,6 @@
 """Tests for the markdown renderer (R2/R3/R4 — XSS-safe rendering)."""
 
-from transmutary.dashboard.render import render_markdown
+from transmutary.report.render import render_markdown
 
 
 def test_renders_headings_lists_links():

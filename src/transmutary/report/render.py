@@ -1,7 +1,9 @@
 """Markdown → HTML rendering for report bodies (R2/R3/R4).
 
-LLM-generated report bodies are UNTRUSTED markdown. This module renders them to
-HTML safely without a heavyweight sanitizer:
+Shared by the dashboard (WebUI report view) and the email/digest delivery layer.
+Lives under ``report/`` (common upstream of ``dashboard/`` and ``deliver/``) to
+avoid a cross-layer import. LLM report bodies are UNTRUSTED markdown; this renders
+them to HTML safely without a heavyweight sanitizer:
 
   * ``MarkdownIt("commonmark", {"html": False})`` escapes ALL raw HTML — a
     ``<script>``/``<img onerror>``/``<div onclick>`` in the source becomes inert

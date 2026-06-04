@@ -140,6 +140,14 @@ class ArtifactStore:
         with open(meta_path, "w", encoding="utf-8") as fh:
             json.dump(report.to_dict(), fh, ensure_ascii=False)
         chmod_private(meta_path, 0o600, inherited_ok=not meta_path_existed)
+        # Designed-layout HTML artifact (R3) alongside the .md — for preview/sharing.
+        html_path = os.path.join(directory, f"{stem}.html")
+        html_existed = os.path.exists(html_path)
+        from ..deliver.render_email import render_email_html
+
+        with open(html_path, "w", encoding="utf-8") as fh:
+            fh.write(render_email_html(report))
+        chmod_private(html_path, 0o600, inherited_ok=not html_existed)
         return path
 
     def read_meta(self, repo: str, filename: str) -> dict | None:

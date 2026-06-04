@@ -24,9 +24,9 @@ from ..effective_config import (
     effective_repo_sources,
     effective_trend_scope,
 )
+from ..report.render import render_markdown
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
-from .render import render_markdown
 
 # Severities that route to the urgent / supply-chain bucket on the overview.
 # Mirrors Severity.is_urgent (critical + high → immediate route).
