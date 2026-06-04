@@ -155,7 +155,11 @@ def build_runtime(
             credentials=settings.credentials,
         )
     client = client if client is not None else make_client()
-    artifacts = artifacts if artifacts is not None else ArtifactStore(delivery.artifact_root)
+    artifacts = (
+        artifacts
+        if artifacts is not None
+        else ArtifactStore(delivery.artifact_root, render_lang=delivery.email_lang)
+    )
 
     feed_dir = delivery.feed_dir or os.path.join(delivery.artifact_root, "_feed")
 

@@ -99,6 +99,14 @@ def test_build_message_is_multipart_alternative():
     assert "text/html" in types
 
 
+def test_build_message_lang_reaches_rendered_parts():
+    # lang must flow _build_message → render_email_html/_text, not be dropped.
+    msg = _build_message(_report(), sender="a@b.test", recipients=["c@d.test"], lang="zh")
+    html = next(p for p in msg.iter_parts() if p.get_content_type() == "text/html")
+    assert "中文正文" in html.get_content()
+    assert 'lang="zh-CN"' in html.get_content()
+
+
 def test_monolingual_report_has_no_zh_section():
     html = render_email_html(_report(body_zh=None))
     assert 'lang="zh-CN"' not in html

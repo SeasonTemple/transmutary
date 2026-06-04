@@ -308,6 +308,21 @@ def test_admin_delivery_preferences_partial_and_replace(store):
     assert prefs.digest_hour == 8
 
 
+def test_admin_delivery_email_lang_roundtrip_and_partial_wipe(store):
+    assert store.get_admin_delivery_preferences().email_lang is None
+    store.set_admin_delivery_preferences(
+        email_recipients=["a@example.com"], digest_hour=8, email_lang="zh"
+    )
+    assert store.get_admin_delivery_preferences().email_lang == "zh"
+    # write-time whitelist: an unsupported value normalizes to the default
+    store.set_admin_delivery_preferences(email_lang="fr")
+    assert store.get_admin_delivery_preferences().email_lang == "en"
+    # DELETE-then-INSERT: a partial set omitting email_lang wipes it (documented
+    # full-replace semantics, shared with recipients/digest_hour).
+    store.set_admin_delivery_preferences(digest_hour=9)
+    assert store.get_admin_delivery_preferences().email_lang is None
+
+
 def test_admin_config_scrubs_credential_shaped_values(store):
     store.add_admin_repo("safe/repo")
     store.add_admin_dependency_edge("safe/repo", "dep/repo")

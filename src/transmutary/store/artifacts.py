@@ -104,8 +104,12 @@ def _render_markdown(report: Report) -> str:
 
 
 class ArtifactStore:
-    def __init__(self, artifact_root: str) -> None:
+    def __init__(self, artifact_root: str, *, render_lang: str = "en") -> None:
         self.artifact_root = os.path.abspath(artifact_root)
+        # Language for the per-report designed-HTML artifact (single-language, like
+        # email; mirrors the deployment's email_lang). Default "en" keeps the
+        # behaviour for callers that don't thread config (demo, tests).
+        self.render_lang = render_lang
         _ensure_dir_permissions(self.artifact_root)
 
     def repo_dir(self, repo: str) -> str:
@@ -146,7 +150,7 @@ class ArtifactStore:
         from ..deliver.render_email import render_email_html
 
         with open(html_path, "w", encoding="utf-8") as fh:
-            fh.write(render_email_html(report))
+            fh.write(render_email_html(report, lang=self.render_lang))
         chmod_private(html_path, 0o600, inherited_ok=not html_existed)
         return path
 

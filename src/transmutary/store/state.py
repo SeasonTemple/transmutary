@@ -589,7 +589,9 @@ class StateStore:
         if digest_hour is not None:
             rows.append(("digest_hour", str(int(digest_hour)), now))
         if email_lang is not None:
-            rows.append(("email_lang", str(email_lang), now))
+            from ..config import normalize_email_lang
+
+            rows.append(("email_lang", normalize_email_lang(email_lang), now))
         with self._lock:
             for key in ("email_recipients", "digest_hour", "email_lang"):
                 self._conn.execute(
