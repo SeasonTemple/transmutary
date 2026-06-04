@@ -263,6 +263,23 @@ def test_json_sidecar_contains_body_md_zh(tmp_path):
     assert meta["body_md_zh"] == "ZH"
 
 
+def test_title_zh_roundtrips_through_sidecar(tmp_path):
+    store = ArtifactStore(str(tmp_path / "art"))
+    store.write(_r(title_zh="中文标题"), ts=1700000000.0)
+    meta = store.read_meta("owner/name", "1700000000-diagnose.md")
+    assert meta["title_zh"] == "中文标题"
+    assert Report.from_dict(meta).title_zh == "中文标题"
+
+
+def test_title_zh_none_when_absent_backward_compat(tmp_path):
+    # A sidecar from before title_zh existed parses to None (no KeyError).
+    legacy = {
+        "kind": "diagnose", "repo": "a/b", "title": "T", "body_md": "x",
+        "severity": "high", "created_at": "2026-06-04T10:00:00Z", "sources": [],
+    }
+    assert Report.from_dict(legacy).title_zh is None
+
+
 def test_json_sidecar_body_md_zh_none_when_absent(tmp_path):
     store = ArtifactStore(str(tmp_path / "art"))
     report = _r(body_md="EN", body_md_zh=None)

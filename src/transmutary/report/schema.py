@@ -64,6 +64,10 @@ class Report:
     created_at: str  # ISO-8601 timestamp string
     sources: list[Source] = field(default_factory=list)
     body_md_zh: str | None = None
+    # Localized title for single-language delivery (mirrors body_md_zh). When
+    # None, delivery falls back to ``title``. External/untranslatable titles
+    # (e.g. an upstream release name) stay identical in both — leave this None.
+    title_zh: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Explicit field construction — avoids ``asdict`` leaking unintended fields."""
@@ -71,6 +75,7 @@ class Report:
             "kind": self.kind.value,
             "repo": self.repo,
             "title": self.title,
+            "title_zh": self.title_zh,
             "body_md": self.body_md,
             "body_md_zh": self.body_md_zh,
             "severity": self.severity.value,
@@ -89,4 +94,5 @@ class Report:
             created_at=d["created_at"],
             sources=[Source.from_dict(s) for s in d.get("sources", [])],
             body_md_zh=d.get("body_md_zh"),
+            title_zh=d.get("title_zh"),
         )
