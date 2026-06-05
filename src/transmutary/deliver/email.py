@@ -12,10 +12,36 @@ catches and records as a degraded email leg WITHOUT failing the RSS leg.
 from __future__ import annotations
 
 import smtplib
+import time
 from email.message import EmailMessage
 
 from ..report.schema import Report
 from .render_email import render_email_html, render_email_text
+
+# SMTP send retry (KTD: round-robin DNS + selectively null-routed Google IP ranges
+# make smtp.gmail.com intermittently unreachable — a fresh connection re-resolves
+# DNS and usually lands on a reachable IP). Each attempt opens a NEW connection so
+# the retry actually dodges the bad IP; a short per-attempt timeout fails fast on a
+# blocked IP instead of hanging. Only transient/connection errors are retried;
+# permanent failures (auth, refused recipient) raise immediately.
+_SMTP_MAX_ATTEMPTS = 3
+_SMTP_TIMEOUT_SECONDS = 15.0
+_SMTP_RETRY_BACKOFF_SECONDS = 2.0
+
+# Permanent: retrying cannot help — bad credentials or a rejected envelope.
+_PERMANENT_SMTP_ERRORS = (
+    smtplib.SMTPAuthenticationError,
+    smtplib.SMTPRecipientsRefused,
+    smtplib.SMTPSenderRefused,
+)
+# Transient: a fresh connection (new DNS resolution → likely a different IP) may
+# succeed. socket.timeout / TimeoutError / ConnectionError are OSError subclasses.
+_TRANSIENT_SMTP_ERRORS = (
+    smtplib.SMTPConnectError,
+    smtplib.SMTPServerDisconnected,
+    smtplib.SMTPHeloError,
+    OSError,
+)
 
 
 class EmailDeliveryError(Exception):
@@ -122,30 +148,55 @@ def _send_message(
     use_tls: bool,
     use_ssl: bool,
     smtp_factory,
+    max_attempts: int = _SMTP_MAX_ATTEMPTS,
+    timeout: float = _SMTP_TIMEOUT_SECONDS,
+    backoff: float = _SMTP_RETRY_BACKOFF_SECONDS,
+    sleep_fn=time.sleep,
 ) -> None:
-    """Low-level SMTP send (shared by send_report / send_html). Strips app-pw spaces."""
+    """Low-level SMTP send (shared by send_report / send_html). Strips app-pw spaces.
+
+    Retries transient/connection failures up to ``max_attempts`` (each attempt opens
+    a FRESH connection so DNS re-resolves — the actual dodge for a null-routed
+    round-robin IP). Permanent failures (auth, refused recipient) raise immediately
+    with no retry. After the attempts are exhausted, raises ``EmailDeliveryError``,
+    which the caller degrades (RSS still delivered, never dropped).
+    """
     smtp_password = smtp_password.replace(" ", "")  # Gmail app-password groups
     if smtp_factory is not None:
         factory = smtp_factory
     elif use_ssl:
-        factory = lambda: smtplib.SMTP_SSL(host, port)  # noqa: E731
+        factory = lambda: smtplib.SMTP_SSL(host, port, timeout=timeout)  # noqa: E731
     else:
-        factory = lambda: smtplib.SMTP(host, port)  # noqa: E731
-    try:
-        smtp = factory()
+        factory = lambda: smtplib.SMTP(host, port, timeout=timeout)  # noqa: E731
+
+    last_exc: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
         try:
-            if use_tls and not use_ssl:
-                smtp.starttls()
-            smtp.login(smtp_user, smtp_password)
-            smtp.send_message(msg)
-        finally:
+            smtp = factory()
             try:
-                smtp.quit()
-            except Exception:  # noqa: BLE001 - quit failure must not mask send result
-                pass
-    except EmailDeliveryError:
-        raise
-    except Exception as exc:  # noqa: BLE001 - normalize all SMTP failures
-        # NOTE: str(exc) may echo server text but NEVER the password — the password
-        # is not interpolated into any message here (R21/KTD4).
-        raise EmailDeliveryError(f"SMTP send failed: {type(exc).__name__}") from exc
+                if use_tls and not use_ssl:
+                    smtp.starttls()
+                smtp.login(smtp_user, smtp_password)
+                smtp.send_message(msg)
+                return  # success
+            finally:
+                try:
+                    smtp.quit()
+                except Exception:  # noqa: BLE001 - quit failure must not mask send result
+                    pass
+        except _PERMANENT_SMTP_ERRORS as exc:
+            # Retrying cannot help (bad creds / rejected envelope) — fail now.
+            # NOTE: type name only, NEVER str(exc)/password (R21/KTD4).
+            raise EmailDeliveryError(f"SMTP send failed: {type(exc).__name__}") from exc
+        except _TRANSIENT_SMTP_ERRORS as exc:
+            last_exc = exc
+            if attempt < max_attempts:
+                sleep_fn(backoff)  # brief pause, then a fresh connection re-resolves DNS
+                continue
+        except Exception as exc:  # noqa: BLE001 - unknown SMTP error → don't retry blindly
+            raise EmailDeliveryError(f"SMTP send failed: {type(exc).__name__}") from exc
+
+    raise EmailDeliveryError(
+        f"SMTP send failed after {max_attempts} attempts: "
+        f"{type(last_exc).__name__ if last_exc else 'unknown'}"
+    ) from last_exc

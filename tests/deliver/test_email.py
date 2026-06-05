@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import smtplib
+from email.message import EmailMessage
+
 import pytest
 
-from transmutary.deliver.email import EmailDeliveryError, send_report
+from transmutary.deliver.email import EmailDeliveryError, _send_message, send_report
 from transmutary.report.schema import Report, ReportKind, Severity
 
 
@@ -72,3 +75,71 @@ def test_smtp_failure_raises_delivery_error_without_password_leak():
                     smtp_factory=lambda: _Boom())
     # R21: the raised error must NOT contain the password value.
     assert "some-secret-pw" not in str(ei.value)
+
+
+# --- SMTP retry (round-robin null-routed IP dodge) ---------------------------
+def _msg() -> EmailMessage:
+    m = EmailMessage()
+    m["Subject"] = "x"
+    m["From"] = "a@b.com"
+    m["To"] = "c@d.com"
+    m.set_content("hi")
+    return m
+
+
+def test_retry_succeeds_on_second_attempt_with_fresh_connection():
+    # First connection lands on a null-routed IP (TimeoutError at connect); the
+    # retry opens a FRESH connection (new DNS resolve) and succeeds.
+    calls = {"n": 0}
+    sleeps = []
+
+    def factory():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise TimeoutError("connection to blocked IP timed out")
+        return _FakeSMTP()
+
+    _send_message(
+        _msg(), smtp_user="u", smtp_password="p", host="smtp.gmail.com", port=465,
+        use_tls=False, use_ssl=True, smtp_factory=factory, sleep_fn=sleeps.append,
+    )
+    assert calls["n"] == 2  # retried once
+    assert sleeps == [pytest.approx(2.0)]  # one backoff before the retry
+
+
+def test_retry_exhausts_then_raises_without_password_leak():
+    calls = {"n": 0}
+
+    def factory():
+        calls["n"] += 1
+        raise TimeoutError("blocked; password=some-secret-pw in transport log")
+
+    with pytest.raises(EmailDeliveryError) as ei:
+        _send_message(
+            _msg(), smtp_user="u", smtp_password="some-secret-pw", host="h", port=465,
+            use_tls=False, use_ssl=True, smtp_factory=factory,
+            max_attempts=3, sleep_fn=lambda _s: None,
+        )
+    assert calls["n"] == 3  # all attempts used
+    assert "after 3 attempts" in str(ei.value)
+    assert "some-secret-pw" not in str(ei.value)  # R21: type name only, no server text
+
+
+def test_permanent_auth_error_not_retried():
+    # Bad credentials are permanent — retrying cannot help, so fail on attempt 1.
+    calls = {"n": 0}
+
+    def factory():
+        calls["n"] += 1
+        fake = _FakeSMTP()
+        fake.login = lambda u, p: (_ for _ in ()).throw(
+            smtplib.SMTPAuthenticationError(535, b"bad creds")
+        )
+        return fake
+
+    with pytest.raises(EmailDeliveryError):
+        _send_message(
+            _msg(), smtp_user="u", smtp_password="p", host="h", port=465,
+            use_tls=False, use_ssl=True, smtp_factory=factory, sleep_fn=lambda _s: None,
+        )
+    assert calls["n"] == 1  # NOT retried
