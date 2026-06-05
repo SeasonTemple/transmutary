@@ -458,3 +458,57 @@ def test_explain_refine_keeps_injection_in_data_slot_only():
     assert all(inj not in c["system"] for c in captured["calls"])
     # Trend severity is unchanged by injection.
     assert out.reports[0].severity is Severity.NORMAL
+
+
+# ===========================================================================
+# U2 — rank_signal + Top-N deep-dive + body self-title removal (KTD4/KTD5/R-G)
+# ===========================================================================
+
+# --- KTD4: report carries growth as rank_signal (None for no-growth candidate) -
+def test_explain_sets_rank_signal_from_growth():
+    captured: dict = {}
+    out = explain_trends(
+        [_cand("a/r", growth=42.0), _cand("b/r", growth=None)],
+        _store(),
+        call_fn=_refine_aware_call(captured),
+        embed_fn=None,
+    )
+    by_repo = {r.repo: r for r in out.reports}
+    assert by_repo["a/r"].rank_signal == 42.0
+    assert by_repo["b/r"].rank_signal is None
+
+
+# --- KTD5: only Top-N reps by growth get the deep-dive critique-refine ----------
+def test_explain_refine_limited_to_top_n_by_growth():
+    from transmutary.report.explain import TREND_TOP_N
+
+    # More candidates than TREND_TOP_N, each distinct (no L2 fold), growth 1..N+2.
+    cands = [
+        _cand(f"r/{i}", growth=float(i), desc=f"distinct agent tool number {i}")
+        for i in range(1, TREND_TOP_N + 3)
+    ]
+    captured: dict = {}
+    explain_trends(cands, _store(), call_fn=_refine_aware_call(captured), refine=True,
+                   embed_fn=None)
+    # critique+refine calls = 2 per deep-dived rep; capped at TREND_TOP_N.
+    cr = [c for c in captured["calls"] if "trend explainer" not in c["system"]]
+    assert len(cr) == 2 * TREND_TOP_N
+
+
+# --- KTD5: a no-growth candidate is never deep-dived, even with refine=True -----
+def test_explain_refine_skips_no_growth_candidate():
+    captured: dict = {}
+    explain_trends([_cand("a/r", growth=None)], _store(),
+                   call_fn=_refine_aware_call(captured), refine=True, embed_fn=None)
+    # Only the batch summary call — no critique/refine (no eligible Top-N).
+    assert len(captured["calls"]) == 1
+
+
+# --- R-G: body no longer restates its own title as a heading --------------------
+def test_explain_body_has_no_self_title_heading():
+    captured: dict = {}
+    out = explain_trends([_cand("a/r")], _store(),
+                         call_fn=_refine_aware_call(captured), embed_fn=None)
+    body = out.reports[0].body_md
+    assert "## Trending:" not in body
+    assert "Trend: a/r" in out.reports[0].title  # title still carries the repo
