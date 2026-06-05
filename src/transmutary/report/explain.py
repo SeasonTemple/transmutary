@@ -50,6 +50,12 @@ from .schema import Report, ReportKind, Severity, Source
 # fingerprint → re-enters the summary (AE2). Same bucket + same content → unchanged.
 GROWTH_BUCKET_STEP = 50.0
 
+# Top-N trend candidates (by growth/day) that get the deep-dive critique-refine
+# pass when refine is on (KTD5). The rest keep their single-pass light summary.
+# Candidates with no growth signal (growth_per_day None) are never eligible — a
+# brand-new candidate has no acceleration to deepen on. Tunable.
+TREND_TOP_N = 8
+
 # The batch-summary trusted system instruction. Candidate text is NEVER appended
 # here (KTD3) — it goes to llm.py's data slot. The model is told to emit a JSON
 # array keyed by the candidate index so the per-candidate parse cannot be steered
@@ -450,7 +456,18 @@ def explain_trends(
     #     applies). A refine LLMError degrades to the original summary (KTD-D).
     refine_notes: list[str] = []
     if refine:
+        # KTD5: only the Top-N representatives by growth/day get the deep-dive.
+        # Reps with no growth signal are excluded; ties keep batch order (stable
+        # sort), so a brand-new no-growth candidate never displaces a real mover.
+        ranked = sorted(
+            (i for i in rep_indices if fresh[i].growth_per_day is not None),
+            key=lambda i: fresh[i].growth_per_day,
+            reverse=True,
+        )
+        deep_dive = set(ranked[:TREND_TOP_N])
         for fresh_i in rep_indices:
+            if fresh_i not in deep_dive:
+                continue
             bs = summary_by_fresh.get(fresh_i)
             draft_summary = bs.summary if bs else ""
             if not (draft_summary and draft_summary.strip()):
@@ -521,8 +538,10 @@ def _build_report(
         else "- Growth: new candidate (no prior snapshot; no growth this run)\n"
     )
     fold_block = f"\n> {fold_note}\n" if fold_note else ""
+    # No leading "## Trending: {repo}" heading — the repo already appears in the
+    # report title (and, in the digest, a repo chip). A body heading that restates
+    # its own title is pure duplication on every surface (digest/RSS/dashboard).
     body = (
-        f"## Trending: {cand.repo}\n"
         f"- Stars: {cand.stargazers}\n"
         f"{growth_line}"
         f"- Topics: {', '.join(cand.topics) if cand.topics else '(none)'}\n"
@@ -533,7 +552,6 @@ def _build_report(
     body_zh = None
     if summary_zh:
         body_zh = (
-            f"## 热门趋势：{cand.repo}\n"
             f"- Stars：{cand.stargazers}\n"
             f"{growth_line}"
             f"- Topics：{', '.join(cand.topics) if cand.topics else '(无)'}\n"
@@ -575,4 +593,7 @@ def _build_report(
         created_at=_now_iso(),
         sources=sources,
         body_md_zh=body_zh,
+        # Structured growth signal for digest tiering/sorting (KTD4). None for a
+        # brand-new candidate with no prior snapshot → digest sinks it to the tail.
+        rank_signal=cand.growth_per_day,
     )

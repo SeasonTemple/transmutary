@@ -35,6 +35,13 @@ DELIVERY_STRINGS: dict[str, dict[str, str]] = {
         "unverified_prefix": "[Unverified] ",
         "trend_title": "Trend: {repo}",
         "feed_title": "transmutary {name} feed",
+        "digest_section_diagnose": "Alerts and diagnostics",
+        "digest_section_trends": "Trends",
+        "digest_trend_more": "More trends",
+        "digest_col_repo": "Repository",
+        "digest_col_summary": "Summary",
+        "digest_col_growth": "Growth",
+        "digest_growth_fmt": "+{v} stars/day",
     },
     "zh": {
         "sources": "来源",
@@ -45,6 +52,13 @@ DELIVERY_STRINGS: dict[str, dict[str, str]] = {
         "unverified_prefix": "[待核实信号] ",
         "trend_title": "趋势：{repo}",
         "feed_title": "transmutary {name} 订阅源",
+        "digest_section_diagnose": "告警与诊断",
+        "digest_section_trends": "趋势",
+        "digest_trend_more": "其余趋势",
+        "digest_col_repo": "仓库",
+        "digest_col_summary": "摘要",
+        "digest_col_growth": "增长",
+        "digest_growth_fmt": "+{v} 颗星/天",
     },
 }
 

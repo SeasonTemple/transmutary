@@ -100,3 +100,23 @@ def test_to_dict_excludes_llm_config():
     """ADV-09: LLMConfig must never appear in serialized report output."""
     d = _sample().to_dict()
     assert "llm_config" not in d
+
+
+def test_rank_signal_roundtrip():
+    r = _sample()
+    r.rank_signal = 123.0
+    d = r.to_dict()
+    assert d["rank_signal"] == 123.0
+    assert Report.from_dict(d).rank_signal == 123.0
+
+
+def test_rank_signal_defaults_none():
+    assert _sample().rank_signal is None
+    assert _sample().to_dict()["rank_signal"] is None
+
+
+def test_from_dict_without_rank_signal_is_none():
+    # Backward compatible: an old sidecar dict missing the key → None.
+    d = _sample().to_dict()
+    del d["rank_signal"]
+    assert Report.from_dict(d).rank_signal is None

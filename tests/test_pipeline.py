@@ -596,14 +596,17 @@ def _trend_handler(rows, *, status=200):
     return handler
 
 
-def _row(repo, stars, desc="an ai llm toolkit"):
+def _row(repo, stars, desc="an ai llm toolkit", *, increment=None):
     owner, name = repo.split("/")
-    return {
+    row = {
         "repo_name": repo,
         "stars": stars,
         "description": desc,
         "language": "Python",
     }
+    if increment is not None:
+        row["stars_increment"] = increment  # → growth_per_day (ossinsight metric)
+    return row
 
 
 def test_ae2_new_trend_enters_digest(tmp_path):
@@ -965,7 +968,8 @@ def test_release_issue_tick_default_no_refine_backward_compatible():
 
 
 def test_trend_tick_refine_reports_true_runs_critique_refine():
-    rows = [_row("acme/ai-tool", 1000)]
+    # growth signal (increment) makes it a Top-N mover → eligible for deep-dive (U2).
+    rows = [_row("acme/ai-tool", 1000, increment=300)]
     seen = {"systems": []}
 
     def _call(system, data, tier=None, *, api_key=None, base_url=None, **kw):

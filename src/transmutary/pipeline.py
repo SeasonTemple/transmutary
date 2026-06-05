@@ -634,7 +634,7 @@ class DigestResult:
     skipped_empty: bool = False
 
 
-def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
+def run_daily_digest(rt: PipelineRuntime, *, now_ts: float, call_fn=_UNSET) -> DigestResult:
     """Aggregate the last 24h of reports into one HTML digest (R10).
 
     Collects across all repos (fixed window, idempotent), writes a designed HTML
@@ -661,8 +661,23 @@ def run_daily_digest(rt: PipelineRuntime, *, now_ts: float) -> DigestResult:
 
     date_label = datetime.datetime.utcfromtimestamp(now_ts).strftime("%Y-%m-%d")
     lang = rt.outbound.email_lang
-    html = digest_mod.render_digest_html(reports, date_label=date_label, lang=lang)
-    text = digest_mod.render_digest_text(reports, date_label=date_label, lang=lang)
+
+    # Trend-section opening synthesis (KTD1): one cheap LLM pass over the window's
+    # explain summaries. Resolved here (digest is the producer→consumer consumer, so
+    # the window already holds today's trend reports — see service daily_publish).
+    # Graceful: synthesize_trends returns "" on no-trend windows or LLM failure.
+    api_key, base_url, cheap_model = _tier_creds(rt, "cheap")
+    synth_call = _llm_call_default() if call_fn is _UNSET else call_fn
+    trend_synthesis = digest_mod.synthesize_trends(
+        reports, lang=lang, call_fn=synth_call,
+        api_key=api_key, base_url=base_url, model=cheap_model,
+    )
+    html = digest_mod.render_digest_html(
+        reports, date_label=date_label, lang=lang, trend_synthesis=trend_synthesis
+    )
+    text = digest_mod.render_digest_text(
+        reports, date_label=date_label, lang=lang, trend_synthesis=trend_synthesis
+    )
 
     # HTML artifact under <artifact_root>/_digest/<date>.html.
     digest_dir = os.path.join(rt.artifact_root, "_digest")
