@@ -42,8 +42,11 @@ from ..collect.trend import TrendCandidate
 from ..dedup import content_hash
 from ..rerank import L2_MAX_EMBED_ITEMS, group_semantic
 from ..store.state import StateStore
+from .body_parse import parse_bilingual_revision
 from .refine import critique_refine
 from .schema import Report, ReportKind, Severity, Source
+
+_BILINGUAL_SPLIT = "<!-- BILINGUAL:SPLIT -->"
 
 # Growth bucket granularity (stars/day) for the artifact fingerprint. A repo that
 # crosses into a higher bucket counts as a SIGNIFICANT re-acceleration → new
@@ -472,10 +475,19 @@ def explain_trends(
             draft_summary = bs.summary if bs else ""
             if not (draft_summary and draft_summary.strip()):
                 continue
+            draft_zh = bs.summary_zh if bs else ""
             rep = fresh[fresh_i]
             evidence = cleaned_by_repo.get(rep.repo, "") or rep.description or ""
+            # The refine prompt is a BILINGUAL contract (en + SPLIT + zh). Feed it a
+            # bilingual draft so BOTH languages get the Top-N deep-dive — not a bare
+            # EN string the model would otherwise pad into a malformed bilingual blob.
+            draft = (
+                f"{draft_summary}\n{_BILINGUAL_SPLIT}\n{draft_zh}"
+                if draft_zh.strip()
+                else draft_summary
+            )
             revised, notes = critique_refine(
-                draft_summary,
+                draft,
                 evidence,
                 call_fn=call_fn,
                 tier=ModelTier.CHEAP,
@@ -483,9 +495,13 @@ def explain_trends(
                 base_url=base_url,
                 model=model,
             )
-            # Preserve summary_zh through refine; revise only EN summary.
-            old_zh = bs.summary_zh if bs else ""
-            summary_by_fresh[fresh_i] = _BatchSummary(revised, old_zh)
+            # Split the revised blob back into clean per-language slots, stripping
+            # wrapper headings / revision-notes meta and fixing reversed order; on a
+            # missing side fall back to the original draft (KTD-D parity).
+            new_en, new_zh = parse_bilingual_revision(
+                revised, fallback_en=draft_summary, fallback_zh=draft_zh
+            )
+            summary_by_fresh[fresh_i] = _BatchSummary(new_en, new_zh)
             refine_notes.extend(notes)
 
     # 4. Per-candidate Report (EXPLAIN, digest severity). Every fresh candidate gets
