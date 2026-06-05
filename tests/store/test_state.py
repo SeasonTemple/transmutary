@@ -323,6 +323,26 @@ def test_admin_delivery_email_lang_roundtrip_and_partial_wipe(store):
     assert store.get_admin_delivery_preferences().email_lang is None
 
 
+def test_admin_delivery_poll_intervals_roundtrip_and_clamp(store):
+    p = store.get_admin_delivery_preferences()
+    assert p.security_interval_seconds is None
+    assert p.release_issue_interval_seconds is None
+    store.set_admin_delivery_preferences(
+        security_interval_seconds=180, release_issue_interval_seconds=1800
+    )
+    p = store.get_admin_delivery_preferences()
+    assert p.security_interval_seconds == 180
+    assert p.release_issue_interval_seconds == 1800
+    # write-time clamp: below 2min floor → 120
+    store.set_admin_delivery_preferences(security_interval_seconds=30)
+    assert store.get_admin_delivery_preferences().security_interval_seconds == 120
+    # partial set omitting intervals wipes them (full-replace semantics)
+    store.set_admin_delivery_preferences(digest_hour=9)
+    p = store.get_admin_delivery_preferences()
+    assert p.security_interval_seconds is None
+    assert p.release_issue_interval_seconds is None
+
+
 def test_admin_config_scrubs_credential_shaped_values(store):
     store.add_admin_repo("safe/repo")
     store.add_admin_dependency_edge("safe/repo", "dep/repo")

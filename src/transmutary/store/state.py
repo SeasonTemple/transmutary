@@ -85,6 +85,8 @@ class AdminDeliveryPreferences:
     email_recipients: list[str] | None = None
     digest_hour: int | None = None
     email_lang: str | None = None
+    security_interval_seconds: int | None = None
+    release_issue_interval_seconds: int | None = None
 
 
 _SCHEMA = """
@@ -578,6 +580,8 @@ class StateStore:
         email_recipients: list[str] | None = None,
         digest_hour: int | None = None,
         email_lang: str | None = None,
+        security_interval_seconds: int | None = None,
+        release_issue_interval_seconds: int | None = None,
     ) -> None:
         now = time.time()
         rows: list[tuple[str, str, float]] = []
@@ -592,8 +596,36 @@ class StateStore:
             from ..config import normalize_email_lang
 
             rows.append(("email_lang", normalize_email_lang(email_lang), now))
+        if security_interval_seconds is not None or release_issue_interval_seconds is not None:
+            from ..config import (
+                DEFAULT_RELEASE_ISSUE_INTERVAL_SECONDS,
+                DEFAULT_SECURITY_INTERVAL_SECONDS,
+                normalize_interval,
+            )
+
+            if security_interval_seconds is not None:
+                rows.append((
+                    "security_interval_seconds",
+                    str(normalize_interval(
+                        security_interval_seconds,
+                        default=DEFAULT_SECURITY_INTERVAL_SECONDS,
+                    )),
+                    now,
+                ))
+            if release_issue_interval_seconds is not None:
+                rows.append((
+                    "release_issue_interval_seconds",
+                    str(normalize_interval(
+                        release_issue_interval_seconds,
+                        default=DEFAULT_RELEASE_ISSUE_INTERVAL_SECONDS,
+                    )),
+                    now,
+                ))
         with self._lock:
-            for key in ("email_recipients", "digest_hour", "email_lang"):
+            for key in (
+                "email_recipients", "digest_hour", "email_lang",
+                "security_interval_seconds", "release_issue_interval_seconds",
+            ):
                 self._conn.execute(
                     "DELETE FROM admin_delivery_preference WHERE key=?", (key,)
                 )
@@ -608,7 +640,8 @@ class StateStore:
         with self._lock:
             cur = self._conn.execute(
                 "SELECT key, value FROM admin_delivery_preference "
-                "WHERE key IN ('email_recipients', 'digest_hour', 'email_lang')"
+                "WHERE key IN ('email_recipients', 'digest_hour', 'email_lang', "
+                "'security_interval_seconds', 'release_issue_interval_seconds')"
             )
             values = {r["key"]: r["value"] for r in cur.fetchall()}
         recipients = None
@@ -619,10 +652,16 @@ class StateStore:
         digest_hour = None
         if "digest_hour" in values:
             digest_hour = int(values["digest_hour"])
+
+        def _int_or_none(key: str) -> int | None:
+            return int(values[key]) if key in values else None
+
         return AdminDeliveryPreferences(
             email_recipients=recipients,
             digest_hour=digest_hour,
             email_lang=values.get("email_lang"),
+            security_interval_seconds=_int_or_none("security_interval_seconds"),
+            release_issue_interval_seconds=_int_or_none("release_issue_interval_seconds"),
         )
 
     # ------------------------------------------------------------------
