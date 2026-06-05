@@ -68,6 +68,11 @@ class Report:
     # None, delivery falls back to ``title``. External/untranslatable titles
     # (e.g. an upstream release name) stay identical in both — leave this None.
     title_zh: str | None = None
+    # Structured ranking signal for digest tiering (KTD4). Carries the trend
+    # candidate's growth/day so the digest sorts and tiers deterministically
+    # without parsing the body. None when the report has no growth signal
+    # (e.g. a brand-new trend candidate, or any non-trend report).
+    rank_signal: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Explicit field construction — avoids ``asdict`` leaking unintended fields."""
@@ -81,6 +86,7 @@ class Report:
             "severity": self.severity.value,
             "created_at": self.created_at,
             "sources": [s.to_dict() for s in self.sources],
+            "rank_signal": self.rank_signal,
         }
 
     @classmethod
@@ -95,4 +101,5 @@ class Report:
             sources=[Source.from_dict(s) for s in d.get("sources", [])],
             body_md_zh=d.get("body_md_zh"),
             title_zh=d.get("title_zh"),
+            rank_signal=d.get("rank_signal"),
         )
