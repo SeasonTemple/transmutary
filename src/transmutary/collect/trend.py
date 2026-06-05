@@ -206,13 +206,23 @@ def _parse_ossinsight(payload: dict) -> tuple[list[TrendCandidate], list[str]]:
         stars = _to_int(row.get("stars") or row.get("stargazers") or row.get("stargazers_count"))
         topics = _to_str_list(row.get("topics") or row.get("collection_names"))
         description = str(row.get("description") or "")
-        raw_url = str(row.get("html_url") or row.get("url") or "")
-        safe_url, ok = _safe_candidate_url(raw_url)
-        if not ok:
-            warnings.append(
-                f"trend candidate {repo!r} carried an off-allowlist URL "
-                f"{raw_url!r}; dropped, not fetched (R23)"
-            )
+        explicit_url = str(row.get("html_url") or row.get("url") or "")
+        if explicit_url:
+            safe_url, ok = _safe_candidate_url(explicit_url)
+            if not ok:
+                # An explicit off-allowlist URL is suspicious — drop it, and do NOT
+                # fall back to a derived one (don't paper over a rejected link).
+                warnings.append(
+                    f"trend candidate {repo!r} carried an off-allowlist URL "
+                    f"{explicit_url!r}; dropped, not fetched (R23)"
+                )
+        else:
+            # OSS Insight rows carry no html_url/url. Derive the candidate's own
+            # repo URL so it has a single citation source (host is always
+            # github.com — on-allowlist; the untrusted repo sits in the path and
+            # cannot change the host). Without this, explain.py sees zero sources
+            # and mislabels EVERY trend report 待核实信号 (Unverified).
+            safe_url, ok = _safe_candidate_url(f"https://github.com/{repo}")
         # OSS Insight may directly provide a period growth metric. ONLY an explicit
         # increment field counts — the total ``stars`` is the snapshot value, not a
         # growth rate, so it must not be mistaken for one (it backfills via the
