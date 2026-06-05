@@ -675,7 +675,9 @@ def run_daily_digest(rt: PipelineRuntime, *, now_ts: float, call_fn=_UNSET) -> D
     html = digest_mod.render_digest_html(
         reports, date_label=date_label, lang=lang, trend_synthesis=trend_synthesis
     )
-    text = digest_mod.render_digest_text(reports, date_label=date_label, lang=lang)
+    text = digest_mod.render_digest_text(
+        reports, date_label=date_label, lang=lang, trend_synthesis=trend_synthesis
+    )
 
     # HTML artifact under <artifact_root>/_digest/<date>.html.
     digest_dir = os.path.join(rt.artifact_root, "_digest")

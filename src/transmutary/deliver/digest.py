@@ -144,16 +144,130 @@ def _report_block(report: Report, lang: str) -> str:
     )
 
 
+def _section_heading(text: str) -> str:
+    """A digest section divider (R-B visual hierarchy, R9 semantic ``<h2>``)."""
+    return (
+        f'<h2 style="font-size:1.2rem;margin:1.75rem 0 .75rem;padding-bottom:.3rem;'
+        f'border-bottom:2px solid #d0d7de;">{escape(text)}</h2>'
+    )
+
+
+def _growth_label(rank_signal: float | None, strings: dict[str, str]) -> str:
+    """Human growth tag from ``rank_signal`` (KTD4), ``""`` when no signal."""
+    if rank_signal is None:
+        return ""
+    return strings["digest_growth_fmt"].format(v=f"{rank_signal:.1f}")
+
+
+def _one_line_summary(report: Report, lang: str) -> str:
+    """One compact summary line for the long-tail table (KTD6).
+
+    Prefers the line under a ``Summary`` heading; else the first prose line.
+    Markdown markers are stripped and the result is truncated for table density.
+    """
+    body_md, _ = localized_body(report, lang)
+    lines = [ln.strip() for ln in body_md.splitlines()]
+    summary = ""
+    for i, ln in enumerate(lines):
+        if ln.lstrip("#").strip().lower() in ("summary", "摘要"):
+            summary = next((nxt for nxt in lines[i + 1 :] if nxt), "")
+            break
+    if not summary:
+        summary = next(
+            (ln for ln in lines if ln and not ln.startswith(("#", "-", "*", ">", "|"))), ""
+        )
+    summary = summary.lstrip("-*# ").strip()
+    if len(summary) > 140:
+        summary = summary[:139].rstrip() + "…"
+    return summary
+
+
+def _trend_card(report: Report, lang: str, strings: dict[str, str]) -> str:
+    """A Top-N trend deep-dive card: repo + growth tag + full body (R-B)."""
+    body_md, lang_attr = localized_body(report, lang)
+    body = render_markdown(body_md)
+    growth = _growth_label(report.rank_signal, strings)
+    growth_html = (
+        f'<span style="display:inline-block;padding:.1rem .5rem;border-radius:5px;'
+        f'font-size:.72rem;font-weight:600;background:#dcfce7;color:#166534;">'
+        f"{escape(growth)}</span>"
+        if growth else ""
+    )
+    return (
+        f'<article style="border:1px solid #d0d7de;border-radius:8px;'
+        f'padding:1rem 1.25rem;margin:0 0 1rem;">'
+        f'<div style="margin:0 0 .5rem;">'
+        f'<code style="color:#636c76;font-size:.82rem;">{escape(report.repo)}</code> '
+        f"{growth_html}</div>"
+        f'<h3 style="font-size:1.1rem;line-height:1.3;margin:0 0 .5rem;">'
+        f"{escape(localized_title(report, lang))}</h3>"
+        f'<div lang="{lang_attr}" style="line-height:1.7;word-break:break-word;">'
+        f"{body}</div></article>"
+    )
+
+
+def _trend_tail_table(reports: list[Report], lang: str, strings: dict[str, str]) -> str:
+    """Long-tail trends as a static compact table (KTD6 — no ``<details>``).
+
+    Columns: repo, one-line summary, growth. Stars are intentionally omitted —
+    there is no structured stars field, and KTD4 bars parsing the body text.
+    """
+    th = (
+        'style="text-align:left;padding:.4rem .5rem;border-bottom:2px solid #d0d7de;'
+        'font-size:.78rem;color:#636c76;font-weight:600;"'
+    )
+    td = 'style="padding:.4rem .5rem;border-bottom:1px solid #eaeef2;vertical-align:top;"'
+    rows = []
+    for r in reports:
+        growth = _growth_label(r.rank_signal, strings) or "—"
+        rows.append(
+            f"<tr>"
+            f'<td {td}><code style="font-size:.82rem;">{escape(r.repo)}</code></td>'
+            f"<td {td}>{escape(_one_line_summary(r, lang))}</td>"
+            f'<td {td} style="padding:.4rem .5rem;border-bottom:1px solid #eaeef2;'
+            f'white-space:nowrap;color:#166534;">{escape(growth)}</td>'
+            f"</tr>"
+        )
+    return (
+        '<table role="table" style="width:100%;border-collapse:collapse;'
+        'font-size:.85rem;margin:0 0 1rem;"><thead><tr>'
+        f'<th scope="col" {th}>{escape(strings["digest_col_repo"])}</th>'
+        f'<th scope="col" {th}>{escape(strings["digest_col_summary"])}</th>'
+        f'<th scope="col" {th}>{escape(strings["digest_col_growth"])}</th>'
+        f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
+def _tier_trends(reports: list[Report]) -> tuple[list[Report], list[Report]]:
+    """Split EXPLAIN reports into Top-N deep-dive cards and long-tail (KTD4/KTD5).
+
+    ``top`` = the ``TREND_TOP_N`` fastest growers (``rank_signal`` non-None, desc).
+    ``tail`` = the remaining ranked movers followed by all no-signal reports — a
+    candidate with no growth signal never enters the Top-N (no signal, no claim).
+    """
+    from ..report.explain import TREND_TOP_N
+
+    ranked = sorted(
+        (r for r in reports if r.rank_signal is not None),
+        key=lambda r: -r.rank_signal,  # type: ignore[operator]
+    )
+    unranked = [r for r in reports if r.rank_signal is None]
+    return ranked[:TREND_TOP_N], ranked[TREND_TOP_N:] + unranked
+
+
 def render_digest_html(
     reports: list[Report], *, date_label: str, lang: str = _DEFAULT_LANG,
     trend_synthesis: str = "",
 ) -> str:
-    """Render the aggregate digest as standalone HTML (R8 CJK, R9 a11y).
+    """Render the aggregate digest as a two-section briefing (R-B, R8 CJK, R9 a11y).
+
+    Section 1 (``DIAGNOSE``): individual alert/diagnostic cards, semantics
+    unchanged (R-E), severity-ordered. Section 2 (``EXPLAIN``): the trend
+    briefing — optional ``trend_synthesis`` lead (KTD1), Top-N growth-ranked
+    deep-dive cards, then a static long-tail table (KTD6).
 
     Single-language (``lang``): one language per report (the dashboard/RSS keep
     both). ``lang="zh"`` falls back to English where no translation exists.
-    ``trend_synthesis`` (KTD1) is the optional LLM opening narrative for the trend
-    section; empty string → no lead paragraph.
     """
     strings = delivery_strings(lang)
     urgent = sum(1 for r in reports if r.severity.is_urgent)
@@ -161,11 +275,36 @@ def render_digest_html(
         strings["digest_high_risk"].format(n=urgent) if urgent else ""
     )
     title_label = strings["daily_digest"]
-    synth_html = (
-        f'<p style="margin:0 0 1.5rem;line-height:1.7;">{escape(trend_synthesis)}</p>'
-        if trend_synthesis else ""
+
+    diagnose = sorted(
+        (r for r in reports if r.kind is not ReportKind.EXPLAIN),
+        key=lambda r: _SEV_ORDER.get(r.severity, 9),
     )
-    blocks = "".join(_report_block(r, lang) for r in reports) or (
+    explain = [r for r in reports if r.kind is ReportKind.EXPLAIN]
+    top, tail = _tier_trends(explain)
+
+    sections: list[str] = []
+    if diagnose:
+        cards = "".join(_report_block(r, lang) for r in diagnose)
+        sections.append(
+            f"<section>{_section_heading(strings['digest_section_diagnose'])}{cards}</section>"
+        )
+    if explain:
+        parts = [_section_heading(strings["digest_section_trends"])]
+        if trend_synthesis:
+            parts.append(
+                f'<p style="margin:0 0 1.5rem;line-height:1.7;">{escape(trend_synthesis)}</p>'
+            )
+        parts.extend(_trend_card(r, lang, strings) for r in top)
+        if tail:
+            parts.append(
+                f'<h3 style="font-size:1rem;margin:1.25rem 0 .5rem;color:#374151;">'
+                f"{escape(strings['digest_trend_more'])}</h3>"
+            )
+            parts.append(_trend_tail_table(tail, lang, strings))
+        sections.append(f"<section>{''.join(parts)}</section>")
+
+    body_html = "".join(sections) or (
         f'<p style="color:#636c76;">{escape(strings["no_reports"])}</p>'
     )
     return (
@@ -177,24 +316,49 @@ def render_digest_html(
         f'<h1 style="font-size:1.5rem;margin:0 0 .25rem;">'
         f"{escape(title_label)} {escape(date_label)}</h1>"
         f'<p style="color:#636c76;margin:0 0 1.5rem;font-size:.9rem;">{escape(overview)}</p>'
-        f"{synth_html}"
-        f"{blocks}</main></body></html>"
+        f"{body_html}</main></body></html>"
     )
 
 
 def render_digest_text(
-    reports: list[Report], *, date_label: str, lang: str = _DEFAULT_LANG
+    reports: list[Report], *, date_label: str, lang: str = _DEFAULT_LANG,
+    trend_synthesis: str = "",
 ) -> str:
-    """Plain-text digest fallback (single-language body per report)."""
+    """Plain-text digest fallback — same two-section split as the HTML (R-B)."""
     strings = delivery_strings(lang)
+    diagnose = sorted(
+        (r for r in reports if r.kind is not ReportKind.EXPLAIN),
+        key=lambda r: _SEV_ORDER.get(r.severity, 9),
+    )
+    explain = [r for r in reports if r.kind is ReportKind.EXPLAIN]
+    top, tail = _tier_trends(explain)
+
     lines = [
         f"{strings['daily_digest']} {date_label}",
         strings["digest_overview"].format(n=len(reports)),
         "",
     ]
-    for r in reports:
-        body_md, _ = localized_body(r, lang)
-        lines.append(f"[{r.severity.value.upper()}] {r.repo} — {localized_title(r, lang)}")
-        lines.append(body_md)
-        lines.append("\n---\n")
+    if diagnose:
+        lines.append(f"== {strings['digest_section_diagnose']} ==")
+        for r in diagnose:
+            body_md, _ = localized_body(r, lang)
+            lines.append(f"[{r.severity.value.upper()}] {r.repo} — {localized_title(r, lang)}")
+            lines.append(body_md)
+            lines.append("\n---\n")
+    if explain:
+        lines.append(f"== {strings['digest_section_trends']} ==")
+        if trend_synthesis:
+            lines.extend((trend_synthesis, ""))
+        for r in top:
+            body_md, _ = localized_body(r, lang)
+            growth = _growth_label(r.rank_signal, strings)
+            tag = f"[{growth}] " if growth else ""
+            lines.append(f"{tag}{r.repo} — {localized_title(r, lang)}")
+            lines.append(body_md)
+            lines.append("\n---\n")
+        if tail:
+            lines.append(f"{strings['digest_trend_more']}:")
+            for r in tail:
+                growth = _growth_label(r.rank_signal, strings) or "—"
+                lines.append(f"  {r.repo} — {_one_line_summary(r, lang)} ({growth})")
     return "\n".join(lines)
