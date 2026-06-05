@@ -553,6 +553,13 @@ def _build_report(
         if cand.growth_per_day is not None
         else "- Growth: new candidate (no prior snapshot; no growth this run)\n"
     )
+    # ZH meta line — keep the digest single-language (no English label/unit leaking
+    # into the 中文 body's structured fields).
+    growth_line_zh = (
+        f"- 增长：{cand.growth_per_day:.1f} 颗星/天（{cand.growth_source}）\n"
+        if cand.growth_per_day is not None
+        else "- 增长：新上榜（无历史快照，本轮无增长数据）\n"
+    )
     fold_block = f"\n> {fold_note}\n" if fold_note else ""
     # No leading "## Trending: {repo}" heading — the repo already appears in the
     # report title (and, in the digest, a repo chip). A body heading that restates
@@ -568,9 +575,9 @@ def _build_report(
     body_zh = None
     if summary_zh:
         body_zh = (
-            f"- Stars：{cand.stargazers}\n"
-            f"{growth_line}"
-            f"- Topics：{', '.join(cand.topics) if cand.topics else '(无)'}\n"
+            f"- 星标：{cand.stargazers}\n"
+            f"{growth_line_zh}"
+            f"- 主题：{', '.join(cand.topics) if cand.topics else '（无）'}\n"
             f"{fold_block}\n"
             f"### 摘要\n{summary_zh}\n"
         )
