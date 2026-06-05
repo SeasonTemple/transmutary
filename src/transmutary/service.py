@@ -278,23 +278,25 @@ def register_pipeline_jobs(
             release_issue_interval=delivery.release_issue_interval_seconds,
         )
 
-    # --- trend: daily digest tick (cron at delivery.digest_hour) ---
-    scheduler.add_job(
-        _isolated("trend", lambda: run_trend_tick(runtime, ts=time.time())),
-        trigger="cron",
-        hour=delivery.digest_hour,
-        id="trend",
-        max_instances=1,
-        coalesce=True,
-        replace_existing=True,
-    )
+    # --- daily publish: trend tick THEN digest, ONE cron @ digest_hour, sequential.
+    #     Merged into a single job (not two same-hour jobs) so the producer→consumer
+    #     order is guaranteed by code, not by which job the executor's thread pool
+    #     happens to pick first. Two same-hour cron jobs race: if digest ran before
+    #     trend, the 24h window misses today's freshly-written trend reports (and
+    #     yesterday's just aged out at the window edge) → empty trend section.
+    #     Each phase is independently _isolated: a trend failure still lets the
+    #     digest ship (it aggregates the 24h window incl. mode-A diagnose written
+    #     through the day). refine_reports=True turns on the Top-N deep-dive. ---
+    def _daily_publish() -> None:
+        _isolated("trend", lambda: run_trend_tick(
+            runtime, ts=time.time(), refine_reports=True))()
+        _isolated("daily-digest", lambda: run_daily_digest(runtime, now_ts=time.time()))()
 
-    # --- daily-digest: aggregate last 24h reports → HTML + RSS + email (R10) ---
     scheduler.add_job(
-        _isolated("daily-digest", lambda: run_daily_digest(runtime, now_ts=time.time())),
+        _daily_publish,
         trigger="cron",
         hour=delivery.digest_hour,
-        id="daily-digest",
+        id="daily-publish",
         max_instances=1,
         coalesce=True,
         replace_existing=True,

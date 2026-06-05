@@ -120,7 +120,7 @@ def test_build_scheduler_with_settings_registers_tiered_jobs():
     # placeholder is NOT registered when settings are supplied.
     assert "placeholder" not in job_ids
     # one trend job + per-repo security + per-repo release-issue jobs.
-    assert "trend" in job_ids
+    assert "daily-publish" in job_ids
     assert "security:acme/cli" in job_ids
     assert "security:acme/gateway" in job_ids
     assert "release-issue:acme/cli" in job_ids
@@ -151,8 +151,49 @@ def test_trend_cron_uses_effective_admin_digest_hour(store):
     store.set_admin_delivery_preferences(email_recipients=None, digest_hour=17)
     sched = BackgroundScheduler()
     build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
-    trend = {j.id: j for j in sched.get_jobs()}["trend"]
+    trend = {j.id: j for j in sched.get_jobs()}["daily-publish"]
     assert str(trend.trigger.fields[5]) == "17"
+
+
+# --- U3: daily-publish merges trend→digest into one ordered, isolated job -------
+def test_daily_publish_is_single_job_no_separate_race(store):
+    # Regression guard: the old design had TWO same-hour cron jobs ("trend" +
+    # "daily-digest") that raced. They must be merged into one "daily-publish".
+    settings = _settings(repos=("acme/cli",), email=True)
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    ids = {j.id for j in sched.get_jobs()}
+    assert "daily-publish" in ids
+    assert "trend" not in ids
+    assert "daily-digest" not in ids
+
+
+def test_daily_publish_runs_trend_then_digest(store, monkeypatch):
+    order: list[str] = []
+    monkeypatch.setattr(service, "run_trend_tick", lambda *a, **k: order.append("trend"))
+    monkeypatch.setattr(service, "run_daily_digest", lambda *a, **k: order.append("digest"))
+    settings = _settings(repos=("acme/cli",), email=True)
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    {j.id: j for j in sched.get_jobs()}["daily-publish"].func()
+    assert order == ["trend", "digest"]  # producer before consumer, guaranteed
+
+
+def test_daily_publish_trend_failure_still_runs_digest(store, monkeypatch):
+    order: list[str] = []
+
+    def boom(*a, **k):
+        order.append("trend")
+        raise RuntimeError("trend down")
+
+    monkeypatch.setattr(service, "run_trend_tick", boom)
+    monkeypatch.setattr(service, "run_daily_digest", lambda *a, **k: order.append("digest"))
+    settings = _settings(repos=("acme/cli",), email=True)
+    sched = BackgroundScheduler()
+    build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
+    # Per-phase isolation: trend raising must NOT abort the digest phase.
+    {j.id: j for j in sched.get_jobs()}["daily-publish"].func()
+    assert order == ["trend", "digest"]
 
 
 def test_backward_compat_placeholder_when_no_settings():
@@ -207,7 +248,7 @@ def test_service_init_passes_settings_through():
     # build_scheduler call is not exposed, so verify through a real (in-memory) run.
     svc = Service(sched, settings=settings, creds=None)
     job_ids = {j.id for j in svc.scheduler.get_jobs()}
-    assert "trend" in job_ids
+    assert "daily-publish" in job_ids
     assert "placeholder" not in job_ids
 
 
@@ -366,7 +407,7 @@ def test_reconcile_leaves_non_repo_jobs_untouched(store):
     build_scheduler(sched, settings=settings, runtime=_rt_store(settings, store))
     reconcile_repo_jobs(sched, _rt_store(settings, store))
     ids = _repo_job_ids(sched)
-    assert "trend" in ids
+    assert "daily-publish" in ids
     assert "reconcile" in ids
 
 
