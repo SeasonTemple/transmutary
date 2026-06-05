@@ -1702,3 +1702,66 @@ def test_settings_delivery_invalid_email_lang_normalized():
         )
         assert resp.status_code == 303  # not a 400; normalized
         assert write_store.get_admin_delivery_preferences().email_lang == "en"
+
+
+# --- poll-frequency configuration (presets + advanced minutes + floor) -------
+
+def _delivery_post(client, csrf, **fields):
+    data = {"csrf_token": csrf, "digest_hour": "8"}
+    data.update(fields)
+    return client.post(
+        "/settings/delivery", data=data,
+        headers={"origin": "http://localhost"}, follow_redirects=False,
+    )
+
+
+def test_settings_delivery_poll_preset_relaxed_persisted():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        csrf = _login(client)
+        resp = _delivery_post(client, csrf, poll_preset="relaxed")
+        assert resp.status_code == 303
+        p = write_store.get_admin_delivery_preferences()
+        assert p.security_interval_seconds == 1800
+        assert p.release_issue_interval_seconds == 1800
+        page = client.get("/settings").text
+        assert '<option value="relaxed" selected' in page
+
+
+def test_settings_delivery_poll_advanced_minutes_persisted():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        csrf = _login(client)
+        # advanced minute fields win over preset
+        resp = _delivery_post(
+            client, csrf, poll_preset="balanced",
+            security_interval_minutes="3", release_issue_interval_minutes="7",
+        )
+        assert resp.status_code == 303
+        p = write_store.get_admin_delivery_preferences()
+        assert p.security_interval_seconds == 180
+        assert p.release_issue_interval_seconds == 420
+
+
+def test_settings_delivery_poll_below_floor_clamped_not_400():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        csrf = _login(client)
+        # 1 minute (<2min floor) → server clamps to 120s, no 400 (don't trust client min=)
+        resp = _delivery_post(client, csrf, security_interval_minutes="1")
+        assert resp.status_code == 303
+        assert write_store.get_admin_delivery_preferences().security_interval_seconds == 120
+
+
+def test_settings_delivery_poll_floor_note_rendered():
+    with tempfile.TemporaryDirectory() as d:
+        write_store = StateStore(":memory:")
+        client, *_ = _client(d, write_store=write_store, admin_token="secret-admin-token")
+        _login(client)
+        page = client.get("/settings").text
+        assert 'name="poll_preset"' in page
+        assert 'name="security_interval_minutes"' in page
+        assert 'data-i18n="poll_floor_note"' in page  # 2min floor rationale shown

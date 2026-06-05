@@ -42,8 +42,15 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 
-from ..config import Settings, load_llm_config, normalize_email_lang
-from ..effective_config import llm_env_locks
+from ..config import (
+    DEFAULT_RELEASE_ISSUE_INTERVAL_SECONDS,
+    DEFAULT_SECURITY_INTERVAL_SECONDS,
+    Settings,
+    load_llm_config,
+    normalize_email_lang,
+    normalize_interval,
+)
+from ..effective_config import effective_delivery, llm_env_locks
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
 from . import auth as admin_auth
@@ -59,6 +66,15 @@ except ImportError:  # pragma: no cover - exercised via monkeypatch in tests
     Jinja2Templates = None
 
 logger = logging.getLogger("transmutary.dashboard")
+
+# Poll-frequency presets → (security_seconds, release_issue_seconds). "realtime"
+# sits at the 120s hard floor. UI sugar only — the server stores the two second
+# values; the preset is reverse-derived for display.
+POLL_PRESETS: dict[str, tuple[int, int]] = {
+    "realtime": (120, 120),
+    "balanced": (DEFAULT_SECURITY_INTERVAL_SECONDS, DEFAULT_RELEASE_ISSUE_INTERVAL_SECONDS),
+    "relaxed": (1800, 1800),
+}
 
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
@@ -280,6 +296,18 @@ def make_dashboard_app(
         # dashboard" — pre-select the viewer's current dashboard language.
         stored_lang = write_store.get_admin_delivery_preferences().email_lang
         email_lang_selected = stored_lang or _lang(request)
+        # Poll-frequency selector: prefill the advanced minute inputs from the
+        # effective intervals, and reverse-derive the preset (else "custom").
+        eff = effective_delivery(settings, write_store)
+        poll_sec_min = eff.security_interval_seconds // 60
+        poll_rel_min = eff.release_issue_interval_seconds // 60
+        poll_preset_selected = next(
+            (
+                name for name, (s, r) in POLL_PRESETS.items()
+                if s == eff.security_interval_seconds and r == eff.release_issue_interval_seconds
+            ),
+            "custom",
+        )
         return templates.TemplateResponse(
             request=request,
             name="settings.html",
@@ -293,6 +321,9 @@ def make_dashboard_app(
                     "form_repo": form_repo,
                     "llm_config": llm_cfg,
                     "llm_env_locks": llm_env_locks(),
+                    "poll_preset_selected": poll_preset_selected,
+                    "poll_sec_min": poll_sec_min,
+                    "poll_rel_min": poll_rel_min,
                     "email_lang_selected": email_lang_selected,
                 },
             ),
@@ -558,10 +589,35 @@ def make_dashboard_app(
             )
         # email_lang: whitelist (unsupported values normalize to the default).
         email_lang = normalize_email_lang(form.get("email_lang", ""))
+
+        # Poll frequency: advanced minute fields win when present; else the chosen
+        # preset; else unchanged. normalize_interval enforces the 120s floor server-
+        # side (never trust the client's min= attribute) — clamp, do not 400.
+        def _minutes_to_seconds(field: str, default: int) -> int | None:
+            raw = form.get(field, "").strip()
+            if not raw:
+                return None
+            try:
+                seconds = int(float(raw) * 60)
+            except ValueError:
+                seconds = default
+            return normalize_interval(seconds, default=default)
+
+        sec_iv = _minutes_to_seconds("security_interval_minutes", DEFAULT_SECURITY_INTERVAL_SECONDS)
+        rel_iv = _minutes_to_seconds(
+            "release_issue_interval_minutes", DEFAULT_RELEASE_ISSUE_INTERVAL_SECONDS
+        )
+        if sec_iv is None and rel_iv is None:
+            preset = POLL_PRESETS.get(form.get("poll_preset", ""))
+            if preset is not None:
+                sec_iv, rel_iv = preset
+
         write_store.set_admin_delivery_preferences(
             email_recipients=recipients,
             digest_hour=digest_hour,
             email_lang=email_lang,
+            security_interval_seconds=sec_iv,
+            release_issue_interval_seconds=rel_iv,
         )
         return _settings_redirect("delivery")
 

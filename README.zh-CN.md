@@ -163,7 +163,7 @@ API key 的存储方式与同类工具一致（opencode、`llm`、aider，以及
 |---|---|
 | `config/watchlist.yaml` | 模式 A 仓库 + 手工依赖边 |
 | `config/trend_scope.yaml` | 模式 B 范围过滤器（topics + keywords） |
-| `config/delivery.yaml` | DB/产物路径、摘要发送时辰、可选 RSS feed 目录 + SMTP 收件人 |
+| `config/delivery.yaml` | DB/产物路径、摘要发送时辰、每仓轮询间隔（2 分钟下限；亦可在看板设置、热更新）、可选 RSS feed 目录 + SMTP 收件人 |
 | `config/llm.yaml` | LLM API key + 可选 base URL（0600 权限，环境变量优先） |
 
 ## 产物与存储

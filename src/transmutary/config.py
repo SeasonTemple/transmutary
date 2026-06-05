@@ -166,6 +166,16 @@ class TrendScope:
     keywords: list[str]
 
 
+# Per-repo poll-interval bounds + defaults (single source; service.py mirrors the
+# defaults via import to avoid drift). 120s hard floor: <2min risks GitHub rate
+# limiting + LLM cost, so it is rejected (clamped up), not merely warned. These
+# are the DEFAULTS — overridable via effective_delivery (admin-pref > yaml).
+MIN_POLL_INTERVAL_SECONDS = 120
+MAX_POLL_INTERVAL_SECONDS = 86400  # 24h
+DEFAULT_SECURITY_INTERVAL_SECONDS = 300
+DEFAULT_RELEASE_ISSUE_INTERVAL_SECONDS = 600
+
+
 @dataclass(frozen=True)
 class Delivery:
     state_db_path: str
@@ -185,6 +195,10 @@ class Delivery:
     # Language for outbound email (single-language push; the dashboard/RSS keep
     # both). One of SUPPORTED_EMAIL_LANGS; admin override > yaml > default.
     email_lang: str = "en"
+    # Per-repo poll cadences (seconds). Defaults mirror service.py; configurable
+    # via WebUI/yaml (admin override > yaml > default), clamped to [120, 86400].
+    security_interval_seconds: int = DEFAULT_SECURITY_INTERVAL_SECONDS
+    release_issue_interval_seconds: int = DEFAULT_RELEASE_ISSUE_INTERVAL_SECONDS
 
 
 @dataclass(frozen=True)
@@ -311,6 +325,15 @@ def normalize_email_lang(value: object) -> str:
     return DEFAULT_EMAIL_LANG
 
 
+def normalize_interval(value: object, *, default: int) -> int:
+    """Clamp a poll interval to [MIN, MAX] seconds; non-numeric/None → default."""
+    try:
+        seconds = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(MIN_POLL_INTERVAL_SECONDS, min(MAX_POLL_INTERVAL_SECONDS, seconds))
+
+
 def parse_delivery(data: dict) -> Delivery:
     try:
         return Delivery(
@@ -324,6 +347,14 @@ def parse_delivery(data: dict) -> Delivery:
             smtp_use_ssl=bool(data.get("smtp_use_ssl", False)),
             feed_dir=(str(data["feed_dir"]) if data.get("feed_dir") else None),
             email_lang=normalize_email_lang(data.get("email_lang")),
+            security_interval_seconds=normalize_interval(
+                data.get("security_interval_seconds"),
+                default=DEFAULT_SECURITY_INTERVAL_SECONDS,
+            ),
+            release_issue_interval_seconds=normalize_interval(
+                data.get("release_issue_interval_seconds"),
+                default=DEFAULT_RELEASE_ISSUE_INTERVAL_SECONDS,
+            ),
         )
     except KeyError as exc:
         raise ConfigError(f"delivery config missing required key: {exc}") from exc

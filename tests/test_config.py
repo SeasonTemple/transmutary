@@ -141,6 +141,43 @@ def test_delivery_optional_fields_default_when_absent():
     assert d.token_max_age_days == 90
     assert d.digest_hour == 9
     assert d.email_lang == "en"  # default
+    assert d.security_interval_seconds == 300  # default
+    assert d.release_issue_interval_seconds == 600  # default
+
+
+def test_delivery_poll_intervals_parsed_and_clamped():
+    from transmutary.config import (
+        MAX_POLL_INTERVAL_SECONDS,
+        MIN_POLL_INTERVAL_SECONDS,
+        normalize_interval,
+    )
+    # valid passes through
+    d = parse_delivery({
+        **_REQUIRED_DELIVERY,
+        "security_interval_seconds": 180,
+        "release_issue_interval_seconds": 1800,
+    })
+    assert d.security_interval_seconds == 180
+    assert d.release_issue_interval_seconds == 1800
+    # below the 2min floor → clamped up to 120 (hard floor, not warned)
+    assert parse_delivery(
+        {**_REQUIRED_DELIVERY, "security_interval_seconds": 90}
+    ).security_interval_seconds == MIN_POLL_INTERVAL_SECONDS == 120
+    assert parse_delivery(
+        {**_REQUIRED_DELIVERY, "security_interval_seconds": 30}
+    ).security_interval_seconds == 120
+    # above the 24h ceiling → clamped down
+    assert parse_delivery(
+        {**_REQUIRED_DELIVERY, "release_issue_interval_seconds": 999999}
+    ).release_issue_interval_seconds == MAX_POLL_INTERVAL_SECONDS == 86400
+    # non-numeric / missing → default
+    assert parse_delivery(
+        {**_REQUIRED_DELIVERY, "security_interval_seconds": "fast"}
+    ).security_interval_seconds == 300
+    # normalize_interval direct
+    assert normalize_interval(None, default=600) == 600
+    assert normalize_interval(50, default=600) == 120
+    assert normalize_interval(300, default=600) == 300
 
 
 def test_delivery_email_lang_parsed_and_whitelisted():

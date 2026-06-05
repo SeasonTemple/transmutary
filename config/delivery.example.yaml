@@ -11,6 +11,15 @@ token_max_age_days: 90
 # Daily digest send hour (local, 24h). Phase 1 scheduler reads this.
 digest_hour: 9
 
+# --- Per-repo poll cadences (seconds, optional) ----------------------------
+# How often each watched repo is polled. Defaults: security 300s (5min),
+# release/issue 600s (10min). Also settable from the dashboard (Poll frequency).
+# HARD floor 120s (2min): faster risks GitHub rate limits + LLM cost and is
+# clamped up. Ceiling 86400s (24h). A change applies within one reconcile cycle
+# (~10min) without restarting the service.
+# security_interval_seconds: 300
+# release_issue_interval_seconds: 600
+
 # --- Optional outbound delivery (U1, KTD-D) -------------------------------
 # RSS is the primary private channel (R14); the email leg is OPTIONAL and only
 # activates when BOTH email_recipients AND smtp_host are set. With neither, the

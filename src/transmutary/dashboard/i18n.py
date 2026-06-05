@@ -178,6 +178,18 @@ MESSAGES: dict[str, dict[str, str]] = {
         "keywords": "Keywords",
         "email_recipients": "Email recipients",
         "digest_hour": "Digest hour",
+        "poll_frequency": "Poll frequency",
+        "poll_preset_realtime": "Realtime (~2 min)",
+        "poll_preset_balanced": "Balanced (5 / 10 min)",
+        "poll_preset_relaxed": "Relaxed (30 min)",
+        "poll_preset_custom": "Custom",
+        "poll_advanced": "Advanced (custom minutes)",
+        "poll_security_label": "Security poll (min)",
+        "poll_release_label": "Release/issue poll (min)",
+        "poll_floor_note": (
+            "Minimum 2 minutes — faster risks GitHub rate limits and LLM cost. "
+            "Changes apply within ~10 min (no restart)."
+        ),
         "email_lang": "Email language",
         "email_lang_en": "English",
         "email_lang_zh": "中文",
@@ -340,6 +352,18 @@ MESSAGES: dict[str, dict[str, str]] = {
         "keywords": "关键词",
         "email_recipients": "邮件收件人",
         "digest_hour": "摘要小时",
+        "poll_frequency": "抓取频率",
+        "poll_preset_realtime": "实时（~2 分钟）",
+        "poll_preset_balanced": "均衡（5 / 10 分钟）",
+        "poll_preset_relaxed": "宽松（30 分钟）",
+        "poll_preset_custom": "自定义",
+        "poll_advanced": "高级（自定义分钟）",
+        "poll_security_label": "安全轮询（分钟）",
+        "poll_release_label": "Release/Issue 轮询（分钟）",
+        "poll_floor_note": (
+            "最小 2 分钟——更快会触发 GitHub 限流并增加 LLM 成本。"
+            "改动约 10 分钟内生效（无需重启）。"
+        ),
         "email_lang": "邮件语言",
         "email_lang_en": "English",
         "email_lang_zh": "中文",

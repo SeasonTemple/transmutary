@@ -17,6 +17,7 @@ from .config import (
     Settings,
     TrendScope,
     normalize_email_lang,
+    normalize_interval,
 )
 from .store.state import StateStore
 
@@ -96,6 +97,19 @@ def effective_delivery(settings: Settings, store: StateStore | None) -> Delivery
         # admin override > yaml > default (whitelisted).
         email_lang=normalize_email_lang(
             prefs.email_lang if prefs.email_lang is not None else base.email_lang
+        ),
+        # poll intervals: admin override > yaml > default, clamped [120, 86400].
+        security_interval_seconds=normalize_interval(
+            prefs.security_interval_seconds
+            if prefs.security_interval_seconds is not None
+            else base.security_interval_seconds,
+            default=base.security_interval_seconds,
+        ),
+        release_issue_interval_seconds=normalize_interval(
+            prefs.release_issue_interval_seconds
+            if prefs.release_issue_interval_seconds is not None
+            else base.release_issue_interval_seconds,
+            default=base.release_issue_interval_seconds,
         ),
     )
 

@@ -401,7 +401,10 @@ pre {
 #llm form.settings-form .form-actions { grid-column: 1 / -1; }
 #llm form.settings-form .form-actions .btn { min-width: 7rem; min-height: 2.4rem; }
 /* Per-tier override disclosure (R4): collapsed by default, native <details>. */
-.llm-advanced { grid-column: 1 / -1; margin: .25rem 0; }
+.llm-advanced, .poll-advanced { grid-column: 1 / -1; margin: .25rem 0; }
+.poll-advanced > summary { cursor: pointer; font-size: .85rem; color: var(--text-secondary); }
+.poll-advanced > summary:hover { color: var(--text-primary); }
+.poll-advanced .panel-note { margin: .3rem 0 .2rem; }
 .llm-advanced > summary {
   cursor: pointer; font-size: .82rem; font-weight: 600; color: var(--text-secondary);
   padding: .4rem 0;
