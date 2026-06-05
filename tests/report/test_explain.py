@@ -552,3 +552,16 @@ def test_topn_refine_splits_bilingual_into_clean_slots():
     assert rep.body_md_zh and "精炼后的中文摘要内容。" in rep.body_md_zh
     assert "Refined English summary content." not in rep.body_md_zh
     assert "Revision Notes" not in rep.body_md_zh
+
+
+def test_refine_skips_zero_growth_candidate():
+    """A zero/negative-growth rep is not a mover — it must not get a Top-N deep-dive
+    (no critique/refine call), even with refine on."""
+    captured: dict = {}
+    out = explain_trends([_cand("a/r", growth=0.0)], _store(),
+                         call_fn=_refine_aware_call(captured), refine=True, embed_fn=None)
+    systems = [c["system"] for c in captured["calls"]]
+    assert systems and all("trend explainer" in s for s in systems)  # batch only
+    assert not any("revising a DRAFT" in s for s in systems)  # no refine stage
+    assert out.reports[0].rank_signal == 0.0  # still reported, just not deep-dived
+    assert out.refine_notes == []

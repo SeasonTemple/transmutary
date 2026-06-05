@@ -339,3 +339,19 @@ def test_synthesize_trends_en_uses_english_system_prompt():
     sys = cap["calls"][0]["system"]
     assert "You are the editor" in sys
     assert "编辑" not in sys
+
+
+def test_html_zero_growth_sinks_to_tail_not_top_card():
+    reports = [_explain("pos/r", rank_signal=5.0), _explain("zero/r", rank_signal=0.0)]
+    html = render_digest_html(reports, date_label="2026-06-05")
+    pre, _, tab = html.partition("<table")
+    assert "<table" in html
+    assert "pos/r" in pre  # positive growth → Top-N deep-dive card
+    assert "zero/r" in tab and "zero/r" not in pre  # zero growth → long-tail table
+
+
+def test_html_all_zero_growth_yields_no_top_cards():
+    reports = [_explain(f"r{i}/x", rank_signal=0.0) for i in range(3)]
+    html = render_digest_html(reports, date_label="2026-06-05")
+    assert "<table" in html               # everything sinks to the long-tail table
+    assert "<article" not in html         # no deep-dive cards for non-movers
