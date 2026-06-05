@@ -69,6 +69,47 @@ def test_happy_trending_with_growth():
     assert cand.growth_source == "ossinsight"
 
 
+def test_candidate_url_derived_when_payload_has_none():
+    # OSS Insight rows carry no html_url/url → derive https://github.com/{repo}
+    # so the candidate has a single citation source (fixes the all-Unverified bug).
+    rows = [{"repo_name": "openai/symphony", "stars": 5, "topics": ["llm"],
+             "description": "agent runs"}]
+
+    def handler(request):
+        return httpx.Response(200, json=_trending_payload(rows))
+
+    with _client(handler) as client:
+        result = collect_trends(client, _store(), topics=TOPICS, keywords=KEYWORDS, ts=1000.0)
+    assert result.candidates[0].url == "https://github.com/openai/symphony"
+
+
+def test_explicit_url_not_overridden_by_derivation():
+    rows = [{"repo_name": "acme/agent-kit", "stars": 9, "topics": ["llm"],
+             "description": "kit", "html_url": "https://github.com/acme/agent-kit/releases/v1"}]
+
+    def handler(request):
+        return httpx.Response(200, json=_trending_payload(rows))
+
+    with _client(handler) as client:
+        result = collect_trends(client, _store(), topics=TOPICS, keywords=KEYWORDS, ts=1000.0)
+    assert result.candidates[0].url == "https://github.com/acme/agent-kit/releases/v1"
+
+
+def test_explicit_off_allowlist_url_dropped_not_derived():
+    rows = [{"repo_name": "acme/agent-kit", "stars": 9, "topics": ["llm"],
+             "description": "kit", "html_url": "https://evil.example.com/x"}]
+
+    def handler(request):
+        return httpx.Response(200, json=_trending_payload(rows))
+
+    with _client(handler) as client:
+        result = collect_trends(client, _store(), topics=TOPICS, keywords=KEYWORDS, ts=1000.0)
+    cand = result.candidates[0]
+    # off-allowlist explicit URL is dropped (no derive fallback) + warned
+    assert cand.url == ""
+    assert any("off-allowlist" in w for w in result.warnings)
+
+
 def test_snapshot_diff_backfills_growth_when_no_period_metric():
     # No stars_increment → growth backfilled from the star-snapshot diff.
     rows1 = [{"repo_name": "a/llm-tool", "stars": 100, "topics": ["llm"],

@@ -126,6 +126,12 @@ def test_build_overview_buckets_and_orders():
         assert [c.ts for c in ov.trend_candidates] == [2000]
         # feed links are local & token-free
         assert {f.href for f in ov.feeds} == {"/feed/immediate", "/feed/digest"}
+        # each card carries a human time string + it round-trips into JSON
+        from transmutary.report.render import fmt_timestamp
+        card = ov.recent_reports[0]
+        assert card.ts_display == fmt_timestamp(card.ts)
+        assert "UTC" in card.ts_display
+        assert card.to_dict()["ts_display"] == card.ts_display
         for f in ov.feeds:
             assert "token" not in f.href.lower()
         assert ov.promotable_repos == frozenset()
@@ -334,6 +340,15 @@ def test_index_lists_watchlist_with_source():
         assert resp.status_code == 200
         assert "acme/cli" in resp.text
         assert "config" in resp.text
+
+
+def test_index_reports_table_has_time_column():
+    with tempfile.TemporaryDirectory() as d:
+        client, *_ = _client(d)  # seeds a report
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert 'data-i18n="th.time"' in resp.text  # Time column header
+        assert "UTC" in resp.text  # a formatted timestamp rendered
 
 
 def test_brand_renders_correct_chinese_name():

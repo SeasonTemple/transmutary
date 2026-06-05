@@ -134,6 +134,7 @@ details > summary.sec { cursor: pointer; }
 .row-title:hover { text-decoration: underline; }
 .repo { grid-area: repo; font-family: var(--mono); font-size: .8rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16rem; }
 .row > .btn { grid-area: action; justify-self: end; }
+.ts { font-family: var(--mono); font-size: .78rem; color: var(--text-tertiary); white-space: nowrap; }
 .sev-critical .sev-bar { background: var(--sev-critical); } .sev-critical .sev-ic { stroke: var(--sev-critical); }
 .sev-high .sev-bar { background: var(--sev-high); } .sev-high .sev-ic { stroke: var(--sev-high); }
 .sev-info .sev-bar { background: var(--sev-info); } .sev-info .sev-ic { stroke: var(--sev-info); }
