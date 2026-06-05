@@ -36,7 +36,10 @@ from transmutary.service import (
 from transmutary.store.state import StateStore
 
 
-def _settings(*, repos=("acme/cli", "acme/gateway"), email=False) -> Settings:
+def _settings(
+    *, repos=("acme/cli", "acme/gateway"), email=False,
+    security_interval=300, release_issue_interval=600,
+) -> Settings:
     return Settings(
         watchlist=Watchlist(
             repos=[RepoEntry(repo=r) for r in repos],
@@ -50,6 +53,8 @@ def _settings(*, repos=("acme/cli", "acme/gateway"), email=False) -> Settings:
             digest_hour=9,
             email_recipients=["a@example.com"] if email else [],
             smtp_host="smtp.example.com" if email else None,
+            security_interval_seconds=security_interval,
+            release_issue_interval_seconds=release_issue_interval,
         ),
     )
 
@@ -398,6 +403,62 @@ def test_repeated_reconcile_no_duplicate_jobs(store, paused_sched):
     ids = [j.id for j in paused_sched.get_jobs()]
     assert ids.count("security:hot/one") == 1
     assert ids.count("release-issue:hot/one") == 1
+
+
+# --- configurable poll intervals: registration + hot-reload (U4) ---
+
+def _interval(sched, job_id):
+    return sched.get_job(job_id).trigger.interval.total_seconds()
+
+
+def test_register_uses_effective_intervals_from_yaml(paused_sched):
+    # base yaml intervals (no store) flow into the registered jobs.
+    settings = _settings(repos=("acme/cli",), security_interval=180, release_issue_interval=1800)
+    build_scheduler(paused_sched, settings=settings, runtime=_fake_rt(settings))
+    assert _interval(paused_sched, "security:acme/cli") == 180
+    assert _interval(paused_sched, "release-issue:acme/cli") == 1800
+
+
+def test_reconcile_reschedules_on_admin_interval_change(store, paused_sched):
+    settings = _settings(repos=("acme/cli",))
+    rt = _rt_store(settings, store)
+    build_scheduler(paused_sched, settings=settings, runtime=rt)
+    assert _interval(paused_sched, "security:acme/cli") == 300  # default
+    # admin (WebUI) changes the cadence in a separate process
+    store.set_admin_delivery_preferences(security_interval_seconds=240)
+    reconcile_repo_jobs(paused_sched, rt)
+    assert _interval(paused_sched, "security:acme/cli") == 240  # hot-reloaded
+
+
+def test_reconcile_does_not_reschedule_when_interval_unchanged(store, paused_sched, monkeypatch):
+    # Anti-starvation invariant: a long interval (> reconcile cadence) must NOT be
+    # rescheduled every reconcile — that would reset next_run_time and starve it.
+    settings = _settings(repos=("acme/cli",), security_interval=1800, release_issue_interval=1800)
+    rt = _rt_store(settings, store)
+    build_scheduler(paused_sched, settings=settings, runtime=rt)
+    calls = {"n": 0}
+    orig = paused_sched.reschedule_job
+
+    def _counting(*a, **k):
+        calls["n"] += 1
+        return orig(*a, **k)
+
+    monkeypatch.setattr(paused_sched, "reschedule_job", _counting)
+    for _ in range(3):
+        reconcile_repo_jobs(paused_sched, rt)
+    assert calls["n"] == 0  # unchanged intervals → zero reschedules → no starvation
+    assert _interval(paused_sched, "security:acme/cli") == 1800
+
+
+def test_reconcile_reschedule_tolerates_missing_job(store, paused_sched):
+    # Race: a repo present in the effective set but whose job vanished mid-cycle
+    # must not raise.
+    settings = _settings(repos=("acme/cli",))
+    rt = _rt_store(settings, store)
+    build_scheduler(paused_sched, settings=settings, runtime=rt)
+    paused_sched.remove_job("security:acme/cli")
+    store.set_admin_delivery_preferences(security_interval_seconds=240)
+    reconcile_repo_jobs(paused_sched, rt)  # must not raise
 
 
 # --- U3: unregister tolerance ---

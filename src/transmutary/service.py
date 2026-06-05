@@ -28,7 +28,12 @@ from typing import Callable
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from .config import Credentials, Settings
+from .config import (
+    DEFAULT_RELEASE_ISSUE_INTERVAL_SECONDS,
+    DEFAULT_SECURITY_INTERVAL_SECONDS,
+    Credentials,
+    Settings,
+)
 from .effective_config import effective_delivery
 from .pipeline import (
     PipelineRuntime,
@@ -45,11 +50,13 @@ logger = logging.getLogger("transmutary.service")
 # Phase 0 placeholder cadence (seconds), used when no Settings is supplied.
 PLACEHOLDER_INTERVAL_SECONDS = 60
 
-# Real tiered cadences (KTD-B — module constants, NOT config schema). The high-risk
-# supply-chain source runs minute-level; release/issue runs ~10 min. The trend tick
-# is daily (cron at delivery.digest_hour).
-SECURITY_INTERVAL_SECONDS = 300
-RELEASE_ISSUE_INTERVAL_SECONDS = 600
+# Real tiered cadences (seconds). These module constants are now the DEFAULTS,
+# not a hard schema (KTD-B reversed): per-repo cadences are overridable via
+# effective_delivery (admin-pref > yaml > these defaults), clamped to a 120s
+# floor. Sourced from config so the default lives in one place. The trend tick
+# is daily (cron at delivery.digest_hour); reconcile cadence stays a constant.
+SECURITY_INTERVAL_SECONDS = DEFAULT_SECURITY_INTERVAL_SECONDS
+RELEASE_ISSUE_INTERVAL_SECONDS = DEFAULT_RELEASE_ISSUE_INTERVAL_SECONDS
 
 # F4 (KTD-B): how often the resident service reconciles its registered per-repo
 # jobs against the effective watchlist (config ∪ promoted). This is the bridge
@@ -196,18 +203,44 @@ def reconcile_repo_jobs(scheduler: BackgroundScheduler, runtime: PipelineRuntime
             if job.id.startswith(prefix):
                 registered.add(job.id[len(prefix):])
 
+    # Effective cadences (admin-pref > yaml > default). New repos register with
+    # them; existing repos are rescheduled only when the live interval differs —
+    # see the diff-based reschedule below.
+    delivery = effective_delivery(runtime.settings, store)
+    sec = delivery.security_interval_seconds
+    rel = delivery.release_issue_interval_seconds
+
     for repo in desired - registered:
-        register_repo_jobs(scheduler, runtime, repo)
+        register_repo_jobs(
+            scheduler, runtime, repo,
+            security_interval=sec, release_issue_interval=rel,
+        )
     for repo in registered - desired:
         unregister_repo_jobs(scheduler, repo)
+
+    # Hot-reload cadence changes for ALREADY-registered repos. CRITICAL: only
+    # reschedule when the interval actually CHANGED. Unconditionally re-adding
+    # (replace_existing) every reconcile resets next_run_time, which would
+    # starve any job whose interval exceeds the reconcile cadence (e.g. a 30min
+    # poll reset every 10min never fires). Diff-based reschedule is a steady-
+    # state no-op and only fires on a real user-initiated interval change.
+    for repo in desired & registered:
+        for job_id, wanted in (
+            (f"security:{repo}", sec),
+            (f"release-issue:{repo}", rel),
+        ):
+            job = scheduler.get_job(job_id)
+            if job is None:
+                continue  # race: demoted between snapshot and now — tolerate
+            current = job.trigger.interval.total_seconds()
+            if current != wanted:
+                scheduler.reschedule_job(job_id, trigger="interval", seconds=wanted)
 
 
 def register_pipeline_jobs(
     scheduler: BackgroundScheduler,
     runtime: PipelineRuntime,
     *,
-    security_interval: int = SECURITY_INTERVAL_SECONDS,
-    release_issue_interval: int = RELEASE_ISSUE_INTERVAL_SECONDS,
     reconcile_interval: int = RECONCILE_INTERVAL_SECONDS,
 ) -> None:
     """Register the real tiered pipeline jobs onto ``scheduler`` (U6 + F4).
@@ -232,14 +265,17 @@ def register_pipeline_jobs(
             "high-risk alerts will be delivered via RSS ONLY (KTD-D)"
         )
 
-    # --- security + release/issue: one pair per effective repo (full coverage) ---
+    # --- security + release/issue: one pair per effective repo (full coverage).
+    # Cadences come from effective_delivery (admin-pref > yaml > default), so a
+    # WebUI/yaml change takes effect at next boot; the reconcile job applies it
+    # live without a restart (see reconcile_repo_jobs). ---
     for repo in repos:
         register_repo_jobs(
             scheduler,
             runtime,
             repo,
-            security_interval=security_interval,
-            release_issue_interval=release_issue_interval,
+            security_interval=delivery.security_interval_seconds,
+            release_issue_interval=delivery.release_issue_interval_seconds,
         )
 
     # --- trend: daily digest tick (cron at delivery.digest_hour) ---
