@@ -8,6 +8,7 @@ LLM mocked via call_fn seam; state via in-memory sqlite. No real network.
 from __future__ import annotations
 
 import json
+import re
 
 from transmutary.collect.trend import TrendCandidate
 from transmutary.report.explain import (
@@ -512,3 +513,42 @@ def test_explain_body_has_no_self_title_heading():
     body = out.reports[0].body_md
     assert "## Trending:" not in body
     assert "Trend: a/r" in out.reports[0].title  # title still carries the repo
+
+
+# --- regression: Top-N refine blob must split into clean per-language slots ----
+def test_topn_refine_splits_bilingual_into_clean_slots():
+    """The noisy bilingual refine output lands in clean per-language slots — the EN
+    body has no Chinese and no wrapper/notes noise; the ZH body has no English.
+    Regression for the digest 'mixed-language card' bug (reversed order + meta)."""
+    poison = (
+        "## DRAFT REPORT (revised)\n\n"
+        "精炼后的中文摘要内容。\n\n"           # ZH first (reversed)
+        "<!-- BILINGUAL:SPLIT -->\n\n"
+        "Refined English summary content.\n\n"  # EN second
+        "---\n\n"
+        "## Draft Revision Notes\n\n"
+        "This revised draft removed unsupported claims.\n"
+    )
+
+    def _call(system, data_block, tier=None, *, api_key=None, base_url=None, **kw):
+        if "trend explainer" in system:
+            idxs = sorted(int(m) for m in re.findall(r"\[CANDIDATE (\d+)\]", data_block))
+            return json.dumps(
+                [{"index": i, "summary": f"draft en {i}", "summary_zh": f"草稿中文 {i}"}
+                 for i in idxs]
+            )
+        if "reviewing a draft" in system.lower():
+            return "CRITIQUE: tighten."
+        return poison  # refine stage
+
+    out = explain_trends([_cand("a/r", growth=99.0)], _store(),
+                         call_fn=_call, refine=True, embed_fn=None)
+    rep = out.reports[0]
+    # EN slot — refined English only.
+    assert "Refined English summary content." in rep.body_md
+    assert "精炼后的中文摘要" not in rep.body_md
+    assert "DRAFT REPORT" not in rep.body_md and "Revision Notes" not in rep.body_md
+    # ZH slot — refined Chinese only.
+    assert rep.body_md_zh and "精炼后的中文摘要内容。" in rep.body_md_zh
+    assert "Refined English summary content." not in rep.body_md_zh
+    assert "Revision Notes" not in rep.body_md_zh

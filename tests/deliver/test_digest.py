@@ -319,3 +319,23 @@ def test_text_two_sections_with_synthesis():
     assert "[HIGH] a/b — T1" in txt  # mode-A line format preserved
     assert "Lead line." in txt
     assert txt.index("Alerts and diagnostics") < txt.index("Trends")
+
+
+def test_synthesize_trends_zh_uses_chinese_system_prompt():
+    from transmutary.deliver.digest import synthesize_trends
+
+    cap: dict = {}
+    synthesize_trends([_explain("a/r", rank_signal=5.0)], lang="zh", call_fn=_capture_call(cap))
+    sys = cap["calls"][0]["system"]
+    assert "编辑" in sys and "趋势" in sys          # Chinese editor instruction
+    assert "You are the editor" not in sys          # not the English prompt
+
+
+def test_synthesize_trends_en_uses_english_system_prompt():
+    from transmutary.deliver.digest import synthesize_trends
+
+    cap: dict = {}
+    synthesize_trends([_explain("a/r", rank_signal=5.0)], lang="en", call_fn=_capture_call(cap))
+    sys = cap["calls"][0]["system"]
+    assert "You are the editor" in sys
+    assert "编辑" not in sys

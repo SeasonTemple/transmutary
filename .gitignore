@@ -32,3 +32,6 @@ config/delivery.yaml
 .idea/
 .vscode/
 config/llm.yaml
+
+# Claude Code local scheduler state
+.claude/scheduled_tasks.lock
