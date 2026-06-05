@@ -149,6 +149,34 @@ def test_effective_delivery_email_lang_invalid_normalizes(store):
     assert delivery.email_lang == "en"  # unsupported → default
 
 
+def test_effective_delivery_poll_intervals_admin_override(store):
+    store.set_admin_delivery_preferences(
+        security_interval_seconds=180, release_issue_interval_seconds=1800
+    )
+    d = effective_delivery(_settings(), store)
+    assert d.security_interval_seconds == 180
+    assert d.release_issue_interval_seconds == 1800
+
+
+def test_effective_delivery_poll_intervals_default_when_unset(store):
+    d = effective_delivery(_settings(), store)
+    assert d.security_interval_seconds == 300  # yaml/default
+    assert d.release_issue_interval_seconds == 600
+
+
+def test_effective_delivery_poll_intervals_clamped(store):
+    # an out-of-range admin value is clamped up to the 2min floor
+    store.set_admin_delivery_preferences(security_interval_seconds=60)
+    d = effective_delivery(_settings(), store)
+    assert d.security_interval_seconds == 120
+
+
+def test_effective_delivery_store_none_carries_yaml_intervals():
+    base = _settings()
+    d = effective_delivery(base, None)
+    assert d.security_interval_seconds == base.delivery.security_interval_seconds
+
+
 # --- effective_llm_config ---------------------------------------------------
 
 def _llm_settings(**overrides) -> Settings:
