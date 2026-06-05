@@ -1,7 +1,7 @@
 ---
 title: "feat: Trend digest 简报重设计 — 补完 R11 两层 + 报告信息架构 + 修调度竞态"
 type: feat
-status: active
+status: done
 date: 2026-06-05
 origin: docs/brainstorms/2026-05-29-repo-observation-system-requirements.md
 depth: Standard (deep extensions)
