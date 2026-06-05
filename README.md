@@ -164,7 +164,7 @@ By default all three share one provider (the shared `api_key`/`base_url`/`transp
 |---|---|
 | `config/watchlist.yaml` | Mode A repos + manual dependency edges |
 | `config/trend_scope.yaml` | Mode B scope filter (topics + keywords) |
-| `config/delivery.yaml` | DB/artifact paths, digest hour, optional RSS feed dir + SMTP recipients |
+| `config/delivery.yaml` | DB/artifact paths, digest hour, per-repo poll intervals (2min floor; also dashboard-settable, hot-reloaded), optional RSS feed dir + SMTP recipients |
 | `config/llm.yaml` | LLM API key + optional base URL (0600, env vars take precedence) |
 
 ## Output & storage
