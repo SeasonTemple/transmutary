@@ -144,3 +144,38 @@ def test_digest_no_email_without_recipients():
         res = run_daily_digest(rt, now_ts=10_500)
         assert res.email_sent is False
         assert res.html_path is not None  # artifact still written
+
+
+def _explain(repo, *, rank_signal):
+    return Report(
+        kind=ReportKind.EXPLAIN, repo=repo, title=f"Trend: {repo}",
+        body_md="- Stars: 9\n\n### Summary\ntrending fast\n", severity=Severity.NORMAL,
+        created_at="2026-06-04T10:00:00+00:00", rank_signal=rank_signal,
+    )
+
+
+def test_digest_threads_trend_synthesis_into_html():
+    # U4: run_daily_digest resolves a cheap-tier call_fn and threads the synthesis
+    # narrative into the written HTML. Inject a fake call_fn (no real LLM).
+    with tempfile.TemporaryDirectory() as tmp:
+        rt, artifacts, _ = _runtime(tmp)
+        artifacts.write(_explain("a/r", rank_signal=10.0), ts=10_000)
+        narrative = "AI ecosystem is accelerating around agents."
+        res = run_daily_digest(rt, now_ts=10_500, call_fn=lambda *a, **k: narrative)
+        with open(res.html_path, encoding="utf-8") as fh:
+            assert narrative in fh.read()
+
+
+def test_digest_diagnose_only_window_skips_synthesis_call():
+    # No EXPLAIN reports → synthesize_trends short-circuits, call_fn never invoked.
+    with tempfile.TemporaryDirectory() as tmp:
+        rt, artifacts, _ = _runtime(tmp)
+        artifacts.write(_report("a/b", "Alert", Severity.HIGH), ts=10_000)
+        called = {"n": 0}
+
+        def _spy(*a, **k):
+            called["n"] += 1
+            return "should not appear"
+
+        run_daily_digest(rt, now_ts=10_500, call_fn=_spy)
+        assert called["n"] == 0
