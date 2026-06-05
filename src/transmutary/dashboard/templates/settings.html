@@ -153,6 +153,20 @@
           <option value="zh" {% if email_lang_selected == 'zh' %}selected{% endif %} data-i18n="email_lang_zh">{{ t['email_lang_zh'] }}</option>
         </select>
       </label>
+      <label class="field"><span data-i18n="poll_frequency">{{ t['poll_frequency'] }}</span>
+        <select id="poll-preset" name="poll_preset">
+          <option value="realtime" {% if poll_preset_selected == 'realtime' %}selected{% endif %} data-i18n="poll_preset_realtime">{{ t['poll_preset_realtime'] }}</option>
+          <option value="balanced" {% if poll_preset_selected == 'balanced' %}selected{% endif %} data-i18n="poll_preset_balanced">{{ t['poll_preset_balanced'] }}</option>
+          <option value="relaxed" {% if poll_preset_selected == 'relaxed' %}selected{% endif %} data-i18n="poll_preset_relaxed">{{ t['poll_preset_relaxed'] }}</option>
+          <option value="custom" {% if poll_preset_selected == 'custom' %}selected{% endif %} data-i18n="poll_preset_custom">{{ t['poll_preset_custom'] }}</option>
+        </select>
+      </label>
+      <details class="poll-advanced" {% if poll_preset_selected == 'custom' %}open{% endif %}>
+        <summary data-i18n="poll_advanced">{{ t['poll_advanced'] }}</summary>
+        <label class="field"><span data-i18n="poll_security_label">{{ t['poll_security_label'] }}</span><input id="poll-security-min" name="security_interval_minutes" type="number" min="2" max="1440" inputmode="numeric" value="{{ poll_sec_min }}"></label>
+        <label class="field"><span data-i18n="poll_release_label">{{ t['poll_release_label'] }}</span><input id="poll-release-min" name="release_issue_interval_minutes" type="number" min="2" max="1440" inputmode="numeric" value="{{ poll_rel_min }}"></label>
+        <p class="panel-note" data-i18n="poll_floor_note">{{ t['poll_floor_note'] }}</p>
+      </details>
       <button class="btn btn--primary" type="submit" data-i18n="save">{{ t['save'] }}</button>
     </form>
   </section>

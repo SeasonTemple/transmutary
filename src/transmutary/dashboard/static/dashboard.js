@@ -107,6 +107,31 @@
     });
   }
 
+  /* Poll-frequency preset → fills the advanced minute fields (mirrors POLL_PRESETS
+     server-side, in minutes). "custom" leaves the fields for manual edit. 2min floor
+     is enforced server-side regardless of the client min= attribute. */
+  var POLL_PRESET_MINUTES = {
+    realtime: [2, 2],
+    balanced: [5, 10],
+    relaxed: [30, 30],
+  };
+  var pollPreset = document.getElementById("poll-preset");
+  if (pollPreset) {
+    pollPreset.addEventListener("change", function () {
+      var mins = POLL_PRESET_MINUTES[pollPreset.value];
+      var secEl = document.getElementById("poll-security-min");
+      var relEl = document.getElementById("poll-release-min");
+      if (mins) {
+        if (secEl) secEl.value = mins[0];
+        if (relEl) relEl.value = mins[1];
+      } else {
+        // custom: reveal the advanced inputs for manual entry
+        var adv = document.querySelector(".poll-advanced");
+        if (adv) adv.open = true;
+      }
+    });
+  }
+
   /* LLM form: preset fills base_url + transport. Model name is user-typed bare. */
   var llmPreset = document.getElementById("llm-preset");
   if (llmPreset) {
