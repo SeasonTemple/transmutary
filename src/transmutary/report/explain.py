@@ -460,10 +460,12 @@ def explain_trends(
     refine_notes: list[str] = []
     if refine:
         # KTD5: only the Top-N representatives by growth/day get the deep-dive.
-        # Reps with no growth signal are excluded; ties keep batch order (stable
-        # sort), so a brand-new no-growth candidate never displaces a real mover.
+        # Eligibility is POSITIVE growth — a candidate with no signal (None) OR a
+        # measured zero/negative delta is not a "mover" and must not occupy a
+        # Top-N slot (ties keep batch order via stable sort).
         ranked = sorted(
-            (i for i in rep_indices if fresh[i].growth_per_day is not None),
+            (i for i in rep_indices
+             if fresh[i].growth_per_day is not None and fresh[i].growth_per_day > 0),
             key=lambda i: fresh[i].growth_per_day,
             reverse=True,
         )

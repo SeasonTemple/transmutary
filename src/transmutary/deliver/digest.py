@@ -254,17 +254,18 @@ def _trend_tail_table(reports: list[Report], lang: str, strings: dict[str, str])
 def _tier_trends(reports: list[Report]) -> tuple[list[Report], list[Report]]:
     """Split EXPLAIN reports into Top-N deep-dive cards and long-tail (KTD4/KTD5).
 
-    ``top`` = the ``TREND_TOP_N`` fastest growers (``rank_signal`` non-None, desc).
-    ``tail`` = the remaining ranked movers followed by all no-signal reports — a
-    candidate with no growth signal never enters the Top-N (no signal, no claim).
+    ``top`` = the ``TREND_TOP_N`` fastest growers (POSITIVE ``rank_signal``, desc).
+    ``tail`` = the remaining ranked movers followed by every non-mover — a
+    candidate with no signal (None) OR a zero/negative delta never enters the
+    Top-N (it has not moved, so it makes no "fastest-growing" claim).
     """
     from ..report.explain import TREND_TOP_N
 
     ranked = sorted(
-        (r for r in reports if r.rank_signal is not None),
+        (r for r in reports if r.rank_signal is not None and r.rank_signal > 0),
         key=lambda r: -r.rank_signal,  # type: ignore[operator]
     )
-    unranked = [r for r in reports if r.rank_signal is None]
+    unranked = [r for r in reports if r.rank_signal is None or r.rank_signal <= 0]
     return ranked[:TREND_TOP_N], ranked[TREND_TOP_N:] + unranked
 
 
