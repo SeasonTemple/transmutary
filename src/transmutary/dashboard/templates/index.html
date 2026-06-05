@@ -24,7 +24,7 @@
     {% else %}<svg viewBox="0 0 16 16" class="sev-ic" aria-hidden="true"><path d="M8 2l6 11H2z"/></svg>{% endif %}
     <span class="pill sev" aria-label="{{ c.severity }} severity">{{ c.severity }}</span>
     <span class="row-title">{{ c.title }}</span>
-    <span class="repo">{{ c.repo }}</span>
+    <span class="repo">{{ c.repo }}{% if c.ts_display %} <span class="ts">· {{ c.ts_display }}</span>{% endif %}</span>
   </a>
   {% endfor %}
 </div>
@@ -51,7 +51,7 @@
     <svg viewBox="0 0 16 16" class="sev-ic" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 5v.01M8 8v3"/></svg>
     <span class="pill info">{{ c.kind }}</span>
     <a class="row-title" href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a>
-    <span class="repo">{{ c.repo }}</span>
+    <span class="repo">{{ c.repo }}{% if c.ts_display %} <span class="ts">· {{ c.ts_display }}</span>{% endif %}</span>
     {% if c.repo in overview.promotable_repos %}<a class="btn btn--primary" href="/promote?repo={{ c.repo }}" data-i18n="promote">{{ t['promote'] }}</a>{% endif %}
   </div>
   {% endfor %}
@@ -62,10 +62,10 @@
 <summary class="sec"><span data-i18n="sec.reports">{{ t['sec.reports'] }}</span></summary>
 {% if overview.recent_reports %}
 <div class="card table-shell reports-scroll"><table class="tbl">
-  <thead><tr><th scope="col" data-i18n="th.kind">{{ t['th.kind'] }}</th><th scope="col" data-i18n="th.severity">{{ t['th.severity'] }}</th><th scope="col" data-i18n="th.repo">{{ t['th.repo'] }}</th><th scope="col" data-i18n="th.title">{{ t['th.title'] }}</th></tr></thead>
+  <thead><tr><th scope="col" data-i18n="th.time">{{ t['th.time'] }}</th><th scope="col" data-i18n="th.kind">{{ t['th.kind'] }}</th><th scope="col" data-i18n="th.severity">{{ t['th.severity'] }}</th><th scope="col" data-i18n="th.repo">{{ t['th.repo'] }}</th><th scope="col" data-i18n="th.title">{{ t['th.title'] }}</th></tr></thead>
   <tbody>
   {% for c in overview.recent_reports %}
-  <tr><td><span class="pill">{{ c.kind }}</span></td><td><span class="pill sev sev-{{ c.severity }}" aria-label="{{ c.severity }} severity">{{ c.severity }}</span></td><td class="repo">{{ c.repo }}</td><td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td></tr>
+  <tr><td class="ts">{{ c.ts_display }}</td><td><span class="pill">{{ c.kind }}</span></td><td><span class="pill sev sev-{{ c.severity }}" aria-label="{{ c.severity }} severity">{{ c.severity }}</span></td><td class="repo">{{ c.repo }}</td><td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td></tr>
   {% endfor %}
   </tbody>
 </table></div>

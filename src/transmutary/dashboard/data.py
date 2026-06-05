@@ -24,7 +24,7 @@ from ..effective_config import (
     effective_repo_sources,
     effective_trend_scope,
 )
-from ..report.render import render_markdown
+from ..report.render import fmt_timestamp, render_markdown
 from ..store.artifacts import ArtifactStore
 from ..store.state import StateStore
 
@@ -76,6 +76,7 @@ class ReportCard:
     title: str
     ts: int
     filename: str
+    ts_display: str = ""  # human time (fmt_timestamp); set at build, also in JSON
 
     def to_dict(self) -> dict:
         # Explicit allow-list (R-S2). `title` is external-origin → trust marker.
@@ -85,6 +86,7 @@ class ReportCard:
             "severity": self.severity,
             "title": self.title,
             "ts": self.ts,
+            "ts_display": self.ts_display,
             "filename": self.filename,
             "_content_trust": "external",  # title comes from upstream repos
         }
@@ -257,6 +259,7 @@ def _card_from_meta(repo: str, ref, meta: dict) -> ReportCard:
         title=str(meta.get("title", "(untitled)")),
         ts=ref.ts,
         filename=ref.filename,
+        ts_display=fmt_timestamp(ref.ts),
     )
 
 
