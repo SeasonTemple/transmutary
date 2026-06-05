@@ -348,7 +348,8 @@ def test_index_reports_table_has_time_column():
         resp = client.get("/")
         assert resp.status_code == 200
         assert 'data-i18n="th.time"' in resp.text  # Time column header
-        assert "UTC" in resp.text  # a formatted timestamp rendered
+        # epoch carried in data-ts → client JS localizes to the viewer's timezone
+        assert "data-ts=" in resp.text
 
 
 def test_brand_renders_correct_chinese_name():

@@ -28,7 +28,7 @@
   <thead><tr><th scope="col" data-i18n="th.time">{{ t['th.time'] }}</th><th scope="col" data-i18n="th.kind">{{ t['th.kind'] }}</th><th scope="col" data-i18n="th.severity">{{ t['th.severity'] }}</th><th scope="col" data-i18n="th.title">{{ t['th.title'] }}</th></tr></thead>
   <tbody>
   {% for c in cards %}
-  <tr><td class="ts">{{ c.ts_display }}</td><td><span class="pill">{{ c.kind }}</span></td><td><span class="pill sev sev-{{ c.severity }}" aria-label="{{ c.severity }} severity">{{ c.severity }}</span></td><td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td></tr>
+  <tr><td class="ts" data-ts="{{ c.ts }}">{{ c.ts_display }}</td><td><span class="pill">{{ c.kind }}</span></td><td><span class="pill sev sev-{{ c.severity }}" aria-label="{{ c.severity }} severity">{{ c.severity }}</span></td><td><a href="/report/{{ c.repo }}/{{ c.filename }}">{{ c.title }}</a></td></tr>
   {% endfor %}
   </tbody>
 </table></div>
