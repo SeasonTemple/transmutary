@@ -69,6 +69,20 @@
     else document.documentElement.setAttribute("data-theme", t);
   }
 
+  function localizeTimes() {
+    function pad(n) { return n < 10 ? "0" + n : "" + n; }
+    var nodes = document.querySelectorAll("[data-ts]");
+    for (var i = 0; i < nodes.length; i++) {
+      var epoch = parseInt(nodes[i].getAttribute("data-ts"), 10);
+      if (!epoch) continue;
+      var d = new Date(epoch * 1000); // epoch seconds → viewer-local
+      // YYYY-MM-DD HH:MM in LOCAL time, no timezone suffix (R: dashboard ≠ email)
+      nodes[i].textContent =
+        d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+        " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    }
+  }
+
   function init() {
     var langBtn = document.querySelector(".lang-btn");
     if (langBtn) {
@@ -92,6 +106,11 @@
     }
     // sync labels to server-rendered language on load
     applyLang(currentLang());
+
+    // localize report timestamps to the VIEWER's local timezone (no UTC suffix).
+    // Server renders a UTC fallback in data-ts-fallback for no-JS; the epoch in
+    // data-ts is the source of truth.
+    localizeTimes();
 
     // bilingual report body toggle
     document.querySelectorAll(".lang-toggle .lang-btn").forEach(function (btn) {
